@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database, Sql } from "../db/database";
 import { sessionAccess, audit } from "../access";
+import { can } from "../../domain/permissions";
 import { AppError } from "../../domain/errors";
 import { idSchema } from "../../domain/contracts";
 import { pagination } from "../../domain/import-contracts";
@@ -18,6 +19,7 @@ import {
   purchaseCommand,
   documentUpload,
   documentReview,
+  documentAdjustment,
   receiptInput,
   needInput,
   budgetInput,
@@ -33,7 +35,9 @@ const orderColumns =
 const lineColumns =
   "id,item_id,offer_id,name,base_unit,quantity::text,received::text,total_minor::text,snapshot";
 const docColumns =
-  "d.id,d.order_id,d.filename,d.sha256,d.state,d.version,d.external_id,d.number,d.date::text,d.extraction,d.review,d.discrepancies,d.obligation_id,d.created_at";
+  "d.id,d.order_id,d.filename,d.sha256,d.state,d.version,d.external_id,d.number,d.date::text,d.extraction,d.review,d.discrepancies,d.obligation_id,d.parent_document_id,d.created_at";
+const docLineColumns =
+  "l.id,l.item_id,l.name,l.unit,l.quantity::text,l.base_quantity::text,l.received::text,l.total_minor::text,l.purchase_line_id,coalesce((SELECT sum(r.value_minor) FROM purchase_receipts r WHERE r.organization_id=l.organization_id AND r.document_line_id=l.id),0)::text received_value_minor";
 async function command(tx: Sql, org: string, key: string, payload: unknown) {
   const hash = createHash("sha256")
       .update(JSON.stringify(payload))
@@ -598,7 +602,7 @@ export class PurchasingService {
       if (original) {
         const [b] = await tx.query<{ original: Uint8Array }>(
           "SELECT original FROM purchase_documents WHERE organization_id=$1 AND id=$2",
-          [org, id],
+          [org, d.parent_document_id || id],
         );
         return {
           filename: d.filename,
@@ -608,9 +612,24 @@ export class PurchasingService {
       return {
         document: d,
         lines: await tx.query(
-          "SELECT id,item_id,name,unit,quantity::text,base_quantity::text,received::text,total_minor::text FROM purchase_document_lines WHERE organization_id=$1 AND document_id=$2 ORDER BY item_id",
+          `SELECT ${docLineColumns} FROM purchase_document_lines l WHERE l.organization_id=$1 AND l.document_id=$2 ORDER BY l.item_id`,
           [org, id],
         ),
+        decisions: await tx.query(
+          "SELECT id,position,item_id,name,unit,quantity::text,total_minor::text,decision,replaces_line_id,split_order_id,split_document_id FROM document_line_decisions WHERE organization_id=$1 AND document_id=$2 ORDER BY position",
+          [org, id],
+        ),
+        adjustments: await tx.query(
+          "SELECT a.id,a.document_version,a.delta_minor::text,a.warnings,a.reason,a.created_at,u.name actor_name FROM purchase_document_adjustments a JOIN users u ON u.id=a.actor_id WHERE a.organization_id=$1 AND a.document_id=$2 ORDER BY a.document_version",
+          [org, id],
+        ),
+        obligation:
+          (
+            await tx.query(
+              "SELECT amount_minor::text,paid_minor::text,due_date::text FROM supplier_obligations WHERE organization_id=$1 AND id=$2",
+              [org, d.obligation_id],
+            )
+          )[0] || null,
         revisions: await tx.query(
           "SELECT r.id,r.version,r.note,r.created_at,u.name actor_name FROM document_revisions r JOIN users u ON u.id=r.actor_id WHERE r.organization_id=$1 AND r.document_id=$2 ORDER BY r.version",
           [org, id],
@@ -627,7 +646,18 @@ export class PurchasingService {
   ) {
     idSchema.parse(id);
     const c = documentReview.parse(input);
-    if (new Set(c.lines.map((l) => l.itemId)).size !== c.lines.length)
+    const posted = c.lines.filter(
+        (l) => l.decision === "accept" || l.decision === "substitute",
+      ),
+      split = c.lines.filter((l) => l.decision === "separate"),
+      replaced = c.lines.flatMap((l) =>
+        l.replacesItemId ? [l.replacesItemId] : [],
+      );
+    if (
+      new Set(posted.map((l) => l.itemId)).size !== posted.length ||
+      new Set(split.map((l) => l.itemId)).size !== split.length ||
+      new Set(replaced).size !== replaced.length
+    )
       throw new AppError("DUPLICATE_LINE", 422);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "purchasing:write");
@@ -637,8 +667,15 @@ export class PurchasingService {
       );
       if (!ref) throw new AppError("NOT_FOUND", 404);
       const o = await this.order(tx, org, ref.order_id, s.branchId, true);
-      const [doc] = await tx.query<{ version: number; state: string }>(
-        "SELECT version,state FROM purchase_documents WHERE organization_id=$1 AND id=$2 FOR UPDATE",
+      const [doc] = await tx.query<{
+        version: number;
+        state: string;
+        parent_document_id: string | null;
+        filename: string;
+        sha256: string;
+        extraction: unknown;
+      }>(
+        "SELECT version,state,parent_document_id,filename,sha256,extraction FROM purchase_documents WHERE organization_id=$1 AND id=$2 FOR UPDATE",
         [org, id],
       );
       const r =
@@ -655,15 +692,25 @@ export class PurchasingService {
       if (doc.state !== "review") throw new AppError("DOCUMENT_APPROVED", 409);
       if (!["approved", "sent", "partial"].includes(o.state))
         throw new AppError("ORDER_STATE", 409);
+      // Substitutions and separate purchases change what is bought; they need approval rights.
+      if (
+        mode === "approve" &&
+        c.lines.some((l) => ["substitute", "separate"].includes(l.decision)) &&
+        !can(s.role, "purchasing:approve")
+      )
+        throw new AppError("FORBIDDEN", 403);
+      if (split.length && doc.parent_document_id)
+        throw new AppError("SPLIT_NESTED", 422);
       // Serialize invoice identity checks across different orders of the same supplier.
       await tx.query(
         "SELECT id FROM suppliers WHERE organization_id=$1 AND id=$2 FOR UPDATE",
         [org, o.supplier_id],
       );
       if (
+        !doc.parent_document_id &&
         (
           await tx.query(
-            "SELECT id FROM purchase_documents WHERE organization_id=$1 AND supplier_id=$2 AND number=$3 AND date=$4 AND id<>$5",
+            "SELECT id FROM purchase_documents WHERE organization_id=$1 AND supplier_id=$2 AND number=$3 AND date=$4 AND id<>$5 AND parent_document_id IS NULL",
             [org, o.supplier_id, c.number, c.date, id],
           )
         ).length
@@ -674,51 +721,130 @@ export class PurchasingService {
         [org, o.id],
       );
       const discrepancies: string[] = [];
-      const lines = [];
-      let goods = 0n;
-      for (const l of [...c.lines].sort((a, b) =>
-        a.itemId.localeCompare(b.itemId),
-      )) {
-        const [item] = await tx.query<Item>(
-          "SELECT *,purchase_price::text,sale_price::text FROM catalog_items WHERE organization_id=$1 AND id=$2 FOR SHARE",
-          [org, l.itemId],
+      const lines: {
+        itemId: string;
+        name: string;
+        unit: string;
+        quantity: string;
+        qty: string;
+        total: string;
+        purchaseLineId: string;
+      }[] = [];
+      const decided: {
+        position: number;
+        item: Item | null;
+        line: (typeof c.lines)[number];
+        qty: string;
+        total: string;
+        replaces: string | null;
+      }[] = [];
+      const covered = new Set<string>();
+      let invoiceGoods = 0n,
+        undecided = false;
+      const compare = (order: PurchaseLine, qty: string, total: string) => {
+        if (!new D(order.quantity).eq(qty))
+          discrepancies.push(`quantity:${order.item_id}`);
+        if (
+          !new D(
+            priceOffer(order.snapshot, order.quantity, order.snapshot.dated)
+              .goods_minor!,
+          )
+            .div(order.quantity)
+            .eq(new D(total).div(qty))
+        )
+          discrepancies.push(`price:${order.item_id}`);
+      };
+      const positions = c.lines
+        .map((line, position) => ({ line, position }))
+        .sort((a, b) =>
+          (a.line.itemId || "~").localeCompare(b.line.itemId || "~"),
         );
-        if (!item || item.kind !== "goods")
-          throw new AppError("ITEM_MISMATCH", 422);
-        const qty = toBase(l.quantity, l.unit, item),
+      for (const { line: l, position } of positions) {
+        let item: Item | null = null;
+        if (l.itemId) {
+          [item] = await tx.query<Item>(
+            "SELECT *,purchase_price::text,sale_price::text FROM catalog_items WHERE organization_id=$1 AND id=$2 FOR SHARE",
+            [org, l.itemId],
+          );
+          if (!item || item.kind !== "goods")
+            throw new AppError("ITEM_MISMATCH", 422);
+        }
+        const qty = item ? toBase(l.quantity, l.unit, item) : l.quantity,
           total = new D(l.unitPrice)
             .mul(l.quantity)
             .mul(100)
             .toDecimalPlaces(0)
-            .toFixed(),
-          order = ordered.find((x) => x.item_id === l.itemId);
-        if (!order) discrepancies.push(`item:${l.itemId}`);
-        else {
-          if (!new D(order.quantity).eq(qty))
-            discrepancies.push(`quantity:${l.itemId}`);
-          if (
-            !new D(
-              priceOffer(order.snapshot, order.quantity, order.snapshot.dated)
-                .goods_minor!,
-            )
-              .div(order.quantity)
-              .eq(new D(total).div(qty))
-          )
-            discrepancies.push(`price:${l.itemId}`);
+            .toFixed();
+        invoiceGoods += BigInt(total);
+        if (l.decision === "accept") {
+          const order = ordered.find((x) => x.item_id === l.itemId);
+          if (!order) {
+            discrepancies.push(`item:${position}`);
+            undecided = true;
+            continue;
+          }
+          if (covered.has(order.id)) throw new AppError("DUPLICATE_LINE", 422);
+          covered.add(order.id);
+          compare(order, qty, total);
+          lines.push({
+            ...l,
+            itemId: item!.id,
+            qty,
+            total,
+            purchaseLineId: order.id,
+          });
+        } else if (l.decision === "substitute") {
+          const order = ordered.find((x) => x.item_id === l.replacesItemId);
+          if (!order || order.item_id === l.itemId || covered.has(order.id))
+            throw new AppError("ITEM_MISMATCH", 422);
+          if (order.base_unit !== item!.base_unit)
+            throw new AppError("UNIT_MISMATCH", 422);
+          covered.add(order.id);
+          discrepancies.push(`substitute:${position}`);
+          compare(order, qty, total);
+          lines.push({
+            ...l,
+            itemId: item!.id,
+            qty,
+            total,
+            purchaseLineId: order.id,
+          });
+          decided.push({
+            position,
+            item,
+            line: l,
+            qty,
+            total,
+            replaces: order.id,
+          });
+        } else {
+          discrepancies.push(
+            `${l.decision === "reject" ? "rejected" : "separate"}:${position}`,
+          );
+          decided.push({ position, item, line: l, qty, total, replaces: null });
         }
-        goods += BigInt(total);
-        lines.push({ ...l, qty, total });
       }
       for (const l of ordered)
-        if (!lines.some((x) => x.itemId === l.item_id))
-          discrepancies.push(`missing:${l.item_id}`);
+        if (!covered.has(l.id)) discrepancies.push(`missing:${l.item_id}`);
       const delivery = minorUnits(c.delivery),
-        total = goods + delivery;
+        total = invoiceGoods + delivery;
       if (total !== minorUnits(c.total) || total === 0n)
         throw new AppError("DOCUMENT_TOTAL_MISMATCH", 422);
-      if (total !== BigInt(o.total_minor)) discrepancies.push("total");
+      const goods = lines.reduce((sum, l) => sum + BigInt(l.total), 0n),
+        payable = lines.length ? goods + delivery : 0n;
+      if (!lines.length && delivery > 0n && !undecided)
+        throw new AppError("DELIVERY_WITHOUT_LINES", 422);
+      if (payable !== BigInt(o.total_minor)) discrepancies.push("total");
       if (mode === "preview")
-        return { ...r, discrepancies, total_minor: total.toString() };
+        return {
+          ...r,
+          discrepancies,
+          total_minor: total.toString(),
+          payable_minor: payable.toString(),
+        };
+      // An invoice line outside the order never reaches stock or payables without a decision.
+      if (mode === "approve" && undecided)
+        throw new AppError("LINE_DECISION_REQUIRED", 422);
       if (
         mode === "approve" &&
         discrepancies.length &&
@@ -775,7 +901,7 @@ export class PurchasingService {
           extra = share - allocated;
         allocated = share;
         await tx.query(
-          "INSERT INTO purchase_document_lines(id,organization_id,document_id,item_id,name,unit,quantity,base_quantity,total_minor) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+          "INSERT INTO purchase_document_lines(id,organization_id,document_id,item_id,name,unit,quantity,base_quantity,total_minor,purchase_line_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
           [
             randomUUID(),
             org,
@@ -786,23 +912,165 @@ export class PurchasingService {
             l.quantity,
             l.qty,
             (BigInt(l.total) + extra).toString(),
+            l.purchaseLineId,
           ],
         );
       }
-      const obligation = randomUUID();
-      await tx.query(
-        "INSERT INTO supplier_obligations(id,organization_id,branch_id,supplier,amount_minor,due_date,note,purchase_order_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-        [
-          obligation,
-          org,
-          o.branch_id,
-          o.supplier_name,
-          total.toString(),
-          c.dueDate,
-          c.note,
-          o.id,
-        ],
+      let obligation: string | null = null;
+      if (payable > 0n) {
+        obligation = randomUUID();
+        await tx.query(
+          "INSERT INTO supplier_obligations(id,organization_id,branch_id,supplier,amount_minor,due_date,note,purchase_order_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+          [
+            obligation,
+            org,
+            o.branch_id,
+            o.supplier_name,
+            payable.toString(),
+            c.dueDate,
+            c.note,
+            o.id,
+          ],
+        );
+      }
+      const splitDecisions = decided.filter(
+        (d) => d.line.decision === "separate",
       );
+      let splitOrder: string | null = null,
+        splitDocument: string | null = null;
+      if (splitDecisions.length) {
+        splitOrder = randomUUID();
+        splitDocument = randomUUID();
+        const splitTotal = splitDecisions.reduce(
+          (sum, d) => sum + BigInt(d.total),
+          0n,
+        );
+        if (splitTotal === 0n)
+          throw new AppError("DOCUMENT_TOTAL_MISMATCH", 422);
+        const splitNote = `Separate purchase from document ${c.number}`.slice(
+          0,
+          250,
+        );
+        await tx.query(
+          "INSERT INTO purchase_orders(id,organization_id,branch_id,warehouse_id,supplier_id,state,due_date,total_minor,budget_minor,note) VALUES($1,$2,$3,$4,$5,'pending',$6,$7,$7,$8)",
+          [
+            splitOrder,
+            org,
+            o.branch_id,
+            o.warehouse_id,
+            o.supplier_id,
+            c.dueDate,
+            splitTotal.toString(),
+            splitNote,
+          ],
+        );
+        for (const d of splitDecisions) {
+          // The invoice line becomes an immutable dated supplier price: one pack equals the invoiced base quantity.
+          const offer = offerInput.parse({
+            key: randomUUID(),
+            supplierId: o.supplier_id,
+            itemId: d.item!.id,
+            supplierSku: d.line.name,
+            packQuantity: d.qty,
+            baseUnit: d.item!.base_unit,
+            packPrice: new D(d.total).div(100).toFixed(2),
+            minimumPacks: 1,
+            delivery: "0",
+            leadDays: 0,
+            currency: "KZT",
+            rate: null,
+            rateDate: null,
+            rateSource: "",
+            tax: "included",
+            taxPercent: null,
+            dated: c.date,
+            validUntil: c.date,
+            characteristicsConfirmed: true,
+            note: `Invoice ${c.number} line ${d.position + 1}`.slice(0, 250),
+          });
+          const offerId = randomUUID();
+          await tx.query(
+            "INSERT INTO supplier_offers(id,organization_id,supplier_id,item_id,data) VALUES($1,$2,$3,$4,$5)",
+            [offerId, org, o.supplier_id, d.item!.id, JSON.stringify(offer)],
+          );
+          await tx.query(
+            "INSERT INTO purchase_lines(id,organization_id,order_id,item_id,offer_id,name,base_unit,quantity,total_minor,snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+            [
+              randomUUID(),
+              org,
+              splitOrder,
+              d.item!.id,
+              offerId,
+              d.item!.name_ru,
+              d.item!.base_unit,
+              d.qty,
+              d.total,
+              JSON.stringify(offer),
+            ],
+          );
+        }
+        const childReview = {
+          key: randomUUID(),
+          version: 1,
+          number: c.number,
+          date: c.date,
+          dueDate: c.dueDate,
+          delivery: "0",
+          total: new D(splitTotal.toString()).div(100).toFixed(2),
+          lines: splitDecisions.map((d) => ({
+            itemId: d.item!.id,
+            name: d.line.name,
+            unit: d.line.unit,
+            quantity: d.line.quantity,
+            unitPrice: d.line.unitPrice,
+            decision: "accept",
+            replacesItemId: null,
+          })),
+          note: c.note,
+          acknowledgeDiscrepancies: false,
+        };
+        // The child shares the parent's original; it is reviewed again after the split purchase is approved.
+        await tx.query(
+          "INSERT INTO purchase_documents(id,organization_id,order_id,supplier_id,filename,sha256,original,external_id,extraction,parent_document_id,review) VALUES($1,$2,$3,$4,$5,$6,$7,'',$8,$9,$10)",
+          [
+            splitDocument,
+            org,
+            splitOrder,
+            o.supplier_id,
+            doc.filename,
+            doc.sha256,
+            Buffer.alloc(0),
+            JSON.stringify(doc.extraction),
+            id,
+            JSON.stringify(childReview),
+          ],
+        );
+        await event(tx, org, splitOrder, s.actorId, "split_created", c.note);
+        await audit(tx, org, s.actorId, "purchase.split_created", o.branch_id, {
+          orderId: splitOrder,
+          documentId: id,
+        });
+      }
+      for (const d of decided)
+        await tx.query(
+          "INSERT INTO document_line_decisions(id,organization_id,document_id,position,item_id,name,unit,quantity,total_minor,decision,replaces_line_id,split_order_id,split_document_id,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
+          [
+            randomUUID(),
+            org,
+            id,
+            d.position,
+            d.item?.id || null,
+            d.line.name,
+            d.line.unit,
+            d.line.quantity,
+            d.total,
+            d.line.decision,
+            d.replaces,
+            d.line.decision === "separate" ? splitOrder : null,
+            d.line.decision === "separate" ? splitDocument : null,
+            s.actorId,
+          ],
+        );
       await tx.query(
         "UPDATE purchase_documents SET state='approved',version=version+1,number=$3,date=$4,review=$5,discrepancies=$6,obligation_id=$7 WHERE organization_id=$1 AND id=$2",
         [
@@ -822,7 +1090,142 @@ export class PurchasingService {
         s.actorId,
         "purchase.document_approved",
         o.branch_id,
-        { documentId: id, obligationId: obligation },
+        {
+          documentId: id,
+          ...(obligation ? { obligationId: obligation } : {}),
+          ...(splitOrder ? { splitOrderId: splitOrder } : {}),
+        },
+      );
+      return r;
+    });
+  }
+  async adjust(secret: string, org: string, id: string, input: unknown) {
+    idSchema.parse(id);
+    const c = documentAdjustment.parse(input);
+    if (new Set(c.lines.map((l) => l.lineId)).size !== c.lines.length)
+      throw new AppError("DUPLICATE_LINE", 422);
+    return this.db.transaction(async (tx) => {
+      // Changing an approved payable is an approval-level action.
+      const s = await sessionAccess(tx, secret, org, "purchasing:approve");
+      const [ref] = await tx.query<{ order_id: string }>(
+        "SELECT order_id FROM purchase_documents WHERE organization_id=$1 AND id=$2",
+        [org, id],
+      );
+      if (!ref) throw new AppError("NOT_FOUND", 404);
+      // Lock order matches receipts: purchase order, document, document lines, obligation.
+      const o = await this.order(tx, org, ref.order_id, s.branchId, true);
+      const [doc] = await tx.query<{
+        version: number;
+        state: string;
+        obligation_id: string | null;
+      }>(
+        "SELECT version,state,obligation_id FROM purchase_documents WHERE organization_id=$1 AND id=$2 FOR UPDATE",
+        [org, id],
+      );
+      const r = await command(tx, org, c.key, {
+        operation: "document.adjust",
+        id,
+        ...c,
+      });
+      if (r.reused) return r;
+      if (doc.version !== c.version)
+        throw new AppError("VERSION_CONFLICT", 409);
+      if (doc.state !== "approved" || !doc.obligation_id)
+        throw new AppError("DOCUMENT_NOT_APPROVED", 409);
+      const current = await tx.query<{
+        id: string;
+        base_quantity: string;
+        received: string;
+        total_minor: string;
+        received_value_minor: string;
+      }>(
+        "SELECT l.id,l.base_quantity::text,l.received::text,l.total_minor::text,coalesce((SELECT sum(r.value_minor) FROM purchase_receipts r WHERE r.organization_id=l.organization_id AND r.document_line_id=l.id),0)::text received_value_minor FROM purchase_document_lines l WHERE l.organization_id=$1 AND l.document_id=$2 ORDER BY l.item_id FOR UPDATE OF l",
+        [org, id],
+      );
+      const [ob] = await tx.query<{ amount_minor: string; paid_minor: string }>(
+        "SELECT amount_minor::text,paid_minor::text FROM supplier_obligations WHERE organization_id=$1 AND id=$2 FOR UPDATE",
+        [org, doc.obligation_id],
+      );
+      const before = [],
+        after = [],
+        warnings: string[] = [];
+      let delta = 0n;
+      for (const change of c.lines) {
+        const line = current.find((l) => l.id === change.lineId);
+        if (!line) throw new AppError("ITEM_MISMATCH", 422);
+        const total = minorUnits(change.total);
+        if (new D(change.baseQuantity).lt(line.received))
+          throw new AppError("QUANTITY_BELOW_RECEIVED", 422);
+        if (total < BigInt(line.received_value_minor))
+          throw new AppError("VALUE_BELOW_RECEIVED", 422);
+        if (
+          new D(change.baseQuantity).eq(line.received) &&
+          total !== BigInt(line.received_value_minor)
+        )
+          warnings.push(`received_cost_not_revalued:${line.id}`);
+        else if (
+          new D(line.received).gt(0) &&
+          !new D(total.toString())
+            .div(change.baseQuantity)
+            .eq(new D(line.total_minor).div(line.base_quantity))
+        )
+          warnings.push(`received_cost_not_revalued:${line.id}`);
+        delta += total - BigInt(line.total_minor);
+        before.push({
+          lineId: line.id,
+          baseQuantity: line.base_quantity,
+          total_minor: line.total_minor,
+        });
+        after.push({
+          lineId: line.id,
+          baseQuantity: new D(change.baseQuantity).toFixed(),
+          total_minor: total.toString(),
+        });
+        await tx.query(
+          "UPDATE purchase_document_lines SET quantity=quantity*$3::numeric/base_quantity,base_quantity=$3,total_minor=$4 WHERE organization_id=$1 AND id=$2",
+          [org, line.id, change.baseQuantity, total.toString()],
+        );
+      }
+      const amount = BigInt(ob.amount_minor) + delta;
+      if (amount <= 0n) throw new AppError("ADJUSTMENT_TO_ZERO", 422);
+      if (amount < BigInt(ob.paid_minor))
+        throw new AppError("OBLIGATION_PAID_EXCEEDS", 422);
+      await tx.query(
+        "UPDATE supplier_obligations SET amount_minor=$3 WHERE organization_id=$1 AND id=$2",
+        [org, doc.obligation_id, amount.toString()],
+      );
+      await tx.query(
+        "INSERT INTO purchase_document_adjustments(id,organization_id,document_id,obligation_id,document_version,delta_minor,before,after,warnings,reason,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+        [
+          r.id,
+          org,
+          id,
+          doc.obligation_id,
+          doc.version,
+          delta.toString(),
+          JSON.stringify(before),
+          JSON.stringify(after),
+          JSON.stringify(warnings),
+          c.reason,
+          s.actorId,
+        ],
+      );
+      await tx.query(
+        "UPDATE purchase_documents SET version=version+1 WHERE organization_id=$1 AND id=$2",
+        [org, id],
+      );
+      await event(tx, org, o.id, s.actorId, "document_adjusted", c.reason);
+      await audit(
+        tx,
+        org,
+        s.actorId,
+        "purchase.document_adjusted",
+        o.branch_id,
+        {
+          documentId: id,
+          obligationId: doc.obligation_id,
+          deltaMinor: delta.toString(),
+        },
       );
       return r;
     });
@@ -851,7 +1254,7 @@ export class PurchasingService {
       if (!doc || doc.state !== "approved")
         throw new AppError("DOCUMENT_NOT_APPROVED", 409);
       const doclines = await tx.query<DocumentView["lines"][number]>(
-        "SELECT id,item_id,name,unit,quantity::text,base_quantity::text,received::text,total_minor::text FROM purchase_document_lines WHERE organization_id=$1 AND document_id=$2 ORDER BY item_id FOR UPDATE",
+        `SELECT ${docLineColumns} FROM purchase_document_lines l WHERE l.organization_id=$1 AND l.document_id=$2 ORDER BY l.item_id FOR UPDATE OF l`,
         [org, c.documentId],
       );
       const lines = await tx.query<PurchaseLine>(
@@ -864,25 +1267,28 @@ export class PurchasingService {
         return ai.localeCompare(bi);
       })) {
         const d = doclines.find((x) => x.id === l.lineId),
-          p = d && lines.find((x) => x.item_id === d.item_id);
+          // A substituted SKU is received against the ordered line it replaces.
+          p =
+            d &&
+            lines.find((x) =>
+              d.purchase_line_id
+                ? x.id === d.purchase_line_id
+                : x.item_id === d.item_id,
+            );
         if (!d || !p) throw new AppError("ITEM_MISMATCH", 422);
         const next = new D(d.received).plus(l.quantity),
           poNext = new D(p.received).plus(l.quantity);
         if (next.gt(d.base_quantity) || poNext.gt(p.quantity))
           throw new AppError("QUANTITY_EXCEEDS", 422);
-        const before = new D(d.received).eq(0)
-            ? 0n
-            : allocatedValue(
-                BigInt(d.total_minor),
-                d.received,
-                d.base_quantity,
-              ),
-          value =
-            allocatedValue(
-              BigInt(d.total_minor),
-              next.toFixed(),
-              d.base_quantity,
-            ) - before;
+        // Value already posted is read from receipts, so a later document adjustment cannot
+        // re-price stock that was received before it; the final part takes the exact remainder.
+        const before = BigInt(d.received_value_minor),
+          total = BigInt(d.total_minor),
+          remaining = total - before,
+          share = next.eq(d.base_quantity)
+            ? remaining
+            : allocatedValue(total, next.toFixed(), d.base_quantity) - before,
+          value = share < 0n ? 0n : share > remaining ? remaining : share;
         const movement = await new InventoryService(
           this.db,
         ).executeInTransaction(

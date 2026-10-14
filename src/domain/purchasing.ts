@@ -136,15 +136,35 @@ export const documentUpload = z
     externalId: z.string().trim().max(120).default(""),
   })
   .strict();
+// accept: matches an ordered line. substitute: a different SKU replaces an ordered line.
+// reject: excluded from payable and stock. separate: becomes its own purchase that needs approval.
+export const lineDecision = z.enum([
+  "accept",
+  "substitute",
+  "reject",
+  "separate",
+]);
 export const invoiceLine = z
   .object({
-    itemId: z.uuid(),
+    itemId: z.uuid().nullable(),
     name,
     unit: z.string().min(1).max(20),
     quantity: positive,
     unitPrice: amount,
+    decision: lineDecision.default("accept"),
+    replacesItemId: z.uuid().nullable().default(null),
   })
-  .strict();
+  .strict()
+  .refine(
+    (l) => l.itemId !== null || ["accept", "reject"].includes(l.decision),
+    { message: "Substitution and separate purchase need a catalogue item" },
+  )
+  .refine(
+    (l) => (l.decision === "substitute") === (l.replacesItemId !== null),
+    {
+      message: "Substitution names exactly one ordered item",
+    },
+  );
 export const documentReview = z
   .object({
     key: z.uuid(),
@@ -157,6 +177,21 @@ export const documentReview = z
     lines: z.array(invoiceLine).min(1).max(100),
     note,
     acknowledgeDiscrepancies: z.boolean(),
+  })
+  .strict();
+export const documentAdjustment = z
+  .object({
+    key: z.uuid(),
+    version: z.number().int().positive(),
+    reason: note,
+    lines: z
+      .array(
+        z
+          .object({ lineId: z.uuid(), baseQuantity: positive, total: money })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
   })
   .strict();
 export const receiptInput = z
@@ -310,6 +345,7 @@ export const documentRow = z.object({
   review: documentReview.nullable(),
   discrepancies: z.array(z.string()),
   obligation_id: z.uuid().nullable(),
+  parent_document_id: z.uuid().nullable(),
   created_at: z.string(),
 });
 export const documentView = z.object({
@@ -324,8 +360,39 @@ export const documentView = z.object({
       base_quantity: z.string(),
       received: z.string(),
       total_minor: minor,
+      purchase_line_id: z.uuid().nullable(),
+      received_value_minor: minor,
     }),
   ),
+  decisions: z.array(
+    z.object({
+      id: z.uuid(),
+      position: z.number(),
+      item_id: z.uuid().nullable(),
+      name: z.string(),
+      unit: z.string(),
+      quantity: z.string(),
+      total_minor: minor,
+      decision: z.enum(["substitute", "reject", "separate"]),
+      replaces_line_id: z.uuid().nullable(),
+      split_order_id: z.uuid().nullable(),
+      split_document_id: z.uuid().nullable(),
+    }),
+  ),
+  adjustments: z.array(
+    z.object({
+      id: z.uuid(),
+      document_version: z.number(),
+      delta_minor: minor,
+      warnings: z.array(z.string()),
+      reason: z.string(),
+      created_at: z.string(),
+      actor_name: z.string(),
+    }),
+  ),
+  obligation: z
+    .object({ amount_minor: minor, paid_minor: minor, due_date: z.string() })
+    .nullable(),
   revisions: z.array(
     z.object({
       id: z.uuid(),

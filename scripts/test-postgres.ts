@@ -89,7 +89,8 @@ try {
         "-t",
         "30",
         "-o",
-        `-h 127.0.0.1 -p ${port} -c max_connections=30`,
+        // Linux packages default the Unix socket to a system directory; keep it inside the temporary cluster.
+        `-h 127.0.0.1 -p ${port} -c max_connections=30${process.platform === "win32" ? "" : ` -k ${dir}`}`,
         "start",
       ],
       { windowsHide: true, stdio: "ignore" },

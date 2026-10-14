@@ -491,3 +491,170 @@ it("prevents two independent connections from spending the same last account bal
     )[0].balance_minor,
   ).toBe("0");
 });
+async function sentPurchase(quantity: string) {
+  const s = new PurchasingService(db),
+    sku = await item(),
+    date = "2026-10-14",
+    supplier = (
+      await s.createSupplier(owner.token, org, {
+        key: randomUUID(),
+        name: randomUUID(),
+        contact: "Test",
+        paymentTerms: "On invoice",
+        quality: 4,
+        reliability: 4,
+      })
+    ).id;
+  const offer = (
+    await s.createOffer(owner.token, org, {
+      key: randomUUID(),
+      supplierId: supplier,
+      itemId: sku,
+      supplierSku: "Single",
+      packQuantity: "1",
+      baseUnit: "pc",
+      packPrice: "10",
+      minimumPacks: 1,
+      delivery: "0",
+      leadDays: 1,
+      currency: "KZT",
+      rate: null,
+      rateDate: null,
+      rateSource: "",
+      tax: "included",
+      taxPercent: null,
+      dated: date,
+      validUntil: date,
+      characteristicsConfirmed: true,
+      note: "T020 concurrency",
+    })
+  ).id;
+  const id = (
+    await s.create(owner.token, org, {
+      key: randomUUID(),
+      branchId: branch,
+      warehouseId: warehouse,
+      supplierId: supplier,
+      date,
+      dueDate: date,
+      budget: "1000",
+      note: "T020 concurrency",
+      lines: [{ offerId: offer, quantity }],
+    })
+  ).id;
+  let version = 1;
+  for (const kind of ["submit", "approve", "sent"])
+    await s.transition(owner.token, org, id, {
+      key: randomUUID(),
+      version: version++,
+      kind,
+      note: "Approved manually",
+    });
+  const doc = (
+    await s.upload(owner.token, org, {
+      key: randomUUID(),
+      orderId: id,
+      filename: "invoice.csv",
+      content: Buffer.from(`name,qty\n${randomUUID()},1`).toString("base64"),
+      externalId: randomUUID(),
+    })
+  ).id;
+  const review = {
+    version: 1,
+    number: randomUUID(),
+    date,
+    dueDate: date,
+    delivery: "0",
+    note: "Compared invoice",
+    acknowledgeDiscrepancies: true,
+    line: {
+      itemId: sku,
+      name: "Unit",
+      unit: "pc",
+      quantity,
+      unitPrice: "10",
+    },
+  };
+  return { s, sku, id, doc, review };
+}
+it("T020: a concurrent receipt and payable adjustment serialize and keep payable equal to document lines", async () => {
+  const { s, id, doc, review } = await sentPurchase("4");
+  const { line, ...rest } = review;
+  await s.review(owner.token, org, doc, {
+    ...rest,
+    key: randomUUID(),
+    total: "40",
+    lines: [line],
+  });
+  const d = documentView.parse(
+    JSON.parse(JSON.stringify(await s.document(owner.token, org, doc))),
+  );
+  const results = await Promise.allSettled([
+    s.receive(owner.token, org, id, {
+      key: randomUUID(),
+      version: 4,
+      documentId: doc,
+      note: "Two physically accepted",
+      lines: [{ lineId: d.lines[0].id, quantity: "2" }],
+    }),
+    new PurchasingService(other).adjust(owner.token, org, doc, {
+      key: randomUUID(),
+      version: d.document.version,
+      reason: "Credit note for one unit",
+      lines: [{ lineId: d.lines[0].id, baseQuantity: "3", total: "30" }],
+    }),
+  ]);
+  expect(results.every((r) => r.status === "fulfilled")).toBe(true);
+  const [row] = await db.query<{
+    amount: string;
+    lines: string;
+    value: string;
+  }>(
+    "SELECT o.amount_minor::text amount,(SELECT sum(total_minor) FROM purchase_document_lines WHERE document_id=$1)::text lines,(SELECT coalesce(sum(r.value_minor),0) FROM purchase_receipts r JOIN purchase_document_lines l ON l.id=r.document_line_id WHERE l.document_id=$1)::text value FROM purchase_documents d JOIN supplier_obligations o ON o.id=d.obligation_id WHERE d.id=$1",
+    [doc],
+  );
+  expect(row).toEqual({ amount: "3000", lines: "3000", value: "2000" });
+});
+it("T020: two connections approving the same document with a separate-purchase decision create one split order", async () => {
+  const { s, doc, review } = await sentPurchase("1");
+  const extra = await item();
+  const { line, ...rest } = review;
+  const body = () => ({
+    ...rest,
+    key: randomUUID(),
+    total: "15",
+    lines: [
+      line,
+      {
+        itemId: extra,
+        name: "Extra",
+        unit: "pc",
+        quantity: "1",
+        unitPrice: "5",
+        decision: "separate",
+      },
+    ],
+  });
+  const results = await Promise.allSettled([
+    s.review(owner.token, org, doc, body()),
+    new PurchasingService(other).review(owner.token, org, doc, body()),
+  ]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((r) => r.status === "rejected")).toMatchObject({
+    reason: {
+      code: expect.stringMatching(/VERSION_CONFLICT|DOCUMENT_APPROVED/),
+    },
+  });
+  expect(
+    await db.query(
+      "SELECT id FROM document_line_decisions WHERE document_id=$1",
+      [doc],
+    ),
+  ).toHaveLength(1);
+  expect(
+    await db.query(
+      "SELECT id FROM purchase_documents WHERE parent_document_id=$1",
+      [doc],
+    ),
+  ).toHaveLength(1);
+});

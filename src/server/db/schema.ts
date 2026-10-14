@@ -3,6 +3,7 @@ import { inventoryMigration } from "./inventory-migration";
 import { commerceMigration } from "./commerce-migration";
 import { purchasingMigration } from "./purchasing-migration";
 import { crmMigration } from "./crm-migration";
+import { reconciliationMigration } from "./reconciliation-migration";
 export const migrations = [
   {
     version: 1,
@@ -57,4 +58,5 @@ CREATE TABLE auth_limits (
   commerceMigration,
   purchasingMigration,
   crmMigration,
+  reconciliationMigration,
 ];

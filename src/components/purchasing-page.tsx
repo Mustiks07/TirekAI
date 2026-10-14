@@ -24,6 +24,11 @@ import { errorText } from "@/lib/i18n";
 import { moneyText, quantityText, inventoryError } from "@/lib/inventory-i18n";
 import { can } from "@/domain/permissions";
 const f = (data: FormData, n: string) => String(data.get(n) || "").trim();
+// Exact minor units → "123.45" without binary floating point.
+const minorInput = (minor: string) => {
+  const digits = minor.padStart(3, "0");
+  return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
+};
 const words: Record<string, [string, string]> = {
   draft: ["Черновик", "Жоба"],
   pending: ["На согласовании", "Келісуде"],
@@ -128,6 +133,38 @@ const errors: Record<string, [string, string]> = {
   DOCUMENT_PAGE_LIMIT: [
     "Документ должен содержать не больше 5 страниц.",
     "Құжат 5 беттен аспауы керек.",
+  ],
+  LINE_DECISION_REQUIRED: [
+    "Есть строки вне заказа или без товара каталога. Выберите для каждой: замена, отклонить или отдельная закупка.",
+    "Тапсырыстан тыс немесе каталог тауарынсыз жолдар бар. Әрқайсысына шешім таңдаңыз: ауыстыру, қабылдамау немесе бөлек сатып алу.",
+  ],
+  UNIT_MISMATCH: [
+    "Замена должна иметь ту же базовую единицу, что и заказанный товар.",
+    "Ауыстыру тапсырыс берілген тауармен бірдей негізгі бірлікте болуы керек.",
+  ],
+  DELIVERY_WITHOUT_LINES: [
+    "Доставку нельзя принять без принятых строк.",
+    "Қабылданған жолдарсыз жеткізуді қабылдауға болмайды.",
+  ],
+  SPLIT_NESTED: [
+    "Документ отдельной закупки нельзя ещё раз разделить.",
+    "Бөлек сатып алу құжатын қайта бөлуге болмайды.",
+  ],
+  QUANTITY_BELOW_RECEIVED: [
+    "Количество не может быть меньше уже принятого на склад.",
+    "Саны қоймаға қабылданғаннан аз бола алмайды.",
+  ],
+  VALUE_BELOW_RECEIVED: [
+    "Сумма строки не может быть меньше стоимости уже принятого товара.",
+    "Жол сомасы қабылданған тауар құнынан аз бола алмайды.",
+  ],
+  OBLIGATION_PAID_EXCEEDS: [
+    "Долг нельзя уменьшить ниже уже оплаченной суммы.",
+    "Қарызды төленген сомадан төмен азайтуға болмайды.",
+  ],
+  ADJUSTMENT_TO_ZERO: [
+    "Корректировка не может обнулить долг. Используйте отмену с основанием.",
+    "Түзету қарызды нөлге түсіре алмайды.",
   ],
   DOCUMENT_PROCESSOR_BUSY: [
     "Распознавание занято. Повторите позже.",
@@ -263,6 +300,7 @@ export function PurchasingPage({
     [docs, setDocs] = useState<z.infer<typeof documentList> | null>(null),
     [docPage, setDocPage] = useState(1),
     [docId, setDocId] = useState(""),
+    [extraRows, setExtraRows] = useState(0),
     [loadedDoc, setDoc] = useState<DocumentView | null>(null);
   const [need, setNeed] = useState<z.infer<typeof needView> | null>(null),
     [budget, setBudget] = useState<z.infer<typeof budgetView> | null>(null);
@@ -1235,6 +1273,7 @@ export function PurchasingPage({
                       externalId: f(d, "externalId"),
                     });
                     setDocId(r.id);
+                    setExtraRows(0);
                     refresh();
                   }}
                 >
@@ -1266,7 +1305,10 @@ export function PurchasingPage({
                   className="commerce-order"
                   type="button"
                   key={d.id}
-                  onClick={() => setDocId(d.id)}
+                  onClick={() => {
+                    setDocId(d.id);
+                    setExtraRows(0);
+                  }}
                 >
                   <strong>{d.filename}</strong>
                   <span>
@@ -1352,166 +1394,369 @@ export function PurchasingPage({
                   ))}
                 </details>
               )}
-              {doc.document.state === "review" && write && (
-                <ActionForm
-                  key={`${doc.document.id}-${doc.document.version}`}
-                  locale={locale}
-                  label={t(
-                    "Сохранить проверку документа",
-                    "Құжат тексеруін сақтау",
-                  )}
-                  submit={async (d, key) => {
-                    const lines = detail.lines
-                      .filter((l) => d.has(`include-${l.id}`))
-                      .map((l) => ({
-                        itemId: l.item_id,
-                        name: l.name,
-                        unit: f(d, `unit-${l.id}`),
-                        quantity: f(d, `qty-${l.id}`),
-                        unitPrice: f(d, `price-${l.id}`),
-                      }));
-                    await post(
-                      `purchase-documents/${doc.document.id}/${f(d, "reviewAction")}`,
-                      {
-                        key,
-                        version: doc.document.version,
-                        number: f(d, "number"),
-                        date: f(d, "date"),
-                        dueDate: f(d, "dueDate"),
-                        delivery: f(d, "delivery"),
-                        total: f(d, "total"),
-                        lines,
-                        note: f(d, "note"),
-                        acknowledgeDiscrepancies: d.has("acknowledge"),
-                      },
-                    );
-                    refresh();
-                  }}
-                >
-                  <Field label={t("Результат проверки", "Тексеру нәтижесі")}>
-                    <select name="reviewAction">
-                      <option value="review-draft">
-                        {t(
-                          "Сохранить исправления, без долга и приёмки",
-                          "Түзетулерді сақтау, қарызсыз және қабылдаусыз",
-                        )}
-                      </option>
-                      <option value="review">
-                        {t(
-                          "Подтвердить документ и создать долг поставщику",
-                          "Құжатты растау және жеткізушіге қарыз құру",
-                        )}
-                      </option>
-                    </select>
-                  </Field>
-                  <Field label={t("Номер документа", "Құжат нөмірі")}>
-                    <input
-                      name="number"
-                      required
-                      maxLength={80}
-                      defaultValue={doc.document.review?.number}
-                    />
-                  </Field>
-                  <Field label={t("Дата документа", "Құжат күні")}>
-                    <input
-                      type="date"
-                      name="date"
-                      required
-                      defaultValue={doc.document.review?.date}
-                    />
-                  </Field>
-                  <Field label={t("Срок оплаты", "Төлем мерзімі")}>
-                    <input
-                      type="date"
-                      name="dueDate"
-                      required
-                      defaultValue={doc.document.review?.dueDate}
-                    />
-                  </Field>
-                  {detail.lines.map((l) => (
-                    <div key={l.id} className="procurement-review-line">
-                      <label className="commerce-check">
-                        <input
-                          type="checkbox"
-                          name={`include-${l.id}`}
-                          defaultChecked={
-                            !doc.document.review ||
-                            doc.document.review.lines.some(
-                              (x) => x.itemId === l.item_id,
-                            )
-                          }
-                        />
-                        {l.name}
-                      </label>
-                      {number(
-                        `qty-${l.id}`,
-                        t("Количество в документе", "Құжаттағы саны"),
-                        doc.document.review?.lines.find(
-                          (x) => x.itemId === l.item_id,
-                        )?.quantity || "",
-                        false,
+              {doc.document.state === "review" &&
+                write &&
+                (() => {
+                  const saved = doc.document.review?.lines || [],
+                    orderedFor = (itemId: string) =>
+                      saved.find(
+                        (x) =>
+                          (x.decision === "accept" && x.itemId === itemId) ||
+                          (x.decision === "substitute" &&
+                            x.replacesItemId === itemId),
+                      ),
+                    savedExtras = saved.filter(
+                      (x) =>
+                        !(
+                          x.decision === "substitute" ||
+                          (x.decision === "accept" &&
+                            detail.lines.some((l) => l.item_id === x.itemId))
+                        ),
+                    ),
+                    extraCount = Math.max(extraRows, savedExtras.length);
+                  return (
+                    <ActionForm
+                      key={`${doc.document.id}-${doc.document.version}-${extraCount}`}
+                      locale={locale}
+                      label={t(
+                        "Сохранить проверку документа",
+                        "Құжат тексеруін сақтау",
                       )}
+                      submit={async (d, key) => {
+                        const lines = [
+                          ...detail.lines
+                            .filter((l) => d.has(`include-${l.id}`))
+                            .map((l) => {
+                              const replacement = f(d, `replace-${l.id}`);
+                              return {
+                                itemId: replacement || l.item_id,
+                                name: l.name,
+                                unit: f(d, `unit-${l.id}`),
+                                quantity: f(d, `qty-${l.id}`),
+                                unitPrice: f(d, `price-${l.id}`),
+                                decision: replacement ? "substitute" : "accept",
+                                replacesItemId: replacement ? l.item_id : null,
+                              };
+                            }),
+                          ...Array.from({ length: extraCount }, (_, i) => ({
+                            itemId: f(d, `extra-item-${i}`) || null,
+                            name: f(d, `extra-name-${i}`),
+                            unit: f(d, `extra-unit-${i}`),
+                            quantity: f(d, `extra-qty-${i}`),
+                            unitPrice: f(d, `extra-price-${i}`),
+                            decision: f(d, `extra-decision-${i}`),
+                            replacesItemId: null,
+                          })).filter((l) => l.name),
+                        ];
+                        await post(
+                          `purchase-documents/${doc.document.id}/${f(d, "reviewAction")}`,
+                          {
+                            key,
+                            version: doc.document.version,
+                            number: f(d, "number"),
+                            date: f(d, "date"),
+                            dueDate: f(d, "dueDate"),
+                            delivery: f(d, "delivery"),
+                            total: f(d, "total"),
+                            lines,
+                            note: f(d, "note"),
+                            acknowledgeDiscrepancies: d.has("acknowledge"),
+                          },
+                        );
+                        refresh();
+                      }}
+                    >
                       <Field
-                        label={t(
-                          "Единица в документе; проверьте преобразование в каталоге",
-                          "Құжат бірлігі; каталогтағы түрлендіруді тексеріңіз",
-                        )}
+                        label={t("Результат проверки", "Тексеру нәтижесі")}
                       >
+                        <select name="reviewAction">
+                          <option value="review-draft">
+                            {t(
+                              "Сохранить исправления, без долга и приёмки",
+                              "Түзетулерді сақтау, қарызсыз және қабылдаусыз",
+                            )}
+                          </option>
+                          <option value="review">
+                            {t(
+                              "Подтвердить документ и создать долг поставщику",
+                              "Құжатты растау және жеткізушіге қарыз құру",
+                            )}
+                          </option>
+                        </select>
+                      </Field>
+                      <Field label={t("Номер документа", "Құжат нөмірі")}>
                         <input
-                          name={`unit-${l.id}`}
-                          defaultValue={
-                            doc.document.review?.lines.find(
-                              (x) => x.itemId === l.item_id,
-                            )?.unit || l.base_unit
-                          }
-                          maxLength={20}
+                          name="number"
+                          required
+                          maxLength={80}
+                          defaultValue={doc.document.review?.number}
                         />
                       </Field>
+                      <Field label={t("Дата документа", "Құжат күні")}>
+                        <input
+                          type="date"
+                          name="date"
+                          required
+                          defaultValue={doc.document.review?.date}
+                        />
+                      </Field>
+                      <Field label={t("Срок оплаты", "Төлем мерзімі")}>
+                        <input
+                          type="date"
+                          name="dueDate"
+                          required
+                          defaultValue={doc.document.review?.dueDate}
+                        />
+                      </Field>
+                      {detail.lines.map((l) => {
+                        const prior = orderedFor(l.item_id);
+                        return (
+                          <div key={l.id} className="procurement-review-line">
+                            <label className="commerce-check">
+                              <input
+                                type="checkbox"
+                                name={`include-${l.id}`}
+                                defaultChecked={!doc.document.review || !!prior}
+                              />
+                              {l.name}
+                            </label>
+                            <Field
+                              label={t(
+                                "Фактический SKU в документе",
+                                "Құжаттағы нақты SKU",
+                              )}
+                            >
+                              <select
+                                name={`replace-${l.id}`}
+                                defaultValue={
+                                  prior?.decision === "substitute"
+                                    ? prior.itemId || ""
+                                    : ""
+                                }
+                              >
+                                <option value="">
+                                  {t("Как в заказе", "Тапсырыстағыдай")}
+                                </option>
+                                {items
+                                  .filter(
+                                    (i) =>
+                                      i.kind === "goods" &&
+                                      i.id !== l.item_id &&
+                                      i.base_unit === l.base_unit,
+                                  )
+                                  .map((i) => (
+                                    <option key={i.id} value={i.id}>
+                                      {t("Замена:", "Ауыстыру:")} {i.sku} ·{" "}
+                                      {locale === "kk" && i.name_kk
+                                        ? i.name_kk
+                                        : i.name_ru}
+                                    </option>
+                                  ))}
+                              </select>
+                            </Field>
+                            {number(
+                              `qty-${l.id}`,
+                              t("Количество в документе", "Құжаттағы саны"),
+                              prior?.quantity || "",
+                              false,
+                            )}
+                            <Field
+                              label={t(
+                                "Единица в документе; проверьте преобразование в каталоге",
+                                "Құжат бірлігі; каталогтағы түрлендіруді тексеріңіз",
+                              )}
+                            >
+                              <input
+                                name={`unit-${l.id}`}
+                                defaultValue={prior?.unit || l.base_unit}
+                                maxLength={20}
+                              />
+                            </Field>
+                            {number(
+                              `price-${l.id}`,
+                              t(
+                                "Цена за эту единицу, включая налоги, KZT",
+                                "Осы бірлік бағасы, салықтармен, KZT",
+                              ),
+                              prior?.unitPrice || "",
+                              false,
+                            )}
+                          </div>
+                        );
+                      })}
+                      <fieldset className="procurement-extra-lines">
+                        <legend>
+                          {t(
+                            "Строки документа вне заказа",
+                            "Тапсырыстан тыс құжат жолдары",
+                          )}
+                        </legend>
+                        <p>
+                          {t(
+                            "Такая строка не попадает на склад и в долг без решения. Отдельная закупка проходит обычное согласование.",
+                            "Мұндай жол шешімсіз қоймаға және қарызға түспейді. Бөлек сатып алу әдеттегі келісуден өтеді.",
+                          )}
+                        </p>
+                        {Array.from({ length: extraCount }, (_, i) => {
+                          const prior = savedExtras[i];
+                          return (
+                            <div
+                              key={i}
+                              className="procurement-review-line"
+                              data-testid={`extra-line-${i}`}
+                            >
+                              <Field
+                                label={t(
+                                  "Наименование по документу",
+                                  "Құжат бойынша атауы",
+                                )}
+                              >
+                                <input
+                                  name={`extra-name-${i}`}
+                                  minLength={2}
+                                  maxLength={120}
+                                  defaultValue={prior?.name}
+                                />
+                              </Field>
+                              <Field
+                                label={t("Товар каталога", "Каталог тауары")}
+                              >
+                                <select
+                                  name={`extra-item-${i}`}
+                                  defaultValue={prior?.itemId || ""}
+                                >
+                                  <option value="">
+                                    {t(
+                                      "Нет в каталоге / неизвестно",
+                                      "Каталогта жоқ / белгісіз",
+                                    )}
+                                  </option>
+                                  {items
+                                    .filter((x) => x.kind === "goods")
+                                    .map((x) => (
+                                      <option key={x.id} value={x.id}>
+                                        {x.sku} ·{" "}
+                                        {locale === "kk" && x.name_kk
+                                          ? x.name_kk
+                                          : x.name_ru}{" "}
+                                        ({x.base_unit})
+                                      </option>
+                                    ))}
+                                </select>
+                              </Field>
+                              <Field label={t("Единица", "Бірлік")}>
+                                <input
+                                  name={`extra-unit-${i}`}
+                                  maxLength={20}
+                                  defaultValue={prior?.unit || "pc"}
+                                />
+                              </Field>
+                              {number(
+                                `extra-qty-${i}`,
+                                t("Количество", "Саны"),
+                                prior?.quantity || "",
+                                false,
+                              )}
+                              {number(
+                                `extra-price-${i}`,
+                                t(
+                                  "Цена за единицу, включая налоги, KZT",
+                                  "Бірлік бағасы, салықтармен, KZT",
+                                ),
+                                prior?.unitPrice || "",
+                                false,
+                              )}
+                              <Field label={t("Решение", "Шешім")}>
+                                <select
+                                  name={`extra-decision-${i}`}
+                                  defaultValue={prior?.decision || "accept"}
+                                >
+                                  <option value="accept">
+                                    {t(
+                                      "Не решено — блокирует подтверждение",
+                                      "Шешілмеген — растауды бұғаттайды",
+                                    )}
+                                  </option>
+                                  <option value="reject">
+                                    {t(
+                                      "Отклонить: не принимать и не оплачивать",
+                                      "Қабылдамау: қабылдамау және төлемеу",
+                                    )}
+                                  </option>
+                                  <option value="separate">
+                                    {t(
+                                      "Оформить отдельной закупкой на согласование",
+                                      "Келісуге бөлек сатып алу ретінде рәсімдеу",
+                                    )}
+                                  </option>
+                                </select>
+                              </Field>
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setExtraRows(extraCount + 1)}
+                        >
+                          {t(
+                            "Добавить строку вне заказа",
+                            "Тапсырыстан тыс жол қосу",
+                          )}
+                        </button>
+                      </fieldset>
                       {number(
-                        `price-${l.id}`,
-                        t(
-                          "Цена за эту единицу, включая налоги, KZT",
-                          "Осы бірлік бағасы, салықтармен, KZT",
-                        ),
-                        doc.document.review?.lines.find(
-                          (x) => x.itemId === l.item_id,
-                        )?.unitPrice || "",
-                        false,
+                        "delivery",
+                        t("Доставка, KZT", "Жеткізу, KZT"),
+                        doc.document.review?.delivery || "0",
                       )}
-                    </div>
-                  ))}
-                  {number(
-                    "delivery",
-                    t("Доставка, KZT", "Жеткізу, KZT"),
-                    doc.document.review?.delivery || "0",
-                  )}
-                  {number(
-                    "total",
-                    t("Итог по оригиналу, KZT", "Түпнұсқа қорытындысы, KZT"),
-                    doc.document.review?.total || "",
-                  )}
-                  {note}
-                  <label className="commerce-check">
-                    <input type="checkbox" name="acknowledge" />
-                    {t(
-                      "Проверены расхождения с заказом; принимаю их с указанным основанием",
-                      "Тапсырыспен айырмашылықтар тексерілді; көрсетілген негізбен қабылдаймын",
-                    )}
-                  </label>
-                </ActionForm>
-              )}
+                      {number(
+                        "total",
+                        t(
+                          "Итог по оригиналу, KZT",
+                          "Түпнұсқа қорытындысы, KZT",
+                        ),
+                        doc.document.review?.total || "",
+                      )}
+                      {note}
+                      <label className="commerce-check">
+                        <input type="checkbox" name="acknowledge" />
+                        {t(
+                          "Проверены расхождения с заказом; принимаю их с указанным основанием",
+                          "Тапсырыспен айырмашылықтар тексерілді; көрсетілген негізбен қабылдаймын",
+                        )}
+                      </label>
+                    </ActionForm>
+                  );
+                })()}
               {(doc.document.state === "approved" || doc.document.review) && (
                 <>
                   <p>
                     {t(
                       doc.document.state === "approved"
-                        ? "Подтверждённый документ неизменяем. Долг доступен в разделе «Финансы»."
+                        ? "Подтверждённый документ не редактируется. Изменения долга — только корректировкой с основанием. Долг доступен в разделе «Финансы»."
                         : "Исправления сохранены. Подтверждение документа ещё не выполнено.",
                       doc.document.state === "approved"
-                        ? "Расталған құжат өзгермейді. Қарыз «Қаржы» бөлімінде қолжетімді."
+                        ? "Расталған құжат өңделмейді. Қарыз тек негізі бар түзетумен өзгереді. Қарыз «Қаржы» бөлімінде қолжетімді."
                         : "Түзетулер сақталды. Құжат әлі расталмаған.",
                     )}
                   </p>
+                  {doc.document.parent_document_id && (
+                    <p>
+                      {t(
+                        "Это часть документа, выделенная в отдельную закупку. Оригинал общий.",
+                        "Бұл бөлек сатып алуға бөлінген құжат бөлігі. Түпнұсқа ортақ.",
+                      )}
+                    </p>
+                  )}
+                  {doc.obligation && (
+                    <p>
+                      {t("Долг поставщику", "Жеткізушіге қарыз")}:{" "}
+                      {moneyText(doc.obligation.amount_minor)} KZT ·{" "}
+                      {t("оплачено", "төленді")}{" "}
+                      {moneyText(doc.obligation.paid_minor)} KZT
+                    </p>
+                  )}
                   {doc.document.discrepancies.length > 0 && (
                     <div className="commerce-alert">
                       <strong>
@@ -1521,7 +1766,10 @@ export function PurchasingPage({
                         )}
                       </strong>
                       {doc.document.discrepancies.map((v) => {
-                        const [kind, id] = v.split(":");
+                        const [kind, id] = v.split(":"),
+                          reviewLine = /^\d+$/.test(id || "")
+                            ? doc.document.review?.lines[Number(id)]
+                            : undefined;
                         return (
                           <p key={v}>
                             {
@@ -1529,28 +1777,71 @@ export function PurchasingPage({
                                 price: t("Цена", "Баға"),
                                 quantity: t("Количество", "Саны"),
                                 item: t(
-                                  "Товар вне заказа",
-                                  "Тапсырыстан тыс тауар",
+                                  "Товар вне заказа — нужно решение",
+                                  "Тапсырыстан тыс тауар — шешім қажет",
                                 ),
                                 missing: t("Нет в документе", "Құжатта жоқ"),
                                 total: t("Общая сумма", "Жалпы сома"),
+                                substitute: t("Замена SKU", "SKU ауыстыру"),
+                                rejected: t(
+                                  "Отклонено, не принято и не оплачивается",
+                                  "Қабылданбады, төленбейді",
+                                ),
+                                separate: t(
+                                  "Выделено в отдельную закупку",
+                                  "Бөлек сатып алуға бөлінді",
+                                ),
                               }[kind]
                             }{" "}
-                            {detail.lines.find((l) => l.item_id === id)?.name}
+                            {reviewLine?.name ||
+                              detail.lines.find((l) => l.item_id === id)?.name}
                           </p>
                         );
                       })}
                     </div>
                   )}
+                  {doc.decisions.map((x) => (
+                    <p key={x.id}>
+                      {x.name}: {quantityText(x.quantity)} {x.unit} ·{" "}
+                      {moneyText(x.total_minor)} KZT ·{" "}
+                      {
+                        {
+                          substitute: t("замена SKU", "SKU ауыстыру"),
+                          reject: t("отклонено", "қабылданбады"),
+                          separate: t("отдельная закупка", "бөлек сатып алу"),
+                        }[x.decision]
+                      }
+                      {x.split_order_id && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            setSelected(x.split_order_id!);
+                            setDocId(x.split_document_id || "");
+                          }}
+                        >
+                          {t(
+                            "Открыть отдельную закупку",
+                            "Бөлек сатып алуды ашу",
+                          )}
+                        </button>
+                      )}
+                    </p>
+                  ))}
                   {doc.lines.map((l) => (
                     <p key={l.id}>
                       {l.name}: {quantityText(l.received)} /{" "}
                       {quantityText(l.base_quantity)}{" "}
                       {
-                        detail.lines.find((p) => p.item_id === l.item_id)
-                          ?.base_unit
+                        detail.lines.find((p) =>
+                          l.purchase_line_id
+                            ? p.id === l.purchase_line_id
+                            : p.item_id === l.item_id,
+                        )?.base_unit
                       }{" "}
-                      · {moneyText(l.total_minor)} KZT
+                      · {moneyText(l.total_minor)} KZT ·{" "}
+                      {t("принято на сумму", "қабылданған сомасы")}{" "}
+                      {moneyText(l.received_value_minor)} KZT
                     </p>
                   ))}
                   {write &&
@@ -1598,11 +1889,78 @@ export function PurchasingPage({
                         {note}
                       </ActionForm>
                     )}
+                  {approve &&
+                    doc.document.state === "approved" &&
+                    doc.obligation &&
+                    doc.lines.length > 0 && (
+                      <details>
+                        <summary>
+                          {t(
+                            "Корректировка подтверждённого документа и долга",
+                            "Расталған құжат пен қарызды түзету",
+                          )}
+                        </summary>
+                        <ActionForm
+                          key={`adjust-${doc.document.id}-${doc.document.version}`}
+                          locale={locale}
+                          label={t(
+                            "Провести корректировку",
+                            "Түзетуді жүргізу",
+                          )}
+                          submit={async (d, key) => {
+                            await post(
+                              `purchase-documents/${doc.document.id}/adjustments`,
+                              {
+                                key,
+                                version: doc.document.version,
+                                reason: f(d, "note"),
+                                lines: doc.lines.map((l) => ({
+                                  lineId: l.id,
+                                  baseQuantity: f(d, `adj-qty-${l.id}`),
+                                  total: f(d, `adj-total-${l.id}`),
+                                })),
+                              },
+                            );
+                            refresh();
+                          }}
+                        >
+                          <p>
+                            {t(
+                              "Например, кредит-нота поставщика или отказ от недопоставки. Нельзя уменьшить ниже принятого и оплаченного. Стоимость уже принятого товара не пересчитывается.",
+                              "Мысалы, жеткізушінің кредит-нотасы немесе жеткізілмегеннен бас тарту. Қабылданған және төленгеннен төмен азайтуға болмайды. Қабылданған тауар құны қайта есептелмейді.",
+                            )}
+                          </p>
+                          {doc.lines.map((l) => (
+                            <div key={l.id} className="procurement-review-line">
+                              {number(
+                                `adj-qty-${l.id}`,
+                                `${l.name} · ${t("количество в базовых единицах", "негізгі бірліктегі саны")}`,
+                                l.base_quantity.replace(/\.?0+$/, ""),
+                              )}
+                              {number(
+                                `adj-total-${l.id}`,
+                                `${l.name} · ${t("сумма строки, KZT", "жол сомасы, KZT")}`,
+                                minorInput(l.total_minor),
+                              )}
+                            </div>
+                          ))}
+                          {note}
+                        </ActionForm>
+                      </details>
+                    )}
                   <details>
                     <summary>{t("История проверки", "Тексеру тарихы")}</summary>
                     {doc.revisions.map((r) => (
                       <p key={r.id}>
                         {r.actor_name} · {r.note}
+                      </p>
+                    ))}
+                    {doc.adjustments.map((a) => (
+                      <p key={a.id}>
+                        {a.actor_name} · {t("корректировка", "түзету")}{" "}
+                        {moneyText(a.delta_minor)} KZT · {a.reason}
+                        {a.warnings.length > 0 &&
+                          ` · ${t("стоимость принятого товара не пересчитана", "қабылданған тауар құны қайта есептелмеді")}`}
                       </p>
                     ))}
                   </details>

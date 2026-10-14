@@ -442,6 +442,7 @@ export async function handle(request: NextRequest, path: string[]) {
                 id: z.uuid(),
                 reused: z.boolean(),
                 total_minor: z.string(),
+                payable_minor: z.string(),
                 discrepancies: z.array(z.string()),
               })
             : commerceResult,
@@ -456,6 +457,16 @@ export async function handle(request: NextRequest, path: string[]) {
                 ? "draft"
                 : "approve",
           ),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "purchase-documents" &&
+        path[4] === "adjustments" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.adjust(secret, id, path[3], body),
         );
       else if (path.length === 3 && path[2] === "orders" && method === "GET")
         data = checked(ordersView, await commerce.list(secret, id, query));
