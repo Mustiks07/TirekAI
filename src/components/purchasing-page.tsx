@@ -23,6 +23,7 @@ import { api, ApiError } from "@/lib/client";
 import { errorText } from "@/lib/i18n";
 import { moneyText, quantityText, inventoryError } from "@/lib/inventory-i18n";
 import { can } from "@/domain/permissions";
+import { executionError } from "@/lib/execution-i18n";
 const f = (data: FormData, n: string) => String(data.get(n) || "").trim();
 // Exact minor units → "123.45" without binary floating point.
 const minorInput = (minor: string) => {
@@ -228,6 +229,7 @@ export function ActionForm({
             : "INTERNAL_ERROR";
       setError(
         errors[code]?.[locale === "ru" ? 0 : 1] ||
+          executionError(code, locale) ||
           inventoryError(code, locale) ||
           errorText(code, locale),
       );

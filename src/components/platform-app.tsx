@@ -10,6 +10,12 @@ import {
 } from "react";
 import {
   ArrowDownLeft,
+  BookOpen,
+  Bot,
+  ClipboardCheck,
+  ListChecks,
+  Plug,
+  Workflow,
   ArrowRight,
   ArrowUpRight,
   Building2,
@@ -54,6 +60,13 @@ import { CustomersPage } from "./customers-page";
 import { InventoryPage } from "./inventory-page";
 import { CommercePage } from "./commerce-page";
 import { PurchasingPage } from "./purchasing-page";
+import { TodayBoard, type Destination } from "./today-board";
+import { TasksPage } from "./tasks-page";
+import { KnowledgePage } from "./knowledge-page";
+import { ApprovalsPage } from "./approvals-page";
+import { AutomationsPage } from "./automations-page";
+import { AssistantPage } from "./assistant-page";
+import { IntegrationsPage } from "./integrations-page";
 import { can } from "@/domain/permissions";
 
 type Page =
@@ -65,7 +78,13 @@ type Page =
   | "inventory"
   | "orders"
   | "finance"
-  | "purchasing";
+  | "purchasing"
+  | "tasks"
+  | "approvals"
+  | "knowledge"
+  | "automations"
+  | "assistant"
+  | "integrations";
 type Modal = "invite" | "newOrg" | "branch" | null;
 const field = (form: FormData, name: string) => String(form.get(name) || "");
 const branchName = (name: string, locale: Locale) =>
@@ -1084,17 +1103,38 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           {(
             [
               { id: "today", Icon: LayoutDashboard },
+              { id: "tasks", Icon: ListChecks },
+              { id: "approvals", Icon: ClipboardCheck },
               { id: "customers", Icon: Users },
               { id: "inventory", Icon: Database },
               { id: "orders", Icon: CheckCheck },
               { id: "finance", Icon: ArrowRight },
               { id: "purchasing", Icon: Building2 },
+              { id: "knowledge", Icon: BookOpen },
+              { id: "automations", Icon: Workflow },
+              { id: "assistant", Icon: Bot },
+              { id: "integrations", Icon: Plug },
               { id: "team", Icon: Users },
               { id: "organization", Icon: Building2 },
               { id: "activity", Icon: History },
             ] as const
           )
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
+            .filter((item) => {
+              const r = workspace?.organization.role;
+              if (!r)
+                return !["approvals", "automations", "integrations"].includes(
+                  item.id,
+                );
+              if (item.id === "approvals")
+                return (
+                  can(r, "proposals:write") || can(r, "purchasing:approve")
+                );
+              if (item.id === "automations") return can(r, "automations:read");
+              if (item.id === "integrations")
+                return can(r, "integrations:read");
+              return true;
+            })
             .filter(
               (item) =>
                 item.id !== "purchasing" ||
@@ -1206,21 +1246,33 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               <p>
                 {page === "today"
                   ? t.todayNote
-                  : page === "team"
-                    ? t.teamNote
-                    : page === "customers"
-                      ? t.customersNote
-                      : page === "orders"
-                        ? t.ordersNote
-                        : page === "purchasing"
-                          ? t.purchasingNote
-                          : page === "finance"
-                            ? t.financeNote
-                            : page === "inventory"
-                              ? t.inventoryNote
-                              : page === "organization"
-                                ? t.orgNote
-                                : t.activityNote}
+                  : page === "tasks"
+                    ? t.tasksNote
+                    : page === "approvals"
+                      ? t.approvalsNote
+                      : page === "knowledge"
+                        ? t.knowledgeNote
+                        : page === "automations"
+                          ? t.automationsNote
+                          : page === "assistant"
+                            ? t.assistantNote
+                            : page === "integrations"
+                              ? t.integrationsNote
+                              : page === "team"
+                                ? t.teamNote
+                                : page === "customers"
+                                  ? t.customersNote
+                                  : page === "orders"
+                                    ? t.ordersNote
+                                    : page === "purchasing"
+                                      ? t.purchasingNote
+                                      : page === "finance"
+                                        ? t.financeNote
+                                        : page === "inventory"
+                                          ? t.inventoryNote
+                                          : page === "organization"
+                                            ? t.orgNote
+                                            : t.activityNote}
               </p>
             </div>
             {page === "today" ? (
@@ -1309,6 +1361,58 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     locale={locale}
                   />
                 )}
+              {page === "tasks" && (
+                <TasksPage
+                  key={workspace.organization.id}
+                  workspace={workspace}
+                  locale={locale}
+                />
+              )}
+              {page === "approvals" && (
+                <ApprovalsPage
+                  key={workspace.organization.id}
+                  workspace={workspace}
+                  locale={locale}
+                />
+              )}
+              {page === "knowledge" && (
+                <KnowledgePage
+                  key={workspace.organization.id}
+                  workspace={workspace}
+                  locale={locale}
+                />
+              )}
+              {page === "automations" &&
+                can(workspace.organization.role, "automations:read") && (
+                  <AutomationsPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
+              {page === "assistant" && (
+                <AssistantPage
+                  key={workspace.organization.id}
+                  workspace={workspace}
+                  locale={locale}
+                />
+              )}
+              {page === "integrations" &&
+                can(workspace.organization.role, "integrations:read") && (
+                  <IntegrationsPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
+              {page === "today" && (
+                <TodayBoard
+                  key={workspace.organization.id}
+                  workspace={workspace}
+                  locale={locale}
+                  onNavigate={(d: Destination) => navigate(d)}
+                />
+              )}
               {page === "today" && (
                 <Today
                   workspace={workspace}
