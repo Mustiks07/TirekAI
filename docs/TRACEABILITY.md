@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | §4 Организации, роли, филиалы | T003,T004 | tests/foundation.test.ts; tests/e2e/foundation.spec.ts | Локальный срез, остальные поверхности не реализованы |
 | §6 KK/RU и мобильный интерфейс | T005 | Browser QA, e2e/pwa.spec.ts, docs/evidence | PWA manifest/offline/cache пройдены; нативные устройства ещё не приняты |
-| §17–18 Архитектура и API | T001,T002,T008 | foundation.test.ts, imports.test.ts, restart.test.ts | Decimal, новые контракты и очередь проверены локально; старые API/PG-конкуренция открыты |
+| §17–18 Архитектура и API | T001,T002,T008 | foundation.test.ts, imports.test.ts, restart.test.ts, postgres.integration.ts | Decimal, новые контракты, очередь и конкурентные SQL-пулы проверены; старые API и нагрузка открыты |
 | REQ CRM 01 | T013 | imports.test.ts, e2e/imports.spec.ts | Частично: контакты, источник, версии и branch scope; виды/согласия/ответственные/история впереди |
 | REQ CRM 02 | T009,T013,T034 | Не создан | planned |
 | REQ CRM 03 | T013 | Не создан | planned |
@@ -17,7 +17,7 @@
 | REQ INV 02 | T010 | inventory.test.ts | Склады/филиалы verified_test; партии, сроки, серийные номера и ячейки не реализованы |
 | REQ INV 03 | T011,T012 | inventory.test.ts, e2e/inventory.spec.ts | Приёмка, выдача, резерв, путь/приёмка, инвентаризация, возврат по выдаче; возврат поставщику и отдельное списание впереди |
 | REQ INV 04 | T012 | inventory.test.ts | physical/reserved/available и in_transit разделены; локально verified_test |
-| REQ INV 05 | T012 | inventory.test.ts | Последний резерв один успешный в PGlite; PG-конкуренция и owner exception отрицательного остатка впереди |
+| REQ INV 05 | T012 | inventory.test.ts, postgres.integration.ts | Последний резерв один успешный в PGlite и PostgreSQL с двумя пулами; owner exception отрицательного остатка впереди |
 | REQ INV 06 | T011,T016 | inventory.test.ts | Средневзвешенная, точные суммы, исходная стоимость возврата verified_test; партийная оценка/задний пересчёт/финансовые отчёты впереди |
 | REQ INV 07 | T042 | Не создан | planned |
 | REQ PUR 01 | T017 | Не создан | planned |
@@ -67,7 +67,7 @@
 | REQ AUT 05 | T025 | Не создан | planned |
 | REQ AUT 06 | T025 | Не создан | planned |
 | AC 01 | T003,T004 | tests/foundation.test.ts; tests/e2e/foundation.spec.ts | Локальный срез; полная приёмка впереди |
-| AC 02 | T009 | imports.test.ts, restart.test.ts, e2e/imports.spec.ts | verified_test: клиенты CSV/TSV, preview/partial/replay/source/date; PostgreSQL-конкуренция не проверена |
+| AC 02 | T009 | imports.test.ts, restart.test.ts, postgres.integration.ts, e2e/imports.spec.ts | verified_test: клиенты CSV/TSV, preview/partial/replay/source/date; PostgreSQL два пула без дублей |
 | AC 03 | T010–T016 | Не создан | planned |
 | AC 04 | T018,T023,T024 | Не создан | planned |
 | AC 05 | T017,T020 | Не создан | planned |

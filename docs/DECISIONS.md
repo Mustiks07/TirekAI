@@ -34,7 +34,7 @@ T009 реализована на конкретной сущности, как �
 
 ## ADR-009: общий worker и явный локальный адаптер
 
-Outbox и задания находятся в БД. Резервирование через [FOR UPDATE SKIP LOCKED](https://www.postgresql.org/docs/current/sql-select.html), lease-token, порции по 25, до трёх попыток, одинаковый transactional processor для pg и PGlite. PGlite не может совместно открываться процессами: локальный worker использует приватный loopback-мост к web, PostgreSQL-worker работает напрямую. Это ограниченный dev-адаптер, не доказательство производственной конкурентности. Испытаны rollback, смена lease и возобновление файловой БД тремя независимыми процессами; нагрузка и PostgreSQL-lock contention остаются открытыми.
+Outbox и задания находятся в БД. Резервирование через [FOR UPDATE SKIP LOCKED](https://www.postgresql.org/docs/current/sql-select.html), lease-token, порции по 25, до трёх попыток, одинаковый transactional processor для pg и PGlite. PGlite не может совместно открываться процессами: локальный worker использует приватный loopback-мост к web, PostgreSQL-worker работает напрямую. Это ограниченный dev-адаптер, не доказательство производственной конкурентности. Испытаны rollback, смена lease и возобновление файловой БД тремя независимыми процессами. Дополнительно PostgreSQL 18.2: два независимых пула без дублей и rollback при завершении backend; нагрузка нескольких OS-workers остаётся открытой.
 
 ## ADR-010: числа и контракт новых API
 
@@ -49,3 +49,7 @@ Outbox и задания находятся в БД. Резервировани�
 ## ADR-012: PWA без кеша бизнес-данных
 
 По [Next.js PWA guide](https://nextjs.org/docs/app/guides/progressive-web-apps) добавлены manifest, PNG-иконки, browser install event и service worker. [Жизненный цикл service worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers) используется для явной активации обновления. Кеш только публичных offline-ресурсов; операции требуют сеть, фонового replay нет. Это позволяет не сохранять контакты, стоимость и сессии в общем кеше устройства. Проверены manifest, offline/reconnect и cache allowlist, но не нативная установка на реальном Android/iOS.
+
+## ADR-013: отдельный кластер для PostgreSQL-тестов
+
+Найден локально установленный PostgreSQL 18.2. Runner создаёт новый кластер с собственными SCRAM-паролем и loopback-портом; системная служба не используется. Запуск/остановка через [pg_ctl](https://www.postgresql.org/docs/18/app-pg-ctl.html); Windows-реализация использует [ограниченный токен](https://doxygen.postgresql.org/pg__ctl_8c_source.html). Launcher запускается без наследуемых pipes, чтобы живой сервер не задерживал ожидание завершения команды. Пароль не передаётся в командной строке и не печатается. Файлы остаются в игнорируемом каталоге для диагностики, сервер останавливается в finally. Два независимых пула проверяют SQL-конкуренцию; это не подменяет многопроцессную нагрузку и backup/restore.
