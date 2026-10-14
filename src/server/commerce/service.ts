@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import Decimal from "decimal.js";
 import type { Database, Sql } from "../db/database";
-import { sessionAccess, audit } from "../access";
+import { sessionAccess, audit, type Credential } from "../access";
 import { AppError } from "../../domain/errors";
 import { can } from "../../domain/permissions";
 import { idSchema } from "../../domain/contracts";
@@ -68,7 +68,7 @@ export class CommerceService {
     if (!o) throw new AppError("NOT_FOUND", 404);
     return o;
   }
-  async customers(secret: string, org: string, input: unknown) {
+  async customers(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "orders:read", q.branchId),
@@ -87,7 +87,7 @@ export class CommerceService {
       };
     });
   }
-  async list(secret: string, org: string, input: unknown) {
+  async list(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "orders:read", q.branchId),
@@ -108,7 +108,7 @@ export class CommerceService {
       };
     });
   }
-  async get(secret: string, org: string, id: string, input: unknown = {}) {
+  async get(secret: Credential, org: string, id: string, input: unknown = {}) {
     const q = pageQuery.pick({ page: true, limit: true }).parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "orders:read"),
@@ -131,14 +131,14 @@ export class CommerceService {
       };
     });
   }
-  async create(secret: string, org: string, input: unknown) {
+  async create(secret: Credential, org: string, input: unknown) {
     return this.db.transaction((tx) =>
       this.createInTransaction(tx, secret, org, input),
     );
   }
   async createInTransaction(
     tx: Sql,
-    secret: string,
+    secret: Credential,
     org: string,
     input: unknown,
   ) {
@@ -268,7 +268,7 @@ export class CommerceService {
       ],
     );
   }
-  async transition(secret: string, org: string, id: string, input: unknown) {
+  async transition(secret: Credential, org: string, id: string, input: unknown) {
     const c = orderCommand.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "orders:write"),
@@ -481,7 +481,7 @@ export class CommerceService {
       return r;
     });
   }
-  async accounts(secret: string, org: string, input: unknown) {
+  async accounts(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -539,7 +539,7 @@ export class CommerceService {
       ],
     );
   }
-  async createAccount(secret: string, org: string, input: unknown) {
+  async createAccount(secret: Credential, org: string, input: unknown) {
     const c = accountInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -591,7 +591,7 @@ export class CommerceService {
       return r;
     });
   }
-  async createObligation(secret: string, org: string, input: unknown) {
+  async createObligation(secret: Credential, org: string, input: unknown) {
     const c = obligationInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -624,7 +624,7 @@ export class CommerceService {
       return r;
     });
   }
-  async money(secret: string, org: string, input: unknown) {
+  async money(secret: Credential, org: string, input: unknown) {
     const c = moneyCommand.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "finance:write");
@@ -736,7 +736,7 @@ export class CommerceService {
       return r;
     });
   }
-  async ledger(secret: string, org: string, input: unknown) {
+  async ledger(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -763,7 +763,7 @@ export class CommerceService {
       };
     });
   }
-  async obligations(secret: string, org: string, input: unknown) {
+  async obligations(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -788,7 +788,7 @@ export class CommerceService {
       };
     });
   }
-  async calendar(secret: string, org: string, input: unknown) {
+  async calendar(secret: Credential, org: string, input: unknown) {
     const q = calendarQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -890,7 +890,7 @@ export class CommerceService {
       };
     });
   }
-  async summary(secret: string, org: string, input: unknown) {
+  async summary(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(

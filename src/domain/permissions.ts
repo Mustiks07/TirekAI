@@ -21,7 +21,21 @@ export type Permission =
   | "finance:write"
   | "purchasing:read"
   | "purchasing:write"
-  | "purchasing:approve";
+  | "purchasing:approve"
+  | "tasks:read"
+  | "tasks:write"
+  | "tasks:manage"
+  | "tasks:verify"
+  | "knowledge:read"
+  | "knowledge:write"
+  | "insights:read"
+  | "proposals:write"
+  | "automations:read"
+  | "automations:write"
+  | "assistant:use"
+  | "assistant:configure"
+  | "integrations:read"
+  | "integrations:write";
 const grants: Record<Role, readonly Permission[]> = {
   owner: [
     "organization:read",
@@ -52,7 +66,36 @@ const grants: Record<Role, readonly Permission[]> = {
   employee: ["organization:read"],
   observer: ["organization:read"],
 };
+const all: Role[] = [
+  "owner",
+  "manager",
+  "sales",
+  "purchasing",
+  "finance",
+  "employee",
+  "observer",
+];
+// T021–T030: execution, knowledge, automation, assistant and integration rights.
+// Situations and tools additionally require the permission of the underlying data.
+const execution: Partial<Record<Permission, readonly Role[]>> = {
+  "tasks:read": all,
+  "tasks:write": ["owner", "manager", "sales", "purchasing", "finance"],
+  "tasks:manage": ["owner", "manager"],
+  "tasks:verify": ["owner", "manager"],
+  "knowledge:read": all,
+  "knowledge:write": ["owner", "manager"],
+  "insights:read": ["owner", "manager", "sales", "purchasing", "finance"],
+  "proposals:write": ["owner", "manager", "sales", "purchasing", "finance"],
+  "automations:read": ["owner", "manager"],
+  "automations:write": ["owner", "manager"],
+  "assistant:use": all,
+  "assistant:configure": ["owner"],
+  "integrations:read": ["owner", "manager"],
+  "integrations:write": ["owner"],
+};
 export function can(role: Role, permission: Permission) {
+  const scoped = execution[permission];
+  if (scoped) return scoped.includes(role);
   if (permission === "purchasing:read")
     return ["owner", "manager", "purchasing", "finance"].includes(role);
   if (permission === "purchasing:write")

@@ -49,16 +49,33 @@ export async function actorAccess(
     role: membership.role,
   };
 }
+// Internal principal for approved proposals, automations and AI tools. It exists only in
+// server memory (never parsed from HTTP input) and is re-checked against the current
+// membership on every call, so revoked rights stop execution.
+export class InternalActor {
+  constructor(
+    readonly actorId: string,
+    readonly origin: "approval" | "automation" | "assistant" | "integration",
+  ) {
+    idSchema.parse(actorId);
+  }
+}
+export type Credential = string | InternalActor;
+export async function credentialActor(tx: Sql, credential: Credential) {
+  return credential instanceof InternalActor
+    ? credential.actorId
+    : actorFromSession(tx, credential);
+}
 export async function sessionAccess(
   tx: Sql,
-  secret: string,
+  secret: Credential,
   organizationId: string,
   permission: Permission,
   branchId?: string,
 ) {
   return actorAccess(
     tx,
-    await actorFromSession(tx, secret),
+    await credentialActor(tx, secret),
     organizationId,
     permission,
     branchId,

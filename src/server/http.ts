@@ -10,6 +10,7 @@ import { CommerceService } from "./commerce/service";
 import { PurchasingService } from "./purchasing/service";
 import { CrmService } from "./crm/service";
 import { quotePdf } from "./crm/pdf";
+import { dispatchExecution, uploadLimit } from "./routes/execution";
 import {
   crmCustomers,
   inquiriesView,
@@ -96,7 +97,9 @@ export async function handle(request: NextRequest, path: string[]) {
           if (done) break;
           size += value.byteLength;
           const limit =
-            path.length === 3 &&
+            (path[0] === "organizations" &&
+              uploadLimit(method, path.slice(2))) ||
+            (path.length === 3 &&
             path[0] === "organizations" &&
             path[2] === "imports" &&
             method === "POST"
@@ -106,7 +109,7 @@ export async function handle(request: NextRequest, path: string[]) {
                   path[2] === "purchase-documents" &&
                   method === "POST"
                 ? 7_100_000
-                : 16384;
+                : 16384);
           if (size > limit) {
             await reader.cancel();
             throw new AppError("TOO_LARGE", 413);
@@ -159,7 +162,15 @@ export async function handle(request: NextRequest, path: string[]) {
       data = await service.acceptInvitation(secret, body);
     else if (path[0] === "organizations" && path[1]) {
       const id = path[1];
-      if (
+      const execution = await dispatchExecution(method, path.slice(2), {
+        db: await getDatabase(),
+        secret,
+        org: id,
+        body,
+        query,
+      });
+      if (execution.matched) data = execution.data;
+      else if (
         path.length === 3 &&
         path[2] === "order-customers" &&
         method === "GET"

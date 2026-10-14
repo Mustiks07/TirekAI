@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import type { Database, Sql } from "../db/database";
-import { sessionAccess, audit } from "../access";
+import { sessionAccess, audit, type Credential } from "../access";
 import { AppError } from "../../domain/errors";
 import { idSchema } from "../../domain/contracts";
 import { pagination } from "../../domain/import-contracts";
@@ -125,13 +125,13 @@ export class CrmService {
     ]);
     return { version: p?.version || 0, stages: p?.data || defaultStages };
   }
-  async pipeline(secret: string, org: string) {
+  async pipeline(secret: Credential, org: string) {
     return this.db.transaction(async (tx) => {
       await sessionAccess(tx, secret, org, "customers:read");
       return this.pipelineData(tx, org);
     });
   }
-  async savePipeline(secret: string, org: string, input: unknown) {
+  async savePipeline(secret: Credential, org: string, input: unknown) {
     const c = pipelineInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "team:write");
@@ -165,7 +165,7 @@ export class CrmService {
       return { ok: true };
     });
   }
-  async customers(secret: string, org: string, input: unknown) {
+  async customers(secret: Credential, org: string, input: unknown) {
     const q = crmQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -190,7 +190,7 @@ export class CrmService {
       };
     });
   }
-  async createCustomer(secret: string, org: string, input: unknown) {
+  async createCustomer(secret: Credential, org: string, input: unknown) {
     const c = customerInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -229,7 +229,7 @@ export class CrmService {
       return r;
     });
   }
-  async profile(secret: string, org: string, id: string, input: unknown) {
+  async profile(secret: Credential, org: string, id: string, input: unknown) {
     const c = customerProfile.extend({ key: z.uuid() }).parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:write"),
@@ -269,7 +269,7 @@ export class CrmService {
       return r;
     });
   }
-  async history(secret: string, org: string, id: string, input: unknown) {
+  async history(secret: Credential, org: string, id: string, input: unknown) {
     const q = crmQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:read");
@@ -287,7 +287,7 @@ export class CrmService {
       };
     });
   }
-  async inquiries(secret: string, org: string, input: unknown) {
+  async inquiries(secret: Credential, org: string, input: unknown) {
     const q = crmQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -314,7 +314,7 @@ export class CrmService {
       };
     });
   }
-  async createInquiry(secret: string, org: string, input: unknown) {
+  async createInquiry(secret: Credential, org: string, input: unknown) {
     const c = inquiryInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -384,7 +384,7 @@ export class CrmService {
     if (!i) throw new AppError("NOT_FOUND", 404);
     return i;
   }
-  async transition(secret: string, org: string, id: string, input: unknown) {
+  async transition(secret: Credential, org: string, id: string, input: unknown) {
     const c = inquiryCommand.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:write"),
@@ -460,7 +460,7 @@ export class CrmService {
       total_minor: total.toString(),
     };
   }
-  async quotes(secret: string, org: string, input: unknown) {
+  async quotes(secret: Credential, org: string, input: unknown) {
     const q = crmQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -487,7 +487,7 @@ export class CrmService {
       };
     });
   }
-  async quote(secret: string, org: string, id: string) {
+  async quote(secret: Credential, org: string, id: string) {
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:read");
       return this.getQuote(tx, org, id, s.branchId);
@@ -507,7 +507,7 @@ export class CrmService {
     if (!q) throw new AppError("NOT_FOUND", 404);
     return q;
   }
-  async saveQuote(secret: string, org: string, input: unknown, id?: string) {
+  async saveQuote(secret: Credential, org: string, input: unknown, id?: string) {
     const c = id ? quoteUpdate.parse(input) : quoteInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:write"),
@@ -562,7 +562,7 @@ export class CrmService {
       return r;
     });
   }
-  async convert(secret: string, org: string, id: string, input: unknown) {
+  async convert(secret: Credential, org: string, id: string, input: unknown) {
     const c = quoteConvert.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "orders:write"),

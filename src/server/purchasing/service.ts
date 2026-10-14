@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database, Sql } from "../db/database";
-import { sessionAccess, audit } from "../access";
+import { sessionAccess, audit, type Credential } from "../access";
 import { can } from "../../domain/permissions";
 import { AppError } from "../../domain/errors";
 import { idSchema } from "../../domain/contracts";
@@ -86,7 +86,7 @@ export class PurchasingService {
     if (!o) throw new AppError("NOT_FOUND", 404);
     return o;
   }
-  async suppliers(secret: string, org: string, input: unknown) {
+  async suppliers(secret: Credential, org: string, input: unknown) {
     const q = procurementQuery.parse(input);
     return this.db.transaction(async (tx) => {
       await sessionAccess(tx, secret, org, "purchasing:read", q.branchId);
@@ -103,7 +103,7 @@ export class PurchasingService {
       };
     });
   }
-  async createSupplier(secret: string, org: string, input: unknown) {
+  async createSupplier(secret: Credential, org: string, input: unknown) {
     const c = supplierInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "purchasing:write"),
@@ -124,7 +124,7 @@ export class PurchasingService {
       return r;
     });
   }
-  async createOffer(secret: string, org: string, input: unknown) {
+  async createOffer(secret: Credential, org: string, input: unknown) {
     const c = offerInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "purchasing:write"),
@@ -186,7 +186,7 @@ export class PurchasingService {
             : new D(a.total_minor).cmp(b.total_minor),
       );
   }
-  async compare(secret: string, org: string, input: unknown) {
+  async compare(secret: Credential, org: string, input: unknown) {
     const c = compareInput.parse(input);
     return this.db.transaction(async (tx) => {
       await sessionAccess(tx, secret, org, "purchasing:read");
@@ -197,7 +197,7 @@ export class PurchasingService {
       };
     });
   }
-  async budget(secret: string, org: string, input: unknown) {
+  async budget(secret: Credential, org: string, input: unknown) {
     const c = budgetInput.parse(input);
     if (new Set(c.lines.map((l) => l.itemId)).size !== c.lines.length)
       throw new AppError("DUPLICATE_LINE", 422);
@@ -247,7 +247,7 @@ export class PurchasingService {
       };
     });
   }
-  async need(secret: string, org: string, input: unknown) {
+  async need(secret: Credential, org: string, input: unknown) {
     const c = needInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "purchasing:read");
@@ -301,9 +301,20 @@ export class PurchasingService {
       };
     });
   }
-  async create(secret: string, org: string, input: unknown) {
+  async create(secret: Credential, org: string, input: unknown) {
+    return this.db.transaction((tx) =>
+      this.createInTransaction(tx, secret, org, input),
+    );
+  }
+  // Internal composition for approved proposals: no nested transaction.
+  async createInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    input: unknown,
+  ) {
     const c = purchaseInput.parse(input);
-    return this.db.transaction(async (tx) => {
+    {
       const s = await sessionAccess(
           tx,
           secret,
@@ -408,9 +419,9 @@ export class PurchasingService {
         orderId: r.id,
       });
       return r;
-    });
+    }
   }
-  async list(secret: string, org: string, input: unknown) {
+  async list(secret: Credential, org: string, input: unknown) {
     const q = procurementQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -437,7 +448,7 @@ export class PurchasingService {
       };
     });
   }
-  async get(secret: string, org: string, id: string, input: unknown = {}) {
+  async get(secret: Credential, org: string, id: string, input: unknown = {}) {
     const q = procurementQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "purchasing:read");
@@ -460,7 +471,12 @@ export class PurchasingService {
       };
     });
   }
-  async transition(secret: string, org: string, id: string, input: unknown) {
+  async transition(
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+  ) {
     const c = purchaseCommand.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(
@@ -506,7 +522,7 @@ export class PurchasingService {
       return r;
     });
   }
-  async upload(secret: string, org: string, input: unknown) {
+  async upload(secret: Credential, org: string, input: unknown) {
     const c = documentUpload.parse(input);
     // Authorization before decoding / local extraction; rechecked before persisting.
     await this.db.transaction(async (tx) => {
@@ -561,7 +577,7 @@ export class PurchasingService {
       return r;
     });
   }
-  async documents(secret: string, org: string, input: unknown) {
+  async documents(secret: Credential, org: string, input: unknown) {
     const q = procurementQuery
       .extend({ orderId: idSchema.optional() })
       .parse(input);
@@ -590,7 +606,12 @@ export class PurchasingService {
       };
     });
   }
-  async document(secret: string, org: string, id: string, original = false) {
+  async document(
+    secret: Credential,
+    org: string,
+    id: string,
+    original = false,
+  ) {
     idSchema.parse(id);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "purchasing:read");
@@ -638,7 +659,7 @@ export class PurchasingService {
     });
   }
   async review(
-    secret: string,
+    secret: Credential,
     org: string,
     id: string,
     input: unknown,
@@ -1099,7 +1120,7 @@ export class PurchasingService {
       return r;
     });
   }
-  async adjust(secret: string, org: string, id: string, input: unknown) {
+  async adjust(secret: Credential, org: string, id: string, input: unknown) {
     idSchema.parse(id);
     const c = documentAdjustment.parse(input);
     if (new Set(c.lines.map((l) => l.lineId)).size !== c.lines.length)
@@ -1230,7 +1251,7 @@ export class PurchasingService {
       return r;
     });
   }
-  async receive(secret: string, org: string, id: string, input: unknown) {
+  async receive(secret: Credential, org: string, id: string, input: unknown) {
     idSchema.parse(id);
     const c = receiptInput.parse(input);
     if (new Set(c.lines.map((l) => l.lineId)).size !== c.lines.length)

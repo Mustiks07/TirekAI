@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import Decimal from "decimal.js";
 import type { Database, Sql } from "../db/database";
-import { sessionAccess, audit } from "../access";
+import { sessionAccess, audit, type Credential } from "../access";
 import { AppError } from "../../domain/errors";
 import { can, type Permission } from "../../domain/permissions";
 import { idSchema } from "../../domain/contracts";
@@ -47,7 +47,7 @@ function conflict(error: unknown): never {
 }
 export class InventoryService {
   constructor(private db: Database) {}
-  async catalog(secret: string, org: string, input: unknown = {}) {
+  async catalog(secret: Credential, org: string, input: unknown = {}) {
     const q = catalogQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const scope = await sessionAccess(tx, secret, org, "catalog:read"),
@@ -70,7 +70,7 @@ export class InventoryService {
       };
     });
   }
-  async saveItem(secret: string, org: string, input: unknown, id?: string) {
+  async saveItem(secret: Credential, org: string, input: unknown, id?: string) {
     if (id) idSchema.parse(id);
     const data = id ? itemUpdate.parse(input) : itemInput.parse(input);
     validateItem(data);
@@ -136,7 +136,7 @@ export class InventoryService {
       conflict(e);
     }
   }
-  async warehouses(secret: string, org: string, input: unknown = {}) {
+  async warehouses(secret: Credential, org: string, input: unknown = {}) {
     const q = pageQuery.pick({ branchId: true }).parse(input);
     return this.db.transaction(async (tx) => {
       const scope = await sessionAccess(
@@ -154,7 +154,7 @@ export class InventoryService {
       };
     });
   }
-  async createWarehouse(secret: string, org: string, input: unknown) {
+  async createWarehouse(secret: Credential, org: string, input: unknown) {
     const data = warehouseInput.parse(input);
     try {
       return await this.db.transaction(async (tx) => {
@@ -201,7 +201,7 @@ export class InventoryService {
     return warehouse;
   }
   async view(
-    secret: string,
+    secret: Credential,
     org: string,
     section: "balances" | "movements" | "reservations" | "transfers",
     input: unknown,
@@ -259,7 +259,7 @@ export class InventoryService {
       return { items, pagination: pagination(q.page, q.limit, count.total) };
     });
   }
-  async execute(secret: string, org: string, input: unknown) {
+  async execute(secret: Credential, org: string, input: unknown) {
     return this.db.transaction((tx) =>
       this.executeInTransaction(tx, secret, org, input),
     );
@@ -267,7 +267,7 @@ export class InventoryService {
   // Internal composition only: HTTP callers cannot provide linkedOrderId.
   async executeInTransaction(
     tx: Sql,
-    secret: string,
+    secret: Credential,
     org: string,
     input: unknown,
     linkedOrderId?: string,
@@ -549,7 +549,7 @@ export class InventoryService {
       return { ...result, reused: false };
     }
   }
-  async snapshot(secret: string, org: string, input: unknown) {
+  async snapshot(secret: Credential, org: string, input: unknown) {
     const q = stockQuery
       .pick({ warehouseId: true })
       .extend({ itemId: idSchema })
