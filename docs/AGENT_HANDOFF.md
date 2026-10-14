@@ -10,7 +10,7 @@
 4. `PROGRESS.md`, `docs/DECISIONS.md`, `docs/API.md`, `docs/DATA_MODEL.md`, `docs/SECURITY.md`, `docs/RUNBOOK.md`, `docs/TESTING.md`.
 5. `git status`, `git log -5 --oneline`, последние результаты CI. Перед продолжением проверить собственный checkout.
 
-GitHub-аккаунт пользователя: `Mustiks07`; целевое имя репозитория `TarazHackathon`, приватный. Фактический URL и ветви проверяются через `git remote -v`. Основная ветка для следующего агента — `main`; историческая рабочая ветка — `codex/foundation`. Не основывать работу на старом commit `5d5dfc9`: в нём нет закупок и нового CRM API.
+GitHub-аккаунт пользователя: `Mustiks07`; создан приватный репозиторий https://github.com/Mustiks07/TarazHackathon, код отправлен. Фактический URL и ветви проверяются через `git remote -v`. Основная ветка для следующего агента — `main`; историческая рабочая ветка — `codex/foundation`. Не основывать работу на старом commit `5d5dfc9`: в нём нет закупок и нового CRM API.
 
 ## Что представляет собой продукт
 
