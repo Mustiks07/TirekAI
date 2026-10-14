@@ -9,6 +9,7 @@ import { knowledgeMigration } from "./knowledge-migration";
 import { decisionsMigration } from "./decisions-migration";
 import { automationMigration } from "./automation-migration";
 import { assistantMigration } from "./assistant-migration";
+import { integrationsMigration } from "./integrations-migration";
 export const migrations = [
   {
     version: 1,
@@ -69,4 +70,5 @@ CREATE TABLE auth_limits (
   decisionsMigration,
   automationMigration,
   assistantMigration,
+  integrationsMigration,
 ];

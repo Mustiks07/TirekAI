@@ -71,70 +71,115 @@ export class InventoryService {
     });
   }
   async saveItem(secret: Credential, org: string, input: unknown, id?: string) {
-    if (id) idSchema.parse(id);
-    const data = id ? itemUpdate.parse(input) : itemInput.parse(input);
-    validateItem(data);
     try {
-      return await this.db.transaction(async (tx) => {
-        const scope = await sessionAccess(tx, secret, org, "catalog:write");
-        // A branch manager cannot mutate the shared organization-wide catalogue.
-        if (scope.branchId) throw new AppError("FORBIDDEN", 403);
-        const values = [
-          data.sku,
-          data.name_ru,
-          data.name_kk,
-          data.category,
-          data.variant,
-          data.barcode,
-          data.kind,
-          data.base_unit,
-          JSON.stringify(data.conversions),
-          data.purchase_price,
-          data.sale_price,
-          data.active,
-        ];
-        if (id) {
-          const [old] = await tx.query<Item>(
-            `SELECT ${itemColumns},purchase_price::text FROM catalog_items WHERE organization_id=$1 AND id=$2 FOR UPDATE`,
-            [org, id],
-          );
-          if (!old) throw new AppError("NOT_FOUND", 404);
-          if (old.version !== ("version" in data ? data.version : undefined))
-            throw new AppError("VERSION_CONFLICT", 409);
-          const unitsChanged =
-            old.base_unit !== data.base_unit ||
-            old.kind !== data.kind ||
-            JSON.stringify(old.conversions) !==
-              JSON.stringify(data.conversions);
-          if (
-            unitsChanged &&
-            (
-              await tx.query(
-                "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM supplier_offers WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT quote_id id FROM quote_items WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
-                [org, id],
-              )
-            ).length
-          )
-            throw new AppError("UNIT_LOCKED", 409);
-          await tx.query(
-            "UPDATE catalog_items SET sku=$3,name_ru=$4,name_kk=$5,category=$6,variant=$7,barcode=$8,kind=$9,base_unit=$10,conversions=$11,purchase_price=$12,sale_price=$13,active=$14,version=version+1 WHERE organization_id=$1 AND id=$2",
-            [org, id, ...values],
-          );
-        } else {
-          id = randomUUID();
-          await tx.query(
-            "INSERT INTO catalog_items(organization_id,id,sku,name_ru,name_kk,category,variant,barcode,kind,base_unit,conversions,purchase_price,sale_price,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
-            [org, id, ...values],
-          );
-        }
-        await audit(tx, org, scope.actorId, "catalog.saved", null, {
-          itemId: id,
-        });
-        return { id };
-      });
+      return await this.db.transaction((tx) =>
+        this.saveItemInTransaction(tx, secret, org, input, id),
+      );
     } catch (e) {
       conflict(e);
     }
+  }
+  // Internal composition (integrations): same validation, rights and audit, caller's transaction.
+  async saveItemInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    input: unknown,
+    id?: string,
+  ) {
+    if (id) idSchema.parse(id);
+    const data = id ? itemUpdate.parse(input) : itemInput.parse(input);
+    validateItem(data);
+    const scope = await sessionAccess(tx, secret, org, "catalog:write");
+    // A branch manager cannot mutate the shared organization-wide catalogue.
+    if (scope.branchId) throw new AppError("FORBIDDEN", 403);
+    const values = [
+      data.sku,
+      data.name_ru,
+      data.name_kk,
+      data.category,
+      data.variant,
+      data.barcode,
+      data.kind,
+      data.base_unit,
+      JSON.stringify(data.conversions),
+      data.purchase_price,
+      data.sale_price,
+      data.active,
+    ];
+    if (id) {
+      const [old] = await tx.query<Item>(
+        `SELECT ${itemColumns},purchase_price::text FROM catalog_items WHERE organization_id=$1 AND id=$2 FOR UPDATE`,
+        [org, id],
+      );
+      if (!old) throw new AppError("NOT_FOUND", 404);
+      if (old.version !== ("version" in data ? data.version : undefined))
+        throw new AppError("VERSION_CONFLICT", 409);
+      const unitsChanged =
+        old.base_unit !== data.base_unit ||
+        old.kind !== data.kind ||
+        JSON.stringify(old.conversions) !== JSON.stringify(data.conversions);
+      if (
+        unitsChanged &&
+        (
+          await tx.query(
+            "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM supplier_offers WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT quote_id id FROM quote_items WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
+            [org, id],
+          )
+        ).length
+      )
+        throw new AppError("UNIT_LOCKED", 409);
+      await tx.query(
+        "UPDATE catalog_items SET sku=$3,name_ru=$4,name_kk=$5,category=$6,variant=$7,barcode=$8,kind=$9,base_unit=$10,conversions=$11,purchase_price=$12,sale_price=$13,active=$14,version=version+1 WHERE organization_id=$1 AND id=$2",
+        [org, id, ...values],
+      );
+    } else {
+      id = randomUUID();
+      await tx.query(
+        "INSERT INTO catalog_items(organization_id,id,sku,name_ru,name_kk,category,variant,barcode,kind,base_unit,conversions,purchase_price,sale_price,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
+        [org, id, ...values],
+      );
+    }
+    await audit(tx, org, scope.actorId, "catalog.saved", null, {
+      itemId: id,
+    });
+    return { id: id! };
+  }
+  async updateItemFields(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    version: number,
+    patch: { name_ru?: string; active?: boolean },
+  ) {
+    const [old] = await tx.query<Item & { purchase_price: string }>(
+      `SELECT ${itemColumns},purchase_price::text FROM catalog_items WHERE organization_id=$1 AND id=$2`,
+      [org, id],
+    );
+    if (!old) throw new AppError("NOT_FOUND", 404);
+    await this.saveItemInTransaction(
+      tx,
+      secret,
+      org,
+      {
+        sku: old.sku,
+        name_ru: patch.name_ru ?? old.name_ru,
+        name_kk: old.name_kk,
+        category: old.category,
+        variant: old.variant,
+        barcode: old.barcode,
+        kind: old.kind,
+        base_unit: old.base_unit,
+        conversions: old.conversions,
+        purchase_price: old.purchase_price,
+        sale_price: old.sale_price,
+        active: patch.active ?? old.active,
+        version,
+      },
+      id,
+    );
+    return { version: version + 1 };
   }
   async warehouses(secret: Credential, org: string, input: unknown = {}) {
     const q = pageQuery.pick({ branchId: true }).parse(input);
@@ -317,6 +362,23 @@ export class InventoryService {
       }
       if (c.kind === "dispatch")
         await this.warehouse(tx, org, c.destinationId, scope);
+      // A warehouse whose stock is owned by an external system (T030) is a read-only mirror:
+      // local receipts, issues, reservations and counts would create a second, diverging balance.
+      if (
+        (
+          await tx.query(
+            "SELECT warehouse_id FROM integration_warehouse_links WHERE organization_id=$1 AND warehouse_id=ANY($2::uuid[])",
+            [
+              org,
+              [
+                c.warehouseId,
+                ...(c.kind === "dispatch" ? [c.destinationId] : []),
+              ],
+            ],
+          )
+        ).length
+      )
+        throw new AppError("EXTERNAL_SOURCE_OF_TRUTH", 409);
       const [item] = await tx.query<Item>(
         `SELECT ${itemColumns} FROM catalog_items WHERE organization_id=$1 AND id=$2 FOR SHARE`,
         [org, c.itemId],

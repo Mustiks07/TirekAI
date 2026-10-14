@@ -122,12 +122,17 @@ export class InsightService {
       safety: string;
       lead_days: number;
       elsewhere: string;
+      external: boolean;
+      external_as_of: string | null;
+      stale: boolean;
     }>(
       `WITH incoming AS (SELECT o.warehouse_id,l.item_id,sum(l.quantity-l.received) qty,jsonb_agg(DISTINCT o.id) orders FROM purchase_lines l JOIN purchase_orders o ON o.organization_id=l.organization_id AND o.id=l.order_id WHERE l.organization_id=$1 AND o.state IN ('approved','sent','partial') GROUP BY o.warehouse_id,l.item_id)
-       SELECT r.warehouse_id,w.branch_id,w.name warehouse_name,r.item_id,i.sku,i.name_ru,i.base_unit,coalesce(b.quantity,0)::text quantity,coalesce(b.reserved,0)::text reserved,coalesce(n.qty,0)::text incoming,coalesce(n.orders,'[]'::jsonb) orders,r.minimum::text,r.safety::text,r.lead_days,
+       SELECT r.warehouse_id,w.branch_id,w.name warehouse_name,r.item_id,i.sku,i.name_ru,i.base_unit,(CASE WHEN l.warehouse_id IS NOT NULL THEN coalesce(es.quantity,0) ELSE coalesce(b.quantity,0) END)::text quantity,(CASE WHEN l.warehouse_id IS NOT NULL THEN 0 ELSE coalesce(b.reserved,0) END)::text reserved,(l.warehouse_id IS NOT NULL) external,es.as_of::text external_as_of,(l.warehouse_id IS NOT NULL AND (es.as_of IS NULL OR es.as_of<now()-interval '60 minutes')) stale,coalesce(n.qty,0)::text incoming,coalesce(n.orders,'[]'::jsonb) orders,r.minimum::text,r.safety::text,r.lead_days,
        (SELECT coalesce(sum(x.quantity-x.reserved),0)::text FROM stock_balances x WHERE x.organization_id=r.organization_id AND x.item_id=r.item_id AND x.warehouse_id<>r.warehouse_id) elsewhere
        FROM reorder_points r JOIN warehouses w ON w.organization_id=r.organization_id AND w.id=r.warehouse_id JOIN catalog_items i ON i.organization_id=r.organization_id AND i.id=r.item_id
        LEFT JOIN stock_balances b ON b.organization_id=r.organization_id AND b.warehouse_id=r.warehouse_id AND b.item_id=r.item_id
+       LEFT JOIN integration_warehouse_links l ON l.organization_id=r.organization_id AND l.warehouse_id=r.warehouse_id
+       LEFT JOIN external_stock es ON es.connection_id=l.connection_id AND es.warehouse_id=r.warehouse_id AND es.item_id=r.item_id
        LEFT JOIN incoming n ON n.warehouse_id=r.warehouse_id AND n.item_id=r.item_id
        WHERE r.organization_id=$1 AND i.active ORDER BY r.warehouse_id,r.item_id`,
       [org],
@@ -177,6 +182,9 @@ export class InsightService {
             lead_days: r.lead_days,
             shortage: shortage.toFixed(),
             other_warehouses_available: new D(r.elsewhere).toFixed(),
+            stock_source: r.external ? "moysklad" : "ledger",
+            stock_as_of: r.external_as_of,
+            stock_stale: r.stale ? "yes" : "no",
             suggested_offer_id: best?.id || null,
             suggested_supplier: best?.supplier || null,
             suggested_quantity: best?.price.quantity || null,
@@ -184,7 +192,17 @@ export class InsightService {
           },
           calculation: "available + incoming < minimum + safety",
           sources: [
-            { type: "stock_balance", id: r.item_id, label: r.warehouse_name },
+            r.external
+              ? {
+                  type: "external_stock",
+                  id: r.item_id,
+                  label: `МойСклад · ${r.warehouse_name} · ${r.external_as_of || "no data"}${r.stale ? " · stale" : ""}`,
+                }
+              : {
+                  type: "stock_balance",
+                  id: r.item_id,
+                  label: r.warehouse_name,
+                },
             ...r.orders.map((id) => ({
               type: "purchase_order",
               id,

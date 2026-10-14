@@ -8,6 +8,7 @@ import { ProposalService } from "../decisions/proposals";
 import { TodayService } from "../decisions/today";
 import { AutomationService } from "../automations/service";
 import { AssistantService } from "../assistant/service";
+import { IntegrationService } from "../integrations/service";
 import {
   askResult,
   assistantStatus,
@@ -461,6 +462,78 @@ export const executionRoutes: Route[] = [
     method: "POST",
     path: "assistant/transcriptions",
     run: (c) => new AssistantService(c.db).transcribe(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "integrations",
+    run: (c) => new IntegrationService(c.db).overview(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "integrations",
+    schema: z.object({
+      id: z.uuid(),
+      reused: z.boolean(),
+      webhookToken: z.string().nullable(),
+    }),
+    run: (c) => new IntegrationService(c.db).configure(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/conflicts/:id",
+    schema: commerceResult,
+    run: (c) =>
+      new IntegrationService(c.db).resolve(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/check",
+    schema: ok,
+    run: (c) =>
+      new IntegrationService(c.db).check(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "integrations/:id/stores",
+    run: (c) =>
+      new IntegrationService(c.db).stores(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/links",
+    schema: ok,
+    run: (c) =>
+      new IntegrationService(c.db).link(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/links/:id/remove",
+    schema: ok,
+    run: (c) =>
+      new IntegrationService(c.db).unlink(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.params[1],
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/sync",
+    run: (c) =>
+      new IntegrationService(c.db).syncNow(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/disconnect",
+    schema: ok,
+    run: (c) =>
+      new IntegrationService(c.db).disconnect(c.secret, c.org, c.params[0]),
   },
 ];
 // Body size limits for routes that accept uploads (bytes, before base64 decoding checks).

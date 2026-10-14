@@ -4,6 +4,7 @@ import { can } from "../../domain/permissions";
 import { visibleRules } from "./insights";
 import { CommerceService } from "../commerce/service";
 import type { ProposalRow } from "../../domain/decisions";
+import { providerStatus } from "../assistant/provider";
 
 // External source statuses are reported honestly; registered providers add their rows here.
 export type SourceStatus = {
@@ -56,6 +57,22 @@ export class TodayService {
           checked_at: run?.finished_at || null,
         },
       ];
+      for (const c of await tx.query<SourceStatus>(
+        "SELECT 'moysklad' name,CASE WHEN status IN ('configured','live_verified','sandbox_verified') AND last_success_at<now()-interval '60 minutes' THEN 'degraded' ELSE status END status,last_success_at checked_at FROM integration_connections WHERE organization_id=$1 AND disconnected_at IS NULL",
+        [org],
+      ))
+        sources.push(c);
+      if (!sources.some((x) => x.name === "moysklad"))
+        sources.push({
+          name: "moysklad",
+          status: "not_configured",
+          checked_at: null,
+        });
+      sources.push({
+        name: "assistant",
+        status: providerStatus().status,
+        checked_at: null,
+      });
       for (const provider of sourceProviders)
         sources.push(...(await provider(tx, org)));
       return {

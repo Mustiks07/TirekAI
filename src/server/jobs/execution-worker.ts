@@ -3,6 +3,7 @@ import { TaskService } from "../tasks/service";
 import { InsightService } from "../decisions/insights";
 import { ProposalService } from "../decisions/proposals";
 import { AutomationService } from "../automations/service";
+import { IntegrationService } from "../integrations/service";
 
 // Background work for T021–T025. Each step is idempotent: repeated ticks, overlapping
 // workers and restarts cannot duplicate tasks, situations, proposals or actions.
@@ -20,12 +21,14 @@ export class ExecutionWorker {
     const insights = new InsightService(this.db);
     for (const o of stale) await insights.detect(o.id);
     const automations = await new AutomationService(this.db).runOnce();
+    const integrations = await new IntegrationService(this.db).runOnce();
     return {
       periodic,
       escalated,
       expired,
       detected: stale.length,
       automations,
+      integrations,
     };
   }
 }
