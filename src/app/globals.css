@@ -3216,3 +3216,5 @@ fieldset {
 @media (prefers-reduced-motion: reduce) {
   .recording-indicator { animation: none; }
 }
+.passport-ops li { display: grid; gap: 6px; }
+.passport-ops code { font-size: 12px; overflow-wrap: anywhere; }

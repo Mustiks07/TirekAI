@@ -1418,7 +1418,7 @@ export function PurchasingPage({
                     extraCount = Math.max(extraRows, savedExtras.length);
                   return (
                     <ActionForm
-                      key={`${doc.document.id}-${doc.document.version}-${extraCount}`}
+                      key={`${doc.document.id}-${doc.document.version}`}
                       locale={locale}
                       label={t(
                         "Сохранить проверку документа",

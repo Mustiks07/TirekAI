@@ -16,7 +16,10 @@ export default defineConfig({
             executablePath:
               "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
           }
-        : {},
+        : // Optional local override when the preinstalled browser build differs from the pinned Playwright.
+          process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+          ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
+          : {},
   },
   webServer: {
     command: "npm run preview",

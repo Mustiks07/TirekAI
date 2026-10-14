@@ -121,11 +121,19 @@ export function TodayBoard({
             <div key={k}>
               <dt>{factLabels[k][locale === "ru" ? 0 : 1]}</dt>
               <dd>
-                {k.endsWith("_minor")
-                  ? `${moneyText(String(v))} KZT`
-                  : typeof v === "string" && /^\d+(\.\d+)?$/.test(v)
-                    ? quantityText(v)
-                    : String(v)}
+                {k === "stock_source"
+                  ? v === "moysklad"
+                    ? "МойСклад"
+                    : t("собственный журнал", "өз журналы")
+                  : k === "stock_stale"
+                    ? v === "yes"
+                      ? t("да", "иә")
+                      : t("нет", "жоқ")
+                    : k.endsWith("_minor")
+                      ? `${moneyText(String(v))} KZT`
+                      : typeof v === "string" && /^\d+(\.\d+)?$/.test(v)
+                        ? quantityText(v)
+                        : String(v)}
               </dd>
             </div>
           ))}
