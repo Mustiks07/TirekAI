@@ -50,8 +50,10 @@ import {
 } from "@/lib/i18n";
 import { api, ApiError } from "@/lib/client";
 import { businessDate } from "@/lib/dates";
+import { CustomersPage } from "./customers-page";
+import { can } from "@/domain/permissions";
 
-type Page = "today" | "team" | "organization" | "activity";
+type Page = "today" | "team" | "organization" | "activity" | "customers";
 type Modal = "invite" | "newOrg" | "branch" | null;
 const field = (form: FormData, name: string) => String(form.get(name) || "");
 const branchName = (name: string, locale: Locale) =>
@@ -217,7 +219,11 @@ function OrganizationFields({
       </label>
       <label>
         {t.profile}
-        <select aria-label={t.profile} name="profile" defaultValue={organization?.profile || "retail"}>
+        <select
+          aria-label={t.profile}
+          name="profile"
+          defaultValue={organization?.profile || "retail"}
+        >
           {profiles.map((p) => (
             <option value={p} key={p}>
               {profileNames[locale][p]}
@@ -574,7 +580,12 @@ function Activity({
             </span>
           </div>
           <time dateTime={new Date(event.created_at).toISOString()}>
-            {businessDate(new Date(event.created_at), locale, workspace.organization.timezone, true)}
+            {businessDate(
+              new Date(event.created_at),
+              locale,
+              workspace.organization.timezone,
+              true,
+            )}
           </time>
         </div>
       ))}
@@ -824,8 +835,12 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
   useEffect(() => {
     let active = true;
     const readInvitation = () => {
-      const candidate = new URLSearchParams(window.location.hash.slice(1)).get("invite");
-      setInvitation(candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : "");
+      const candidate = new URLSearchParams(window.location.hash.slice(1)).get(
+        "invite",
+      );
+      setInvitation(
+        candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : "",
+      );
     };
     window.addEventListener("hashchange", readInvitation);
     api<SessionView>("session")
@@ -1057,12 +1072,19 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           {(
             [
               { id: "today", Icon: LayoutDashboard },
+              { id: "customers", Icon: Users },
               { id: "team", Icon: Users },
               { id: "organization", Icon: Building2 },
               { id: "activity", Icon: History },
             ] as const
           )
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
+            .filter(
+              (item) =>
+                item.id !== "customers" ||
+                (workspace &&
+                  can(workspace.organization.role, "customers:read")),
+            )
             .map(({ id, Icon }) => (
               <button
                 key={id}
@@ -1148,15 +1170,21 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                   ? t.todayNote
                   : page === "team"
                     ? t.teamNote
-                    : page === "organization"
-                      ? t.orgNote
-                      : t.activityNote}
+                    : page === "customers"
+                      ? t.customersNote
+                      : page === "organization"
+                        ? t.orgNote
+                        : t.activityNote}
               </p>
             </div>
             {page === "today" ? (
               <span className="date-chip">
                 <Clock3 size={15} />
-                {businessDate(new Date(), locale, currentOrg?.timezone || "Asia/Qyzylorda")}
+                {businessDate(
+                  new Date(),
+                  locale,
+                  currentOrg?.timezone || "Asia/Qyzylorda",
+                )}
               </span>
             ) : page === "team" && workspace?.canManageTeam ? (
               <button
@@ -1199,6 +1227,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             </section>
           ) : (
             <>
+              {page === "customers" &&
+                can(workspace.organization.role, "customers:read") && (
+                  <CustomersPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
               {page === "today" && (
                 <Today
                   workspace={workspace}

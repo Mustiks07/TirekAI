@@ -10,6 +10,10 @@
 | Приглашения и отзыв доступа | implemented, серверные тесты | ручные локальные ссылки; почта not_configured |
 | Аудит | implemented для текущих мутаций | local synthetic |
 | KK/RU и адаптивный UI | implemented; QA в TESTING.md | PWA planned |
+| Импорт клиентов CSV/TSV | verified_test: preview, partial, replay, источник | local synthetic; другие сущности расширяются позднее |
+| Реестр и правка клиентов | verified_test: branch scope, пагинация, версии | local synthetic; полноценная CRM впереди |
+| Очередь/outbox/worker | verified_test локально, перезапуск отдельным процессом | внешний PostgreSQL и конкурентная нагрузка не проверены |
+| Decimal и новые API-контракты | verified_test для примитивов и imports/customers | финансовых операций ещё нет |
 | МойСклад, Битрикс24 и остальные системы | planned | not_configured |
 | Учёт, AI, голос, видео, отрасли | planned | not_configured |
 
@@ -17,4 +21,4 @@
 
 Ограничения: PGlite в одном локальном процессе, синтетические данные, нет подтверждения email/MFA/recovery, общей приёмки, нагрузки или подтверждённого восстановления. Код внешнего PostgreSQL пока не прошёл испытание на отдельном сервере. Живые интеграции и размещение не выполнялись.
 
-Проверки среза: 19 unit/integration + 2 e2e, lint/typecheck/build, npm audit без известных уязвимостей. Подробные границы подтверждения в TESTING.md. Локальные серверы при передаче остановлены.
+Проверки среза: 39 unit/integration/process + 3 e2e, lint/typecheck/build, npm audit без известных уязвимостей. Подробные границы подтверждения в TESTING.md. Локальные web и worker при передаче остановлены.

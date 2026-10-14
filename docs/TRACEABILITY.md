@@ -6,8 +6,8 @@
 | --- | --- | --- | --- |
 | §4 Организации, роли, филиалы | T003,T004 | tests/foundation.test.ts; tests/e2e/foundation.spec.ts | Локальный срез, остальные поверхности не реализованы |
 | §6 KK/RU и мобильный интерфейс | T005 | Browser QA, docs/evidence | PWA остаётся открытой |
-| §17–18 Архитектура и API | T001,T002,T008 | Миграции и rollback в foundation.test.ts | Частично; очередь/числа/контракты открыты |
-| REQ CRM 01 | T013 | Не создан | planned |
+| §17–18 Архитектура и API | T001,T002,T008 | foundation.test.ts, imports.test.ts, restart.test.ts | Decimal, новые контракты и очередь проверены локально; старые API/PG-конкуренция открыты |
+| REQ CRM 01 | T013 | imports.test.ts, e2e/imports.spec.ts | Частично: контакты, источник, версии и branch scope; виды/согласия/ответственные/история впереди |
 | REQ CRM 02 | T009,T013,T034 | Не создан | planned |
 | REQ CRM 03 | T013 | Не создан | planned |
 | REQ CRM 04 | T013,T027 | Не создан | planned |
@@ -67,7 +67,7 @@
 | REQ AUT 05 | T025 | Не создан | planned |
 | REQ AUT 06 | T025 | Не создан | planned |
 | AC 01 | T003,T004 | tests/foundation.test.ts; tests/e2e/foundation.spec.ts | Локальный срез; полная приёмка впереди |
-| AC 02 | T009 | Не создан | planned |
+| AC 02 | T009 | imports.test.ts, restart.test.ts, e2e/imports.spec.ts | verified_test: клиенты CSV/TSV, preview/partial/replay/source/date; PostgreSQL-конкуренция не проверена |
 | AC 03 | T010–T016 | Не создан | planned |
 | AC 04 | T018,T023,T024 | Не создан | planned |
 | AC 05 | T017,T020 | Не создан | planned |

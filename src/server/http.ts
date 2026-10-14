@@ -4,6 +4,19 @@ import { randomUUID } from "node:crypto";
 import { AppError } from "../domain/errors";
 import { getDatabase } from "./db/database";
 import { Platform } from "./platform";
+import { ImportService } from "./imports/service";
+import {
+  batchViewSchema,
+  batchesViewSchema,
+  customersViewSchema,
+  importApiContract,
+} from "../domain/import-contracts";
+import type { ZodType } from "zod";
+function checked(schema: ZodType, data: unknown) {
+  const result = schema.safeParse(JSON.parse(JSON.stringify(data)));
+  if (!result.success) throw new AppError("RESPONSE_CONTRACT_ERROR", 500);
+  return result.data;
+}
 const cookie = "smb_session";
 const localPreview = () => process.env.LOCAL_PREVIEW === "1";
 function origin() {
@@ -35,7 +48,14 @@ export async function handle(request: NextRequest, path: string[]) {
           const { done, value } = await reader.read();
           if (done) break;
           size += value.byteLength;
-          if (size > 16384) {
+          const limit =
+            path.length === 3 &&
+            path[0] === "organizations" &&
+            path[2] === "imports" &&
+            method === "POST"
+              ? 512 * 1024
+              : 16384;
+          if (size > limit) {
             await reader.cancel();
             throw new AppError("TOO_LARGE", 413);
           }
@@ -48,10 +68,14 @@ export async function handle(request: NextRequest, path: string[]) {
       }
     }
     const service = new Platform(await getDatabase());
+    const imports = new ImportService(await getDatabase());
+    const query = Object.fromEntries(request.nextUrl.searchParams);
     let data: unknown;
     let sessionToken: string | undefined;
     const route = path.join("/");
-    if (method === "GET" && route === "session")
+    if (method === "GET" && route === "contracts/imports")
+      data = importApiContract();
+    else if (method === "GET" && route === "session")
       data = {
         ...(await service.session(secret)),
         localPreview: localPreview(),
@@ -75,7 +99,50 @@ export async function handle(request: NextRequest, path: string[]) {
       data = await service.acceptInvitation(secret, body);
     else if (path[0] === "organizations" && path[1]) {
       const id = path[1];
-      if (path.length === 2 && method === "GET")
+      if (path.length === 3 && path[2] === "imports" && method === "POST")
+        data = checked(batchViewSchema, await imports.upload(secret, id, body));
+      else if (path.length === 3 && path[2] === "imports" && method === "GET")
+        data = checked(
+          batchesViewSchema,
+          await imports.list(secret, id, query),
+        );
+      else if (path.length === 4 && path[2] === "imports" && method === "GET")
+        data = checked(
+          batchViewSchema,
+          await imports.get(secret, id, path[3], query),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "imports" &&
+        path[4] === "confirm" &&
+        method === "POST"
+      )
+        data = checked(
+          batchViewSchema,
+          await imports.confirm(secret, id, path[3], body),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "imports" &&
+        path[4] === "retry" &&
+        method === "POST"
+      )
+        data = checked(
+          batchViewSchema,
+          await imports.retry(secret, id, path[3], body),
+        );
+      else if (path.length === 3 && path[2] === "customers" && method === "GET")
+        data = checked(
+          customersViewSchema,
+          await imports.customers(secret, id, query),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "customers" &&
+        method === "PATCH"
+      )
+        data = await imports.updateCustomer(secret, id, path[3], body);
+      else if (path.length === 2 && method === "GET")
         data = await service.workspace(secret, id);
       else if (path.length === 2 && method === "PATCH") {
         await service.updateOrganization(secret, id, body);

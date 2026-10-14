@@ -27,3 +27,15 @@ Docker CLI установлен, Docker Engine не запущен. Чтобы �
 ## ADR-007: линтер без уязвимой транзитивной цепочки
 
 `npm audit` обнаружил advisory GHSA-vfj7-8cjw-p6xm через eslint-config-next → fast-glob → micromatch → braces 3.0.3. Исправленной версии braces при проверке не было. Вместо downgrade Next установлен явный flat config ESLint + typescript-eslint + react-hooks + jsx-a11y. ESLint 9.39.5 выбран из-за peer range jsx-a11y; помечен поставщиком deprecated, миграция на ESLint 10 ожидает совместимого plugin. После изменения npm audit сообщил 0 уязвимостей. Next build отдельно проверяет TypeScript.
+
+## ADR-008: первый импорт — контакты клиентов
+
+T009 реализована на конкретной сущности, как допускает план. UTF-8 CSV/TSV, фиксированные external_id/name/email/phone, явный выбор разделителя, до 256 КБ/1000 строк. Используется реальный [csv-parse](https://csv.js.org/parse/options/), а не split по запятой. Namespace внешнего ID — филиал организации. Совпадение содержимого открывает прежний пакет; исправленная версия пропускает уже добавленные записи, а отличающиеся поля того же ID не перезаписываются. XLSX/сопоставление колонок/другие сущности — последующие расширения. Это не реализация обращений REQ CRM 02.
+
+## ADR-009: общий worker и явный локальный адаптер
+
+Outbox и задания находятся в БД. Резервирование через [FOR UPDATE SKIP LOCKED](https://www.postgresql.org/docs/current/sql-select.html), lease-token, порции по 25, до трёх попыток, одинаковый transactional processor для pg и PGlite. PGlite не может совместно открываться процессами: локальный worker использует приватный loopback-мост к web, PostgreSQL-worker работает напрямую. Это ограниченный dev-адаптер, не доказательство производственной конкурентности. Испытаны rollback, смена lease и возобновление файловой БД тремя независимыми процессами; нагрузка и PostgreSQL-lock contention остаются открытыми.
+
+## ADR-010: числа и контракт новых API
+
+[decimal.js](https://mikemcl.github.io/decimal.js/) со своей конфигурацией precision 40 и HALF_UP; вход только десятичными строками, итоговые минимальные денежные единицы bigint. Не округлять цену до умножения количества. Новые API клиентов/импорта проверяют ответы Zod и публикуют [JSON Schema](https://zod.dev/json-schema) из тех же определений. Это частичное выполнение T002: прежние ответы и полная спецификация OpenAPI ещё впереди.
