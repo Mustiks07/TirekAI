@@ -151,6 +151,7 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 | GET/POST | proposals, proposals/:id, proposals/:id/commands, proposals/:id/revisions | submit, approve/reject(paramVersion, note), execute, cancel; изменение параметров |
 | GET/POST | proposals/policy, proposals/policy/limits, proposals/policy/delegations, …/:id/revoke | лимиты (owner), делегирование |
 | GET/POST | automations, automations/:id, automations/:id/versions, automations/:id/tests, automations/:id/commands | правила, версии, тест, activate/pause/disable |
+| POST | automations/draft | `{locale, text}` → `{status: ok/invalid/refused/error/not_configured/budget_exceeded, draft, warnings, issues}`; черновик не сохраняется (automations:write) |
 | GET/POST | automations/templates, automations/executions, automations/executions/:id/retry | шаблоны, журнал, повтор ручного разбора |
 | GET | assistant | статус провайдера/речи, настройки, потребление, инструменты |
 | POST | assistant/settings | только owner |
@@ -160,6 +161,10 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 | GET/POST | integrations | обзор с паспортами / настройка токена (owner); токен вебхука возвращается один раз |
 | POST | integrations/:id/check, sync, disconnect, links, links/:warehouseId/remove; GET integrations/:id/stores | проверка, синхронизация, отключение, связь складов |
 | POST | integrations/conflicts/:id | kept_local / took_remote |
+| GET | integrations/:id/parties?search= | юрлица и контрагенты МойСклад для явного выбора (owner) |
+| POST | integrations/:id/supply | `{key, version, enabled, organizationId}` — включение/выключение записи приёмки; юрлицо и валюта KZT проверяются в API МойСклад (owner) |
+| POST | integrations/:id/counterparties | `{key, supplierId, counterpartyId|null}` — сопоставление поставщика с контрагентом (owner); 409 COUNTERPARTY_MAPPED |
+| POST | integrations/exports/:id/retry | `{key}` — повтор выгрузки в состоянии dead/failed (owner) |
 
 Публичный входящий маршрут: `POST /api/integrations/moysklad/:connectionId/:token?requestId=…` — без сессии и Origin, тело ≤ 64 КБ, токен сравнивается по хешу, повтор requestId возвращает `{accepted:true, duplicate:true}`. Обработка выполняется worker.
 

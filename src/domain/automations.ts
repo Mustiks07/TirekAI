@@ -81,6 +81,42 @@ export const automationDefinition = z
   })
   .strict();
 export type AutomationDefinition = z.infer<typeof automationDefinition>;
+// T025: a rule described in words becomes an unsaved draft; a person still saves, tests and
+// activates it through the regular commands.
+export const draftInput = z
+  .object({
+    locale: z.enum(["ru", "kk"]),
+    text: z.string().trim().min(10).max(1000),
+  })
+  .strict();
+export const draftProposal = z
+  .object({
+    name: z.string().trim().min(3).max(120),
+    explanation: z.string().trim().max(1000),
+    definition: automationDefinition,
+  })
+  .strict();
+export const draftResult = z.object({
+  status: z.enum([
+    "ok",
+    "invalid",
+    "refused",
+    "error",
+    "not_configured",
+    "budget_exceeded",
+  ]),
+  draft: z
+    .object({
+      name: z.string(),
+      explanation: z.string(),
+      definition: automationDefinition,
+    })
+    .nullable(),
+  warnings: z.array(z.string()),
+  issues: z.array(z.string()),
+  error_code: z.string().nullable(),
+  model: z.string().nullable(),
+});
 export const ruleInput = z
   .object({
     key: z.uuid(),

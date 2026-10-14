@@ -1319,6 +1319,34 @@ export function PurchasingPage({
                 </button>
               ))}
               {docs && pagination(docPage, docs.pagination.pages, setDocPage)}
+              {(detail.exports || []).length > 0 && (
+                <ul
+                  className="today-list"
+                  aria-label={t("Приёмки в МойСклад", "МойСкладқа қабылдаулар")}
+                >
+                  {detail.exports.map((x) => (
+                    <li key={x.id}>
+                      {t("Приёмка в МойСклад", "МойСкладқа қабылдау")} ·{" "}
+                      <strong>
+                        {x.state === "sent"
+                          ? t("создана", "құрылды")
+                          : x.state === "pending"
+                            ? t("ждёт отправки", "жіберуді күтеді")
+                            : x.state === "failed"
+                              ? t("ошибка, будет повтор", "қате, қайталанады")
+                              : t(
+                                  "остановлена, нужен разбор",
+                                  "тоқтатылды, талдау қажет",
+                                )}
+                      </strong>
+                      {x.error_code &&
+                        ` · ${executionError(x.error_code, locale) || x.error_code}`}
+                      {x.warning &&
+                        ` · ${t("проверьте сумму в МойСклад", "МойСкладтағы соманы тексеріңіз")}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <details>
                 <summary>{t("История закупки", "Сатып алу тарихы")}</summary>
                 {detail.events.map((e) => (

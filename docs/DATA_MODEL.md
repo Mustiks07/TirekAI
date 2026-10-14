@@ -67,7 +67,7 @@
 
 После публикации миграции 1–6 не менять: checksum истории обязателен. Следующая миграция — 7.
 
-## Миграции 7–13 (T020–T030)
+## Миграции 7–14 (T020–T030)
 
 Миграция 7 (`reconciliation-migration.ts`): `purchase_documents.parent_document_id` (дочерний документ отдельной закупки делит оригинал; уникальность хеша и номера/даты — только для корневых), `purchase_document_lines.purchase_line_id` (замена SKU приходуется на заказанную строку), `document_line_decisions` (substitute/reject/separate с позицией строки, суммой, связью с отдельным заказом), `purchase_document_adjustments` (до/после, дельта долга, предупреждения). Долг = сумма принятых строк + доставка; отклонённые и отдельные строки в него не входят. Стоимость прихода = накопленная доля − уже проведённая сумма receipts; последняя часть получает точный остаток.
 
@@ -83,4 +83,6 @@
 
 Миграция 13 (`integrations-migration.ts`): `integration_connections` (status, credentials AES-GCM, hint, hash токена вебхука, ownership, verification), `integration_mappings` (external_id ↔ internal_id, external_updated, local_version), `integration_warehouse_links`, `external_stock` (зеркало остатка связанного склада), `sync_cursors`, `sync_runs`, `integration_inbox` (UNIQUE(connection, requestId)), `sync_conflicts`.
 
-Источник истины: для связанного склада остаток — МойСклад (`external_stock`), складские команды по нему запрещены; для остальных — собственный журнал. Каталог импортированных товаров обновляется из МойСклад, но локальная правка после синхронизации создаёт конфликт. Задачи, согласования, закупки и знания ведутся у нас. Следующая миграция — 14; миграции 1–13 после публикации не менять.
+Миграция 14 (`writeback-migration.ts`): `catalog_items.purchase_price/sale_price` допускают NULL (цена неизвестна); `purchase_receipts.movement_id` допускает NULL (приёмка на склад-зеркало без локального движения); `integration_connections.settings` (jsonb, раздел supply: enabled, organization_id, кто и когда); `integration_mappings.entity_type` += counterparty; `sync_runs.kind` += export; `integration_exports` (kind supply, источник purchase_receive = ключ команды приёмки, UNIQUE(organization, source_type, source_id), payload снимка позиций, expected_minor, state pending/sent/failed/dead, attempts, next_attempt_at, external_id, external_sum_minor, warning, error_code).
+
+Источник истины: для связанного склада остаток — МойСклад (`external_stock`), складские команды по нему запрещены; для остальных — собственный журнал. Каталог импортированных товаров обновляется из МойСклад, но локальная правка после синхронизации создаёт конфликт. Задачи, согласования, закупки и знания ведутся у нас. Следующая миграция — 15; миграции 1–14 после публикации не менять.

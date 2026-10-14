@@ -31,6 +31,9 @@ export const rulePermission: Record<InsightRow["rule"], Permission> = {
   purchase_pending: "purchasing:read",
   document_review: "purchasing:read",
   overdue_task: "tasks:manage",
+  below_cost_sale: "inventory:cost",
+  unknown_cost: "inventory:cost",
+  missing_sale_price: "catalog:read",
 };
 export function visibleRules(role: Role) {
   return (Object.keys(rulePermission) as InsightRow["rule"][]).filter((r) =>
@@ -401,6 +404,105 @@ export class InsightService {
           sources: [{ type: "task", id: r.id, label: `№${r.number}` }],
           as_of: asOf,
           suggestion: "reassign_or_escalate",
+        },
+      });
+    // Shipped below cost over the last 30 days (fulfilment events with known cost only).
+    const lines = await tx.query<{
+      line_id: string;
+      order_id: string;
+      branch_id: string;
+      number: number;
+      sku: string;
+      name_ru: string;
+      quantity: string;
+      revenue_minor: string;
+      cost_minor: string | null;
+      unknown: number;
+      events: number;
+    }>(
+      "SELECT l.id line_id,o.id order_id,o.branch_id,o.number,l.sku,l.name_ru,sum(e.quantity)::text quantity,sum(e.revenue_minor)::text revenue_minor,CASE WHEN bool_and(e.cost_minor IS NOT NULL) THEN sum(e.cost_minor)::text END cost_minor,count(*) FILTER (WHERE e.cost_minor IS NULL)::int unknown,count(*)::int events FROM sales_events e JOIN sales_order_lines l ON l.organization_id=e.organization_id AND l.id=e.line_id JOIN sales_orders o ON o.organization_id=e.organization_id AND o.id=e.order_id WHERE e.organization_id=$1 AND e.kind='fulfill' AND e.created_at>now()-interval '30 days' GROUP BY l.id,o.id,o.branch_id,o.number,l.sku,l.name_ru HAVING count(*) FILTER (WHERE e.cost_minor IS NULL)>0 OR sum(e.cost_minor)>sum(e.revenue_minor) ORDER BY o.number LIMIT 200",
+      [org],
+    );
+    for (const r of lines) {
+      const sources = [
+        { type: "sales_order", id: r.order_id, label: `№${r.number}` },
+      ];
+      if (r.unknown > 0) {
+        // Unknown cost is a data gap, not a zero margin: profit is not shown for it.
+        out.push({
+          rule: "unknown_cost",
+          branch: r.branch_id,
+          entityType: "sales_order_line",
+          entityId: r.line_id,
+          severity: 2,
+          evidence: {
+            title: `№${r.number} · ${r.sku} · ${r.name_ru}`,
+            facts: {
+              order_id: r.order_id,
+              shipped_quantity: r.quantity,
+              revenue_kzt: money(r.revenue_minor),
+              events_unknown_cost: r.unknown,
+              events_total: r.events,
+            },
+            calculation:
+              "fulfilment events in the last 30 days without a recorded cost (stock received without cost)",
+            sources,
+            as_of: asOf,
+            suggestion: "record_cost",
+          },
+        });
+        continue;
+      }
+      const loss = (BigInt(r.cost_minor!) - BigInt(r.revenue_minor)).toString();
+      out.push({
+        rule: "below_cost_sale",
+        branch: r.branch_id,
+        entityType: "sales_order_line",
+        entityId: r.line_id,
+        // Loss above 10% of cost is high.
+        severity: BigInt(loss) * 10n > BigInt(r.cost_minor!) ? 3 : 2,
+        evidence: {
+          title: `№${r.number} · ${r.sku} · ${r.name_ru}`,
+          facts: {
+            order_id: r.order_id,
+            shipped_quantity: r.quantity,
+            revenue_kzt: money(r.revenue_minor),
+            cost_kzt: money(r.cost_minor!),
+            loss_kzt: money(loss),
+            loss_minor: loss,
+          },
+          calculation:
+            "sum(cost of fulfilled quantity) − sum(revenue) over fulfilment events in the last 30 days",
+          sources,
+          as_of: asOf,
+          suggestion: "review_price",
+        },
+      });
+    }
+    // Goods on hand (own ledger or MoySklad mirror) that cannot be sold at a known price.
+    for (const r of await tx.query<{
+      branch_id: string;
+      branch_name: string;
+      n: number;
+      skus: string[];
+    }>(
+      "SELECT w.branch_id,b.name branch_name,count(DISTINCT c.id)::int n,(array_agg(DISTINCT c.sku ORDER BY c.sku))[1:5] skus FROM catalog_items c JOIN (SELECT organization_id,warehouse_id,item_id FROM stock_balances WHERE quantity>0 UNION SELECT organization_id,warehouse_id,item_id FROM external_stock WHERE quantity>0) s ON s.organization_id=c.organization_id AND s.item_id=c.id JOIN warehouses w ON w.organization_id=s.organization_id AND w.id=s.warehouse_id JOIN branches b ON b.organization_id=w.organization_id AND b.id=w.branch_id WHERE c.organization_id=$1 AND c.active AND c.kind='goods' AND c.sale_price IS NULL GROUP BY w.branch_id,b.name LIMIT 200",
+      [org],
+    ))
+      out.push({
+        rule: "missing_sale_price",
+        branch: r.branch_id,
+        entityType: "branch",
+        entityId: r.branch_id,
+        severity: r.n > 10 ? 2 : 1,
+        evidence: {
+          title: r.branch_name,
+          facts: { items_without_price: r.n, sample_skus: r.skus.join(", ") },
+          calculation:
+            "active goods with stock > 0 in this branch and no sale price in the catalogue",
+          sources: [{ type: "catalog", id: r.branch_id, label: r.branch_name }],
+          as_of: asOf,
+          suggestion: "fill_prices",
         },
       });
     return out;

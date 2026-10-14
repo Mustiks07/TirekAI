@@ -287,6 +287,19 @@ export const purchaseDetail = z.object({
     }),
   ),
   eventPagination: paginationSchema,
+  // Receipts into a MoySklad-mirrored warehouse are handed over as supplies (T030).
+  exports: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        state: z.enum(["pending", "sent", "failed", "dead"]),
+        error_code: z.string().nullable(),
+        warning: z.string().nullable(),
+        external_id: z.string().nullable(),
+        created_at: z.string(),
+      }),
+    )
+    .default([]),
 });
 export const supplierList = z.object({
   items: z.array(

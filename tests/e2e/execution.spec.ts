@@ -293,6 +293,14 @@ test("situation → draft purchase → second-person approval → execution; tas
   await expect(
     page.getByRole("button", { name: /Нехватка → задача.*Включено/ }),
   ).toBeVisible();
+  // T025: an AI draft without a configured provider is reported honestly, nothing is saved.
+  await page
+    .getByLabel("Что должно происходить", { exact: true })
+    .fill("Каждое утро ставить задачу проверить кассу");
+  await page
+    .getByRole("button", { name: "Предложить черновик", exact: true })
+    .click();
+  await expect(page.getByText(/AI-помощник не настроен/)).toBeVisible();
   // T026: honest not_configured state.
   await nav(page, "Помощник");
   await expect(
@@ -310,6 +318,12 @@ test("situation → draft purchase → second-person approval → execution; tas
   await expect(page.getByText("Не подключено", { exact: true })).toBeVisible();
   await expect(
     page.getByText(/GET \/report\/stock\/bystore\/current/),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator("li")
+      .filter({ hasText: "Создание приёмки в МойСклад" })
+      .filter({ hasText: "реализовано" }),
   ).toBeVisible();
   // T020: invoice line outside the order is rejected explicitly, not posted.
   const purchase = (

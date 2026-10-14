@@ -43,8 +43,9 @@ export const itemInput = z
       .array(z.object({ unit, factor: positive }).strict())
       .max(8)
       .default([]),
-    purchase_price: decimalInput,
-    sale_price: decimalInput,
+    // null = price not known (e.g. imported without a KZT price); never treated as zero.
+    purchase_price: decimalInput.nullable(),
+    sale_price: decimalInput.nullable(),
     active: z.boolean().default(true),
   })
   .strict();
@@ -116,7 +117,7 @@ export type CatalogInput = z.infer<typeof itemInput>;
 export const itemSchema = itemInput.omit({ purchase_price: true }).extend({
   id: z.uuid(),
   version: z.number().int().positive(),
-  purchase_price: decimalInput.optional(),
+  purchase_price: decimalInput.nullable().optional(),
 });
 export type Item = z.infer<typeof itemSchema>;
 export const catalogSchema = z.object({

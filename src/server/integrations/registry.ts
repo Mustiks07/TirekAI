@@ -45,6 +45,7 @@ export const passports: Passport[] = [
       stock_linked_warehouses: "external",
       tasks: "internal",
       purchases: "internal",
+      receipts_linked_warehouses: "external",
     },
     operations: [
       {
@@ -78,7 +79,30 @@ export const passports: Passport[] = [
         verification: "contract_test",
         live: "not_verified",
         notes:
-          "cursor on updated (MSK) with overlap; units by OKEI code; local edits are not overwritten silently",
+          "cursor on updated (MSK) with overlap; units by OKEI code; local edits are not overwritten silently; buyPrice and the first salePrices entry are taken only in KZT (minor units ÷ 100), otherwise the price stays unknown",
+      },
+      {
+        id: "currencies",
+        direction: "read",
+        entity: "currency",
+        endpoint: "GET /entity/currency",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "isoCode resolves the currency of prices; KZT is required for price import and supply write-back",
+      },
+      {
+        id: "parties",
+        direction: "read",
+        entity: "organization, counterparty",
+        endpoint:
+          "GET /entity/organization; GET /entity/counterparty?search=…&limit=50",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "owner picks the legal entity and maps each local supplier to a counterparty explicitly",
       },
       {
         id: "stock",
@@ -119,12 +143,13 @@ export const passports: Passport[] = [
         id: "supply_create",
         direction: "write",
         entity: "supply",
-        endpoint: "POST /entity/supply",
-        implementation: "planned",
-        verification: "none",
+        endpoint:
+          "GET /entity/supply?filter=externalCode=…; POST /entity/supply",
+        implementation: "implemented",
+        verification: "contract_test",
         live: "not_verified",
         notes:
-          "write-back of receipts is not enabled: receipts for linked warehouses happen in MoySklad to avoid double posting",
+          "off by default; when the owner enables it, a confirmed receipt into a linked warehouse posts no local movement and is queued as a supply (organization, counterparty, store, KZT, positions with price in minor units); externalCode makes retries idempotent; POST is never retried blindly",
       },
     ],
     unverified: [
@@ -132,6 +157,7 @@ export const passports: Passport[] = [
       "real webhook delivery to a public URL",
       "rate-limit behaviour under load",
       "time zone of 'updated' for accounts outside MSK",
+      "supply creation, VAT defaults and rounding of the document sum in a live account",
     ],
     disconnect:
       "Owner disconnects: credentials are erased, links and the stock mirror stop updating and are marked stale; local warehouses become writable again only by an explicit unlink.",

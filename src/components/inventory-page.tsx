@@ -42,6 +42,8 @@ type Operation = {
   movementId?: string;
 };
 const field = (f: FormData, n: string) => String(f.get(n) || "").trim();
+const priceText = (v: string | null | undefined, missing: string) =>
+  v === null || v === undefined ? missing : quantityText(v);
 export function InventoryPage({
   workspace,
   locale,
@@ -215,8 +217,8 @@ export function InventoryPage({
         kind: field(f, "kind"),
         base_unit: field(f, "base_unit"),
         conversions,
-        purchase_price: field(f, "purchase_price"),
-        sale_price: field(f, "sale_price"),
+        purchase_price: field(f, "purchase_price") || null,
+        sale_price: field(f, "sale_price") || null,
         active: f.get("active") === "on",
         ...(editing && editing !== "new" ? { version: editing.version } : {}),
       };
@@ -502,7 +504,7 @@ export function InventoryPage({
                     pattern="(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?"
                     defaultValue={
                       operation.kind === "receipt"
-                        ? quantityText(operation.item.purchase_price || "0")
+                        ? priceText(operation.item.purchase_price, "")
                         : ""
                     }
                   />
@@ -845,9 +847,8 @@ export function InventoryPage({
                 <input
                   name="purchase_price"
                   inputMode="decimal"
-                  required
                   defaultValue={
-                    initial ? quantityText(initial.purchase_price || "0") : "0"
+                    initial ? priceText(initial.purchase_price, "") : ""
                   }
                 />
               </label>
@@ -856,9 +857,8 @@ export function InventoryPage({
                 <input
                   name="sale_price"
                   inputMode="decimal"
-                  required
                   defaultValue={
-                    initial ? quantityText(initial.sale_price) : "0"
+                    initial ? priceText(initial.sale_price, "") : ""
                   }
                 />
               </label>
@@ -979,12 +979,14 @@ export function InventoryPage({
                 <div className="catalog-prices">
                   <div>
                     <span>{t.sale_price}</span>
-                    <strong>{quantityText(i.sale_price)}</strong>
+                    <strong>{priceText(i.sale_price, t.priceUnknown)}</strong>
                   </div>
                   {cost && i.purchase_price !== undefined && (
                     <div>
                       <span>{t.purchase_price}</span>
-                      <strong>{quantityText(i.purchase_price)}</strong>
+                      <strong>
+                        {priceText(i.purchase_price, t.priceUnknown)}
+                      </strong>
                     </div>
                   )}
                 </div>

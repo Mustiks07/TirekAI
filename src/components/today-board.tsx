@@ -450,7 +450,9 @@ export function TodayBoard({
                       ? t("Собственный учёт", "Өз есебі")
                       : s.name === "moysklad"
                         ? "МойСклад"
-                        : t("AI-помощник", "AI көмекші")}
+                        : s.name === "moysklad_writeback"
+                          ? t("Приёмки в МойСклад", "МойСкладқа қабылдаулар")
+                          : t("AI-помощник", "AI көмекші")}
                   </strong>{" "}
                   · {stateText(s.status, locale)}
                   {s.checked_at &&

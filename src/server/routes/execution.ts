@@ -21,6 +21,7 @@ import {
   testResult,
   executionList,
   automationTemplates,
+  draftResult,
 } from "../../domain/automations";
 import {
   insightList,
@@ -460,6 +461,13 @@ export const executionRoutes: Route[] = [
   },
   {
     method: "POST",
+    path: "automations/draft",
+    schema: draftResult,
+    run: (c) =>
+      new AssistantService(c.db).draftAutomation(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
     path: "assistant/transcriptions",
     run: (c) => new AssistantService(c.db).transcribe(c.secret, c.org, c.body),
   },
@@ -527,6 +535,53 @@ export const executionRoutes: Route[] = [
     path: "integrations/:id/sync",
     run: (c) =>
       new IntegrationService(c.db).syncNow(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "integrations/:id/parties",
+    run: (c) =>
+      new IntegrationService(c.db).parties(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.query,
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/supply",
+    schema: commerceResult,
+    run: (c) =>
+      new IntegrationService(c.db).configureSupply(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/:id/counterparties",
+    schema: commerceResult,
+    run: (c) =>
+      new IntegrationService(c.db).mapCounterparty(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/exports/:id/retry",
+    schema: commerceResult,
+    run: (c) =>
+      new IntegrationService(c.db).retryExport(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
   },
   {
     method: "POST",

@@ -107,10 +107,10 @@ CI повторяет основные команды и устанавлива�
 | --- | --- |
 | npm run lint | PASS |
 | npm run typecheck | PASS |
-| npm test | 120 / 120, 15 файлов, 82 с |
-| npm run test:postgres | 13 / 13; PostgreSQL 16.15 из пакета Ubuntu, отдельный временный кластер (`PG_BIN=/usr/lib/postgresql/16/bin`, запуск от непривилегированного пользователя, так как initdb не работает от root) |
+| npm test | 124 / 124, 15 файлов, 92 с (после доработки: +цены KZT и запись приёмки в moysklad-contract (8), +AI-черновик в assistant (8), +3 правила ситуаций в commerce) |
+| npm run test:postgres | 13 / 13 (миграции 1–14); PostgreSQL 16 из пакета Ubuntu, отдельный временный кластер (`PG_BIN=/usr/lib/postgresql/16/bin`, запуск от непривилегированного пользователя, так как initdb не работает от root) |
 | npm run build | PASS |
-| npm run test:e2e | 8 / 8, 1.1 мин; `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`, так как предустановленная сборка браузера отличается от закреплённой Playwright |
+| npm run test:e2e | 8 / 8, 1.1 мин (execution.spec.ts дополнительно: AI-черновик not_configured, паспорт записи приёмки); `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`, так как предустановленная сборка браузера отличается от закреплённой Playwright |
 | npm audit | 0 уязвимостей (с новой зависимостью @anthropic-ai/sdk 0.133.0) |
 
 Новые наборы: `tests/purchasing.test.ts` (+5: неизвестная/лишняя строка, замена SKU, отдельная закупка, корректировка, отказ ниже оплаченного), `tests/tasks.test.ts` (5), `tests/knowledge.test.ts` (3), `tests/decisions.test.ts` (3, включая сквозной сценарий этапа 3 до проверенного эффекта), `tests/automations.test.ts` (4: повторная доставка, цикл двух правил, перезапуск worker с fencing, ручной разбор, отзыв прав), `tests/assistant.test.ts` (7, обвязка через тестовый сценарный провайдер), `tests/moysklad-contract.test.ts` (6, локальный контрактный сервер по официальной документации). PostgreSQL: +2 (приход ↔ корректировка долга; одновременное подтверждение документа с отдельной закупкой). E2E `tests/e2e/execution.spec.ts`: ситуация → черновик → согласование вторым пользователем → исполнение; задача с проверкой; знания; правило с тестом; помощник not_configured; паспорта подключений; решение по строке вне заказа; axe, KK, 360/390/430 px. Снимки `docs/evidence/today-desktop-ru.png`, `approvals-mobile-kk.png`.

@@ -10,6 +10,7 @@ import { InventoryService } from "../src/server/inventory/service";
 import { CommerceService } from "../src/server/commerce/service";
 import { ImportService } from "../src/server/imports/service";
 import { ImportWorker } from "../src/server/jobs/worker";
+import { InsightService } from "../src/server/decisions/insights";
 import {
   discountedTotal,
   commerceContract,
@@ -660,4 +661,79 @@ it("shows zero revenue and no percentages for an organization that only received
     markup_percent: null,
     gross_profit_minor: "0",
   });
+});
+it("T023: detects below-cost sales, unknown cost and stocked goods without a sale price, visible only with cost rights", async () => {
+  const cheap = await item();
+  const id = await order(cheap, "3", "10");
+  await act(id, "confirm");
+  const line = (await s.get(owner.token, org, id)).lines[0];
+  await act(id, "fulfill", { lineId: line.id, quantity: "3" });
+  const unpriced = (
+    await inventory.saveItem(owner.token, org, {
+      sku: randomUUID(),
+      name_ru: "Без цены",
+      kind: "goods",
+      base_unit: "pc",
+      purchase_price: null,
+      sale_price: null,
+    })
+  ).id!;
+  await inventory.execute(owner.token, org, {
+    key: randomUUID(),
+    kind: "receipt",
+    warehouseId: warehouse,
+    itemId: unpriced,
+    quantity: "2",
+    unit: "pc",
+    unitCost: "5",
+    note: "Synthetic receipt",
+  });
+  const ins = new InsightService(db);
+  await ins.detect(org);
+  const list = async (token: string, rule: string) =>
+    (
+      (await ins.list(token, org, { rule })) as unknown as {
+        items: {
+          entity_id: string;
+          severity: number;
+          evidence: { facts: Record<string, unknown> };
+        }[];
+      }
+    ).items;
+  const below = (await list(owner.token, "below_cost_sale")).find(
+    (x) => x.entity_id === line.id,
+  );
+  expect(below).toMatchObject({
+    severity: 3,
+    evidence: {
+      facts: { revenue_kzt: "30.00", cost_kzt: "60.00", loss_kzt: "30.00" },
+    },
+  });
+  // The service fulfilled earlier has no cost: reported as a data gap, not as a profit.
+  const unknown = await list(owner.token, "unknown_cost");
+  expect(unknown.length).toBeGreaterThan(0);
+  expect(unknown[0].evidence.facts).not.toHaveProperty("cost_kzt");
+  const missing = await list(owner.token, "missing_sale_price");
+  expect(missing[0]).toMatchObject({ entity_id: branch });
+  expect(Number(missing[0].evidence.facts.items_without_price)).toBe(1);
+  // A seller without cost rights does not see cost-based situations.
+  expect(await list(seller.token, "below_cost_sale")).toEqual([]);
+  // Once the item gets a price, the situation clears on the next detection.
+  await inventory.saveItem(
+    owner.token,
+    org,
+    {
+      sku: (await inventory.catalog(owner.token, org, { q: "Без цены" }))
+        .items[0].sku,
+      name_ru: "Без цены",
+      kind: "goods",
+      base_unit: "pc",
+      purchase_price: null,
+      sale_price: "15",
+      version: 1,
+    },
+    unpriced,
+  );
+  await ins.detect(org);
+  expect(await list(owner.token, "missing_sale_price")).toEqual([]);
 });

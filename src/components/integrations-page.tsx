@@ -6,6 +6,7 @@ import { api } from "@/lib/client";
 import { errorText } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import { executionError, stateText } from "@/lib/execution-i18n";
+import { moneyText } from "@/lib/inventory-i18n";
 import { ActionForm, Field } from "./purchasing-page";
 
 const f = (d: FormData, n: string) => String(d.get(n) || "").trim();
@@ -41,6 +42,26 @@ type Overview = {
     open_conflicts: number;
     pending_events: number;
     disconnected_at: string | null;
+    version: number;
+    supply: { enabled: boolean; organization_id: string | null } | null;
+  }[];
+  exports: {
+    id: string;
+    order_number: number;
+    state: string;
+    attempts: number;
+    expected_minor: string;
+    external_sum_minor: string | null;
+    external_id: string | null;
+    warning: string | null;
+    error_code: string | null;
+    created_at: string;
+  }[];
+  counterparties: {
+    connection_id: string;
+    supplier_id: string;
+    supplier_name: string;
+    counterparty_id: string;
   }[];
   links: {
     warehouse_id: string;
@@ -98,6 +119,14 @@ const opNames: Record<string, [string, string]> = {
   webhook: ["Вебхуки об изменениях", "Өзгерістер туралы вебхуктар"],
   webhook_register: ["Регистрация вебхука", "Вебхукты тіркеу"],
   supply_create: ["Создание приёмки в МойСклад", "МойСкладта қабылдау құру"],
+  currencies: ["Валюты", "Валюталар"],
+  parties: ["Юрлица и контрагенты", "Заңды тұлғалар мен контрагенттер"],
+};
+const exportStates: Record<string, [string, string]> = {
+  pending: ["ждёт отправки", "жіберуді күтеді"],
+  sent: ["создана в МойСклад", "МойСкладта құрылды"],
+  failed: ["ошибка, будет повтор", "қате, қайталанады"],
+  dead: ["остановлена, нужен разбор", "тоқтатылды, талдау қажет"],
 };
 const opNotes: Record<string, [string, string]> = {
   stores: [
@@ -105,8 +134,16 @@ const opNotes: Record<string, [string, string]> = {
     "Қойма біздікімен тек иесінің нақты әрекетімен байланысады.",
   ],
   products: [
-    "Курсор по дате изменения с перекрытием; единицы по коду ОКЕИ; наши правки не затираются молча.",
-    "Өзгеру күні бойынша қабаттасқан курсор; бірліктер ОКЕИ коды бойынша; біздің түзетулер үнсіз жазылмайды.",
+    "Курсор по дате изменения с перекрытием; единицы по коду ОКЕИ; наши правки не затираются молча. Цены берутся только в KZT; иначе цена остаётся «не указана», а не 0.",
+    "Өзгеру күні бойынша қабаттасқан курсор; бірліктер ОКЕИ коды бойынша; біздің түзетулер үнсіз жазылмайды. Бағалар тек KZT-пен алынады; әйтпесе баға 0 емес, «көрсетілмеген» болып қалады.",
+  ],
+  currencies: [
+    "Код валюты (isoCode) определяет, можно ли взять цену.",
+    "Валюта коды (isoCode) бағаны алуға болатынын анықтайды.",
+  ],
+  parties: [
+    "Юрлицо и контрагент для приёмки выбирает собственник; по названию ничего не сопоставляется.",
+    "Қабылдауға арналған заңды тұлға мен контрагентті иесі таңдайды; атау бойынша ештеңе сәйкестендірілмейді.",
   ],
   stock: [
     "Зеркало физического остатка для связанных складов; локальные складские операции по ним заблокированы.",
@@ -121,8 +158,8 @@ const opNotes: Record<string, [string, string]> = {
     "Тек иесінің нақты әрекеті; жария HTTPS мекенжайы және ақылы тариф қажет.",
   ],
   supply_create: [
-    "Запись приёмки обратно не включена: приёмка по связанным складам делается в МойСклад, чтобы не было двойного прихода.",
-    "Қабылдауды кері жазу қосылмаған: байланысқан қоймалар бойынша қабылдау МойСкладта жасалады, екі рет кіріс болмас үшін.",
+    "Выключено по умолчанию. После включения подтверждённая приёмка на связанный склад не создаёт движение у нас, а ставится в очередь как приёмка МойСклад; внешний код защищает от дублей при повторе.",
+    "Әдепкі бойынша өшірулі. Қосылғаннан кейін байланысқан қоймаға расталған қабылдау бізде қозғалыс жасамайды, МойСклад қабылдауы ретінде кезекке қойылады; сыртқы код қайталағанда көшірмеден қорғайды.",
   ],
 };
 export function IntegrationsPage({
@@ -140,6 +177,11 @@ export function IntegrationsPage({
     [stores, setStores] = useState<
       { id: string; name: string; archived: boolean }[] | null
     >(null),
+    [parties, setParties] = useState<{
+      organizations: { id: string; name: string; archived: boolean }[];
+      counterparties: { id: string; name: string; archived: boolean }[];
+    } | null>(null),
+    [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]),
     [secretUrl, setSecretUrl] = useState(""),
     [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
@@ -155,6 +197,15 @@ export function IntegrationsPage({
       .catch((e) => live && setError(e.code || "INTERNAL_ERROR"));
     api<{ items: Warehouse[] }>(`${base}/warehouses`)
       .then((v) => live && setWarehouses(v.items))
+      .catch(() => undefined);
+    api<{ items: { id: string; data: { name: string } }[] }>(
+      `${base}/suppliers?limit=100&page=1`,
+    )
+      .then(
+        (v) =>
+          live &&
+          setSuppliers(v.items.map((x) => ({ id: x.id, name: x.data.name }))),
+      )
       .catch(() => undefined);
     return () => {
       live = false;
@@ -418,6 +469,250 @@ export function IntegrationsPage({
                     </select>
                   </Field>
                 </ActionForm>
+              )}
+            </section>
+          )}
+          {conn && conn.status !== "disconnected" && (
+            <section className="panel" aria-labelledby="supply-writeback">
+              <h2 id="supply-writeback">
+                {t("Приёмки в МойСклад", "МойСкладқа қабылдаулар")}
+              </h2>
+              <p>
+                {conn.supply?.enabled
+                  ? t(
+                      "Включено: подтверждённая приёмка на связанный склад создаёт приёмку в МойСклад. У нас движение не создаётся, остаток придёт со следующей синхронизацией.",
+                      "Қосулы: байланысқан қоймаға расталған қабылдау МойСкладта қабылдау құрады. Бізде қозғалыс жасалмайды, қалдық келесі синхрондаумен келеді.",
+                    )
+                  : t(
+                      "Выключено: приёмку на связанный склад нужно делать в МойСклад.",
+                      "Өшірулі: байланысқан қоймаға қабылдауды МойСкладта жасау керек.",
+                    )}
+              </p>
+              {o.canWrite && (
+                <ActionForm
+                  locale={locale}
+                  label={t(
+                    "Загрузить юрлица и контрагентов",
+                    "Заңды тұлғалар мен контрагенттерді жүктеу",
+                  )}
+                  submit={async (d) => {
+                    setParties(
+                      await api(
+                        `${base}/integrations/${conn.id}/parties?search=${encodeURIComponent(f(d, "search"))}`,
+                      ),
+                    );
+                  }}
+                >
+                  <Field
+                    label={t(
+                      "Поиск контрагента (часть названия)",
+                      "Контрагентті іздеу (атаудың бөлігі)",
+                    )}
+                  >
+                    <input name="search" maxLength={80} />
+                  </Field>
+                </ActionForm>
+              )}
+              {o.canWrite && parties && !conn.supply?.enabled && (
+                <ActionForm
+                  locale={locale}
+                  label={t(
+                    "Включить выгрузку приёмок",
+                    "Қабылдауды жіберуді қосу",
+                  )}
+                  submit={async (d, key) => {
+                    await api(
+                      `${base}/integrations/${conn.id}/supply`,
+                      "POST",
+                      {
+                        key,
+                        version: conn.version,
+                        enabled: true,
+                        organizationId: f(d, "organizationId"),
+                      },
+                    );
+                    refresh();
+                  }}
+                >
+                  <Field
+                    label={t("Юрлицо в МойСклад", "МойСкладтағы заңды тұлға")}
+                  >
+                    <select name="organizationId" required>
+                      {parties.organizations
+                        .filter((x) => !x.archived)
+                        .map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name}
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                </ActionForm>
+              )}
+              {o.canWrite && conn.supply?.enabled && (
+                <div className="commerce-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={!!busy}
+                    onClick={() =>
+                      run(
+                        "supply-off",
+                        () =>
+                          api(
+                            `${base}/integrations/${conn.id}/supply`,
+                            "POST",
+                            {
+                              key: crypto.randomUUID(),
+                              version: conn.version,
+                              enabled: false,
+                              organizationId: null,
+                            },
+                          ),
+                        t("Выгрузка выключена.", "Жіберу өшірілді."),
+                      )
+                    }
+                  >
+                    {t("Выключить выгрузку", "Жіберуді өшіру")}
+                  </button>
+                </div>
+              )}
+              <h3>
+                {t("Поставщики → контрагенты", "Жеткізушілер → контрагенттер")}
+              </h3>
+              {o.counterparties.length === 0 ? (
+                <p>{t("Сопоставлений нет.", "Сәйкестендірулер жоқ.")}</p>
+              ) : (
+                <ul className="today-list">
+                  {o.counterparties.map((m) => (
+                    <li key={m.supplier_id}>
+                      {m.supplier_name} → {m.counterparty_id.slice(0, 8)}
+                      {o.canWrite && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() =>
+                            run(
+                              m.supplier_id,
+                              () =>
+                                api(
+                                  `${base}/integrations/${conn.id}/counterparties`,
+                                  "POST",
+                                  {
+                                    key: crypto.randomUUID(),
+                                    supplierId: m.supplier_id,
+                                    counterpartyId: null,
+                                  },
+                                ),
+                              t(
+                                "Сопоставление снято.",
+                                "Сәйкестендіру алынды.",
+                              ),
+                            )
+                          }
+                        >
+                          {t("Снять", "Алу")}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {o.canWrite && parties && suppliers.length > 0 && (
+                <ActionForm
+                  locale={locale}
+                  label={t(
+                    "Сопоставить поставщика",
+                    "Жеткізушіні сәйкестендіру",
+                  )}
+                  submit={async (d, key) => {
+                    await api(
+                      `${base}/integrations/${conn.id}/counterparties`,
+                      "POST",
+                      {
+                        key,
+                        supplierId: f(d, "supplierId"),
+                        counterpartyId: f(d, "counterpartyId"),
+                      },
+                    );
+                    refresh();
+                  }}
+                >
+                  <Field label={t("Наш поставщик", "Біздің жеткізуші")}>
+                    <select name="supplierId" required>
+                      {suppliers.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field
+                    label={t("Контрагент МойСклад", "МойСклад контрагенті")}
+                  >
+                    <select name="counterpartyId" required>
+                      {parties.counterparties
+                        .filter((x) => !x.archived)
+                        .map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name}
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                </ActionForm>
+              )}
+              <h3>{t("Очередь выгрузки", "Жіберу кезегі")}</h3>
+              {o.exports.length === 0 ? (
+                <p>{t("Выгрузок не было.", "Жіберулер болмады.")}</p>
+              ) : (
+                <ul className="today-list">
+                  {o.exports.map((x) => (
+                    <li key={x.id}>
+                      {t("Закупка", "Сатып алу")} №{x.order_number} ·{" "}
+                      {moneyText(x.expected_minor)} ₸ ·{" "}
+                      <strong>
+                        {exportStates[x.state]?.[locale === "ru" ? 0 : 1] ||
+                          x.state}
+                      </strong>
+                      {x.external_sum_minor &&
+                        ` · ${t("сумма в МойСклад", "МойСкладтағы сома")} ${moneyText(x.external_sum_minor)} ₸`}
+                      {x.warning &&
+                        ` · ${
+                          x.warning === "sum_mismatch"
+                            ? t(
+                                "сумма в МойСклад отличается — проверьте округление",
+                                "МойСкладтағы сома өзгеше — дөңгелектеуді тексеріңіз",
+                              )
+                            : t(
+                                "МойСклад не вернул сумму",
+                                "МойСклад соманы қайтармады",
+                              )
+                        }`}
+                      {x.error_code && ` · ${msg(x.error_code)}`}
+                      {o.canWrite && ["dead", "failed"].includes(x.state) && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() =>
+                            run(
+                              x.id,
+                              () =>
+                                api(
+                                  `${base}/integrations/exports/${x.id}/retry`,
+                                  "POST",
+                                  { key: crypto.randomUUID() },
+                                ),
+                              t("Поставлено в очередь.", "Кезекке қойылды."),
+                            )
+                          }
+                        >
+                          {t("Повторить", "Қайталау")}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
             </section>
           )}

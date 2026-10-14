@@ -30,6 +30,12 @@ import {
   type DocumentView,
 } from "../../domain/purchasing";
 import { extractDocument } from "./extract";
+import {
+  externalProductInTransaction,
+  queueSupplyInTransaction,
+  supplyTargetInTransaction,
+  type SupplyPosition,
+} from "../integrations/writeback";
 const orderColumns =
   "o.id,o.branch_id,o.warehouse_id,o.supplier_id,s.name supplier_name,o.number,o.state,o.version,o.due_date::text,o.total_minor::text,o.budget_minor::text,o.note,o.created_at";
 const lineColumns =
@@ -468,6 +474,10 @@ export class PurchasingService {
           [org, id, q.limit, (q.page - 1) * q.limit],
         ),
         eventPagination: pagination(q.page, q.limit, c.total),
+        exports: await tx.query(
+          "SELECT id,state,error_code,warning,external_id,created_at FROM integration_exports WHERE organization_id=$1 AND purchase_order_id=$2 ORDER BY created_at DESC LIMIT 20",
+          [org, id],
+        ),
       };
     });
   }
@@ -1304,6 +1314,15 @@ export class PurchasingService {
         `SELECT ${lineColumns} FROM purchase_lines WHERE organization_id=$1 AND order_id=$2 ORDER BY item_id FOR UPDATE`,
         [org, id],
       );
+      // A warehouse mirrored from MoySklad gets no local movement: the receipt is queued as a
+      // supply there (T030 write-back) or refused when write-back is off or mappings are missing.
+      const external = await supplyTargetInTransaction(
+          tx,
+          org,
+          o.warehouse_id,
+          o.supplier_id,
+        ),
+        positions: SupplyPosition[] = [];
       for (const l of [...c.lines].sort((a, b) => {
         const ai = doclines.find((d) => d.id === a.lineId)?.item_id || "",
           bi = doclines.find((d) => d.id === b.lineId)?.item_id || "";
@@ -1332,25 +1351,36 @@ export class PurchasingService {
             ? remaining
             : allocatedValue(total, next.toFixed(), d.base_quantity) - before,
           value = share < 0n ? 0n : share > remaining ? remaining : share;
-        const movement = await new InventoryService(
-          this.db,
-        ).executeInTransaction(
-          tx,
-          secret,
-          org,
-          {
-            key: randomUUID(),
-            kind: "receipt",
-            warehouseId: o.warehouse_id,
-            itemId: d.item_id,
+        let movement: { id: string } | null = null;
+        if (external)
+          positions.push({
+            product: await externalProductInTransaction(
+              tx,
+              external.connectionId,
+              d.item_id,
+            ),
+            item_id: d.item_id,
             quantity: l.quantity,
-            unit: p.base_unit,
-            unitCost: "0",
-            note: c.note,
-          },
-          undefined,
-          value,
-        );
+            value_minor: value.toString(),
+          });
+        else
+          movement = await new InventoryService(this.db).executeInTransaction(
+            tx,
+            secret,
+            org,
+            {
+              key: randomUUID(),
+              kind: "receipt",
+              warehouseId: o.warehouse_id,
+              itemId: d.item_id,
+              quantity: l.quantity,
+              unit: p.base_unit,
+              unitCost: "0",
+              note: c.note,
+            },
+            undefined,
+            value,
+          );
         await tx.query(
           "INSERT INTO purchase_receipts(id,organization_id,document_line_id,purchase_line_id,movement_id,quantity,value_minor,note) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
           [
@@ -1358,7 +1388,7 @@ export class PurchasingService {
             org,
             d.id,
             p.id,
-            movement.id,
+            movement?.id ?? null,
             l.quantity,
             value.toString(),
             c.note,
@@ -1381,10 +1411,29 @@ export class PurchasingService {
         "UPDATE purchase_orders SET state=$3,version=version+1 WHERE organization_id=$1 AND id=$2",
         [org, id, left.remaining ? "partial" : "completed"],
       );
+      let exportId: string | null = null;
+      if (external) {
+        exportId = (
+          await queueSupplyInTransaction(tx, org, s.actorId, {
+            target: external,
+            sourceId: r.id,
+            orderId: id,
+            orderNumber: String(o.number),
+            warehouseId: o.warehouse_id,
+            note: c.note,
+            positions,
+          })
+        ).id;
+        await audit(tx, org, s.actorId, "integration.supply_queued", null, {
+          orderId: id,
+          exportId,
+        });
+      }
       await event(tx, org, id, s.actorId, "received", c.note);
       await audit(tx, org, s.actorId, "purchase.received", o.branch_id, {
         orderId: id,
         documentId: c.documentId,
+        ...(exportId ? { exportId } : {}),
       });
       return r;
     });

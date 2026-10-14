@@ -1333,7 +1333,7 @@ function OrderLineEditor({
             name={`price${index}`}
             aria-label={`${t("Цена", "Баға")} ${index + 1}`}
             required
-            defaultValue={item?.sale_price || "0"}
+            defaultValue={item?.sale_price ?? ""}
             inputMode="decimal"
           />
         </Field>

@@ -13,6 +13,9 @@ export const insightRules = [
   "purchase_pending",
   "document_review",
   "overdue_task",
+  "below_cost_sale",
+  "unknown_cost",
+  "missing_sale_price",
 ] as const;
 export const reorderInput = z
   .object({

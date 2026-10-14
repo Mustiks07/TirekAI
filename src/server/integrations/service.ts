@@ -24,6 +24,8 @@ import {
   MOYSKLAD_BASE_URL,
   MOYSKLAD_CONTRACT,
   entityIdFromHref,
+  kztCurrency,
+  kztPrice,
   mapUnit,
   toMoscow,
   type Fetch,
@@ -31,6 +33,12 @@ import {
   type MsWebhookEvent,
 } from "./moysklad";
 import { passports } from "./registry";
+import {
+  externalCode,
+  supplySettings,
+  unitPriceMinor,
+  type SupplyPosition,
+} from "./writeback";
 
 export const configureInput = z
   .object({
@@ -46,6 +54,27 @@ export const configureInput = z
   .strict();
 export const linkInput = z
   .object({ warehouseId: z.uuid(), storeId: z.uuid() })
+  .strict();
+export const supplySettingsInput = z
+  .object({
+    key: z.uuid(),
+    version: z.number().int().positive(),
+    enabled: z.boolean(),
+    organizationId: z.uuid().nullable(),
+  })
+  .strict()
+  .refine((v) => !v.enabled || v.organizationId, {
+    path: ["organizationId"],
+  });
+export const counterpartyInput = z
+  .object({
+    key: z.uuid(),
+    supplierId: z.uuid(),
+    counterpartyId: z.uuid().nullable(),
+  })
+  .strict();
+export const partiesQuery = z
+  .object({ search: z.string().trim().max(80).default("") })
   .strict();
 export const conflictDecision = z
   .object({ key: z.uuid(), decision: z.enum(["kept_local", "took_remote"]) })
@@ -76,6 +105,8 @@ type Connection = {
   status: string;
   credentials: Uint8Array | null;
   webhook_token_hash: string | null;
+  settings: unknown;
+  disconnected_at: string | null;
   created_by: string;
   last_success_at: string | null;
   version: number;
@@ -141,7 +172,8 @@ export class IntegrationService {
       const connections = await tx.query(
         `SELECT c.id,c.provider,CASE WHEN c.status IN ('configured','live_verified','sandbox_verified') AND (c.last_success_at IS NULL OR c.last_success_at<now()-make_interval(mins=>${STALE_MINUTES})) AND EXISTS(SELECT 1 FROM sync_runs r WHERE r.connection_id=c.id AND r.kind<>'check') THEN 'degraded' ELSE c.status END status,c.credentials_hint,c.ownership,c.contract_version,c.last_success_at,c.last_error_code,c.last_error_at,c.verification,c.version,c.created_at,c.disconnected_at,
         (SELECT count(*)::int FROM sync_conflicts x WHERE x.connection_id=c.id AND x.state='open') open_conflicts,
-        (SELECT count(*)::int FROM integration_inbox i WHERE i.connection_id=c.id AND i.state IN ('received','failed')) pending_events
+        (SELECT count(*)::int FROM integration_inbox i WHERE i.connection_id=c.id AND i.state IN ('received','failed')) pending_events,
+        c.settings->'supply' supply
         FROM integration_connections c WHERE c.organization_id=$1 ORDER BY c.created_at DESC LIMIT 20`,
         [org],
       );
@@ -158,6 +190,14 @@ export class IntegrationService {
         ),
         conflicts: await tx.query(
           "SELECT id,connection_id,entity_type,external_id,internal_id,reason,local,remote,state,created_at FROM sync_conflicts WHERE organization_id=$1 AND state='open' ORDER BY created_at DESC LIMIT 50",
+          [org],
+        ),
+        exports: await tx.query(
+          "SELECT e.id,e.connection_id,e.purchase_order_id,o.number order_number,e.warehouse_id,e.state,e.attempts,e.expected_minor::text,e.external_sum_minor::text,e.external_id,e.warning,e.error_code,e.created_at,e.sent_at,e.next_attempt_at FROM integration_exports e JOIN purchase_orders o ON o.organization_id=e.organization_id AND o.id=e.purchase_order_id JOIN warehouses w ON w.organization_id=e.organization_id AND w.id=e.warehouse_id WHERE e.organization_id=$1 AND ($2::uuid IS NULL OR w.branch_id=$2) ORDER BY e.created_at DESC LIMIT 30",
+          [org, s.branchId],
+        ),
+        counterparties: await tx.query(
+          "SELECT m.connection_id,m.internal_id supplier_id,s.name supplier_name,m.external_id counterparty_id FROM integration_mappings m JOIN suppliers s ON s.organization_id=m.organization_id AND s.id=m.internal_id WHERE m.organization_id=$1 AND m.entity_type='counterparty' AND m.state='active' ORDER BY s.name",
           [org],
         ),
         canWrite: s.role === "owner",
@@ -386,12 +426,16 @@ export class IntegrationService {
                 5 * 60_000,
             ),
           );
+        const kzt = await kztCurrency(client);
+        if (!kzt) stats.no_kzt_currency = 1;
         for await (const page of client.products(from)) {
           let max = cursor?.cursor || "";
           await this.db.transaction(async (tx) => {
             for (const p of page) {
-              const outcome = await this.applyProduct(tx, conn, p);
+              const outcome = await this.applyProduct(tx, conn, p, kzt);
               stats[outcome] = (stats[outcome] || 0) + 1;
+              if (!p.archived && !kztPrice(p.salePrices?.[0], kzt))
+                stats.sale_price_unknown = (stats.sale_price_unknown || 0) + 1;
               if (p.updated > max) max = p.updated;
             }
             if (max)
@@ -408,7 +452,11 @@ export class IntegrationService {
     tx: Sql,
     conn: Connection,
     p: MsProduct,
+    kzt: string | null,
   ): Promise<string> {
+    // The first sale price is the account's default price type.
+    const purchase = kztPrice(p.buyPrice, kzt),
+      sale = kztPrice(p.salePrices?.[0], kzt);
     const org = conn.organization_id;
     const actor = new InternalActor(conn.created_by, "integration");
     // The connection owner's rights are re-checked for every applied change.
@@ -473,9 +521,8 @@ export class IntegrationService {
           name_ru: p.name.slice(0, 120).padEnd(2, "."),
           kind: "goods",
           base_unit: unit,
-          // Reference prices are not imported (currency and price type unverified); they are not used in calculations.
-          purchase_price: "0",
-          sale_price: "0",
+          purchase_price: purchase,
+          sale_price: sale,
           category: "МойСклад",
         },
       );
@@ -514,6 +561,9 @@ export class IntegrationService {
       {
         name_ru: p.name.slice(0, 120).padEnd(2, "."),
         active: !p.archived,
+        // A missing or non-KZT remote price leaves the local price as it is.
+        ...(purchase ? { purchase_price: purchase } : {}),
+        ...(sale ? { sale_price: sale } : {}),
       },
     );
     await tx.query(
@@ -664,6 +714,7 @@ export class IntegrationService {
         if (!conn.credentials)
           throw new AppError("INTEGRATION_NOT_CONFIGURED", 409);
         await this.run(conn, "webhook", async (client, stats) => {
+          let kzt: string | null | undefined;
           for (const e of item.payload.events) {
             const id = entityIdFromHref(e.meta.href, "product");
             if (e.meta.type !== "product" || !id) {
@@ -699,8 +750,9 @@ export class IntegrationService {
             }
             // The entity is re-read by id from the official API; the event body is not trusted.
             const product = await client.product(id);
+            if (kzt === undefined) kzt = await kztCurrency(client);
             const outcome = await this.db.transaction((tx) =>
-              this.applyProduct(tx, conn, product),
+              this.applyProduct(tx, conn, product, kzt!),
             );
             stats[outcome] = (stats[outcome] || 0) + 1;
           }
@@ -787,6 +839,286 @@ export class IntegrationService {
       return r;
     });
   }
+  // Legal entities and counterparties for the owner's explicit choices; nothing is matched by name.
+  async parties(secret: Credential, org: string, id: string, input: unknown) {
+    const q = partiesQuery.parse(input ?? {});
+    const conn = await this.db.transaction(async (tx) => {
+      await sessionAccess(tx, secret, org, "integrations:write");
+      return this.connection(tx, org, id);
+    });
+    const r = await this.run(conn, "check", async (client, stats) => {
+      const [organizations, counterparties] = [
+        await client.organizations(),
+        await client.counterparties(q.search),
+      ];
+      stats.organizations = organizations.length;
+      stats.counterparties = counterparties.length;
+      const pick = (x: { id: string; name: string; archived?: boolean }) => ({
+        id: x.id,
+        name: String(x.name).slice(0, 200),
+        archived: Boolean(x.archived),
+      });
+      return {
+        organizations: organizations.map(pick),
+        counterparties: counterparties.map(pick),
+      };
+    });
+    return r.result;
+  }
+  // Write-back is off until the owner turns it on for a chosen MoySklad legal entity.
+  async configureSupply(
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+  ) {
+    const c = supplySettingsInput.parse(input);
+    if (c.enabled) {
+      // The entity must exist in the account (checked against the API, not trusted from input).
+      const conn = await this.db.transaction(async (tx) => {
+        await sessionAccess(tx, secret, org, "integrations:write");
+        return this.connection(tx, org, id);
+      });
+      const r = await this.run(conn, "check", async (client) => ({
+        organizations: await client.organizations(),
+        kzt: await kztCurrency(client),
+      }));
+      if (
+        !r.result.organizations.some(
+          (o) => o.id === c.organizationId && !o.archived,
+        )
+      )
+        throw new AppError("MOYSKLAD_ORGANIZATION_NOT_FOUND", 422);
+      if (!r.result.kzt) throw new AppError("MOYSKLAD_NO_KZT_CURRENCY", 422);
+    }
+    return this.db.transaction(async (tx) => {
+      const s = await sessionAccess(tx, secret, org, "integrations:write");
+      const conn = await this.connection(tx, org, id, true);
+      const r = await idempotent(tx, org, c.key, {
+        operation: "integration.supply_settings",
+        connectionId: id,
+        ...c,
+      });
+      if (r.reused) return r;
+      if (conn.disconnected_at || conn.status === "disconnected")
+        throw new AppError("INTEGRATION_NOT_CONFIGURED", 409);
+      if (conn.version !== c.version)
+        throw new AppError("VERSION_CONFLICT", 409);
+      await tx.query(
+        "UPDATE integration_connections SET settings=jsonb_set(settings,'{supply}',$3::jsonb),version=version+1 WHERE organization_id=$1 AND id=$2",
+        [
+          org,
+          id,
+          JSON.stringify({
+            enabled: c.enabled,
+            organization_id: c.enabled ? c.organizationId : null,
+            changed_by: s.actorId,
+            changed_at: new Date().toISOString(),
+          }),
+        ],
+      );
+      await audit(tx, org, s.actorId, "integration.supply_settings", null, {
+        connectionId: id,
+        enabled: String(c.enabled),
+      });
+      return r;
+    });
+  }
+  async mapCounterparty(
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+  ) {
+    const c = counterpartyInput.parse(input);
+    return this.db.transaction(async (tx) => {
+      const s = await sessionAccess(tx, secret, org, "integrations:write");
+      await this.connection(tx, org, id, true);
+      const r = await idempotent(tx, org, c.key, {
+        operation: "integration.counterparty",
+        connectionId: id,
+        ...c,
+      });
+      if (r.reused) return r;
+      const [supplier] = await tx.query(
+        "SELECT id FROM suppliers WHERE organization_id=$1 AND id=$2",
+        [org, c.supplierId],
+      );
+      if (!supplier) throw new AppError("NOT_FOUND", 404);
+      await tx.query(
+        "DELETE FROM integration_mappings WHERE connection_id=$1 AND entity_type='counterparty' AND internal_id=$2",
+        [id, c.supplierId],
+      );
+      if (c.counterpartyId) {
+        const added = await tx.query(
+          "INSERT INTO integration_mappings(organization_id,connection_id,entity_type,external_id,internal_id,state) VALUES($1,$2,'counterparty',$3,$4,'active') ON CONFLICT DO NOTHING RETURNING internal_id",
+          [org, id, c.counterpartyId, c.supplierId],
+        );
+        // One counterparty stands for one local supplier, so receipts are attributable.
+        if (!added.length) throw new AppError("COUNTERPARTY_MAPPED", 409);
+      }
+      await audit(tx, org, s.actorId, "integration.counterparty_mapped", null, {
+        connectionId: id,
+        supplierId: c.supplierId,
+        mapped: String(Boolean(c.counterpartyId)),
+      });
+      return r;
+    });
+  }
+  // Worker: sends queued supplies. Lookup by externalCode first, so a timed-out POST that did
+  // reach MoySklad is found instead of duplicated; POST itself is attempted once per tick.
+  async processExports(limit = 10) {
+    const due = await this.db.query<{
+      id: string;
+      organization_id: string;
+      connection_id: string;
+      attempts: number;
+      expected_minor: string;
+      created_by: string;
+      payload: {
+        organization: string;
+        agent: string;
+        store: string;
+        order_number: string;
+        note: string;
+        positions: SupplyPosition[];
+      };
+    }>(
+      "SELECT id,organization_id,connection_id,attempts,expected_minor::text,created_by,payload FROM integration_exports WHERE state IN ('pending','failed') AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT $1",
+      [limit],
+    );
+    let sent = 0;
+    for (const x of due) {
+      const claimed = await this.db.query(
+        "UPDATE integration_exports SET attempts=attempts+1,next_attempt_at=now()+interval '10 minutes' WHERE id=$1 AND state IN ('pending','failed') AND attempts=$2 RETURNING id",
+        [x.id, x.attempts],
+      );
+      if (!claimed.length) continue;
+      const [conn] = await this.db.query<Connection>(
+        "SELECT * FROM integration_connections WHERE id=$1",
+        [x.connection_id],
+      );
+      try {
+        if (!supplySettings(conn.settings).enabled)
+          throw new AppError("WRITEBACK_DISABLED", 409);
+        const r = await this.run(conn, "export", async (client, stats) => {
+          const code = externalCode(x.id);
+          let supply = await client.supplyByExternalCode(code);
+          if (supply) stats.found_existing = 1;
+          else {
+            const kzt = await kztCurrency(client);
+            if (!kzt) throw new AppError("MOYSKLAD_NO_KZT_CURRENCY", 422);
+            supply = await client.createSupply({
+              externalCode: code,
+              organization: client.meta("organization", x.payload.organization),
+              agent: client.meta("counterparty", x.payload.agent),
+              store: client.meta("store", x.payload.store),
+              rate: { currency: client.meta("currency", kzt) },
+              applicable: true,
+              description:
+                `Taraz: закупка №${x.payload.order_number}. ${x.payload.note}`.slice(
+                  0,
+                  4096,
+                ),
+              // JSON numbers are required by the API; values are formed from exact decimals.
+              positions: x.payload.positions.map((p) => ({
+                assortment: client.meta("product", p.product),
+                quantity: Number(p.quantity),
+                price: Number(unitPriceMinor(p.value_minor, p.quantity)),
+              })),
+            });
+            stats.created = 1;
+          }
+          return supply;
+        });
+        const sum =
+          typeof r.result.sum === "number" && Number.isFinite(r.result.sum)
+            ? BigInt(Math.round(r.result.sum)).toString()
+            : null;
+        // The document sum is compared back; a rounding difference is shown, not hidden.
+        const warning =
+          sum === null
+            ? "sum_not_returned"
+            : sum !== x.expected_minor
+              ? "sum_mismatch"
+              : null;
+        await this.db.transaction(async (tx) => {
+          await tx.query(
+            "UPDATE integration_exports SET state='sent',external_id=$2,external_sum_minor=$3,warning=$4,error_code=NULL,sent_at=now() WHERE id=$1",
+            [x.id, r.result.id, sum, warning],
+          );
+          await audit(
+            tx,
+            x.organization_id,
+            x.created_by,
+            "integration.supply_sent",
+            null,
+            { exportId: x.id, warning: warning || "none" },
+          );
+        });
+        sent++;
+      } catch (error) {
+        const code =
+          error instanceof AppError ? error.code : "INTEGRATION_FAILED";
+        // Request/config errors will not fix themselves; transient ones back off up to 8 tries.
+        const permanent = [
+          "MOYSKLAD_REQUEST_REJECTED",
+          "MOYSKLAD_REQUEST_INVALID",
+          "MOYSKLAD_NOT_FOUND",
+          "MOYSKLAD_NO_KZT_CURRENCY",
+        ].includes(code);
+        const dead = permanent || x.attempts + 1 >= 8;
+        await this.db.transaction(async (tx) => {
+          await tx.query(
+            "UPDATE integration_exports SET state=$2,error_code=$3,next_attempt_at=now()+make_interval(mins=>$4) WHERE id=$1",
+            [
+              x.id,
+              dead ? "dead" : "failed",
+              code,
+              2 ** Math.min(x.attempts, 8),
+            ],
+          );
+          if (dead)
+            await audit(
+              tx,
+              x.organization_id,
+              x.created_by,
+              "integration.supply_dead",
+              null,
+              { exportId: x.id, code },
+            );
+        });
+      }
+    }
+    return sent;
+  }
+  // Owner re-queues a dead export after fixing the cause (mapping, legal entity, currency).
+  async retryExport(
+    secret: Credential,
+    org: string,
+    exportId: string,
+    input: unknown,
+  ) {
+    idSchema.parse(exportId);
+    const c = z.object({ key: z.uuid() }).strict().parse(input);
+    return this.db.transaction(async (tx) => {
+      const s = await sessionAccess(tx, secret, org, "integrations:write");
+      const r = await idempotent(tx, org, c.key, {
+        operation: "integration.export_retry",
+        exportId,
+      });
+      if (r.reused) return r;
+      const rows = await tx.query(
+        "UPDATE integration_exports SET state='pending',attempts=0,next_attempt_at=now(),error_code=NULL WHERE organization_id=$1 AND id=$2 AND state IN ('dead','failed') RETURNING id",
+        [org, exportId],
+      );
+      if (!rows.length) throw new AppError("EXPORT_STATE", 409);
+      await audit(tx, org, s.actorId, "integration.supply_retry", null, {
+        exportId,
+      });
+      return r;
+    });
+  }
   // Worker: periodic sync of configured connections (stock every 15 min), and the inbox.
   async runOnce() {
     const due = await this.db.query<Connection>(
@@ -800,6 +1132,10 @@ export class IntegrationService {
         // Recorded in sync_runs and on the connection; the next tick retries.
       }
     }
-    return { synced: due.length, inbox: await this.processInbox() };
+    return {
+      synced: due.length,
+      inbox: await this.processInbox(),
+      exports: await this.processExports(),
+    };
   }
 }

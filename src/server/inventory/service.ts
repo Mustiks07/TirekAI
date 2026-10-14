@@ -151,9 +151,14 @@ export class InventoryService {
     org: string,
     id: string,
     version: number,
-    patch: { name_ru?: string; active?: boolean },
+    patch: {
+      name_ru?: string;
+      active?: boolean;
+      purchase_price?: string;
+      sale_price?: string;
+    },
   ) {
-    const [old] = await tx.query<Item & { purchase_price: string }>(
+    const [old] = await tx.query<Item & { purchase_price: string | null }>(
       `SELECT ${itemColumns},purchase_price::text FROM catalog_items WHERE organization_id=$1 AND id=$2`,
       [org, id],
     );
@@ -172,8 +177,8 @@ export class InventoryService {
         kind: old.kind,
         base_unit: old.base_unit,
         conversions: old.conversions,
-        purchase_price: old.purchase_price,
-        sale_price: old.sale_price,
+        purchase_price: patch.purchase_price ?? old.purchase_price,
+        sale_price: patch.sale_price ?? old.sale_price,
         active: patch.active ?? old.active,
         version,
       },

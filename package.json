@@ -14,9 +14,9 @@
     "test:e2e": "playwright test",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "worker": "tsx scripts/worker.ts",
+    "worker": "tsx --env-file-if-exists=.env.local scripts/worker.ts",
     "format": "prettier --write src tests scripts *.ts *.mjs",
-    "eval:assistant": "tsx scripts/assistant-eval.ts"
+    "eval:assistant": "tsx --env-file-if-exists=.env.local scripts/assistant-eval.ts"
   },
   "engines": {
     "node": ">=22.20.0"

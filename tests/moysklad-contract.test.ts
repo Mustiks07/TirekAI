@@ -11,6 +11,8 @@ import { Platform } from "../src/server/platform";
 import { InventoryService } from "../src/server/inventory/service";
 import { InsightService } from "../src/server/decisions/insights";
 import { IntegrationService } from "../src/server/integrations/service";
+import { PurchasingService } from "../src/server/purchasing/service";
+import { TodayService } from "../src/server/decisions/today";
 import { entityIdFromHref } from "../src/server/integrations/moysklad";
 
 // Local contract server built from the documented shapes of MoySklad JSON API 1.2
@@ -24,6 +26,17 @@ type P = {
   updated: string;
   archived: boolean;
   uom: string;
+  buy?: { value: number; iso: string };
+  sale?: { value: number; iso: string };
+};
+const currencies = { KZT: randomUUID(), RUB: randomUUID() };
+const legal = randomUUID(),
+  counterparty = randomUUID();
+type Supply = {
+  id: string;
+  externalCode: string;
+  sum: number;
+  body: Record<string, unknown>;
 };
 const state = {
   products: [] as P[],
@@ -32,7 +45,8 @@ const state = {
     storeId: string | null;
     stock: number;
   }[],
-  failOnce: { rate: false, server: false },
+  failOnce: { rate: false, server: false, supplyLost: false },
+  supplies: [] as Supply[],
   requests: [] as string[],
   webhooks: [] as unknown[],
 };
@@ -61,7 +75,32 @@ const product = (p: P) => ({
   externalCode: `ext-${p.code}`,
   archived: p.archived,
   uom: { name: p.uom === "796" ? "шт" : "?", code: p.uom },
+  // Prices in minor units with a currency reference, as in the documented product shape.
+  ...(p.buy ? { buyPrice: price(p.buy) } : {}),
+  ...(p.sale
+    ? {
+        salePrices: [
+          {
+            ...price(p.sale),
+            priceType: { id: randomUUID(), name: "Цена продажи" },
+          },
+        ],
+      }
+    : {}),
 });
+const price = (x: { value: number; iso: string }) => ({
+  value: x.value,
+  currency: {
+    meta: {
+      href: `${base}/entity/currency/${currencies[x.iso as "KZT" | "RUB"]}`,
+      type: "currency",
+    },
+  },
+});
+const metaId = (v: unknown, type: string) => {
+  const href = (v as { meta?: { href?: string; type?: string } })?.meta;
+  return href?.type === type ? href.href?.split("/").pop() : undefined;
+};
 let db: Database,
   p: Platform,
   org: string,
@@ -148,6 +187,96 @@ beforeAll(async () => {
         ? send(res, 200, product(x))
         : send(res, 404, { errors: [{ error: "Объект не найден" }] });
     }
+    if (path === "/entity/currency")
+      return send(res, 200, {
+        meta: { size: 2, limit: 1000, offset: 0 },
+        rows: [
+          {
+            id: currencies.RUB,
+            isoCode: "RUB",
+            default: true,
+            archived: false,
+          },
+          {
+            id: currencies.KZT,
+            isoCode: "KZT",
+            default: false,
+            archived: false,
+          },
+        ],
+      });
+    if (path === "/entity/organization")
+      return send(res, 200, {
+        meta: { size: 1, limit: 100, offset: 0 },
+        rows: [{ id: legal, name: "ТОО Контракт", archived: false }],
+      });
+    if (path === "/entity/counterparty") {
+      const search = url.searchParams.get("search") || "";
+      const rows = [
+        { id: counterparty, name: "Поставщик МС", archived: false },
+        { id: randomUUID(), name: "Другой контрагент", archived: false },
+      ].filter((r) => r.name.includes(search));
+      return send(res, 200, {
+        meta: { size: rows.length, limit: 50, offset: 0 },
+        rows,
+      });
+    }
+    if (path === "/entity/supply" && req.method === "GET") {
+      const code = (url.searchParams.get("filter") || "").replace(
+        "externalCode=",
+        "",
+      );
+      const rows = state.supplies.filter((s) => s.externalCode === code);
+      return send(res, 200, {
+        meta: { size: rows.length, limit: 2, offset: 0 },
+        rows: rows.map((s) => ({
+          id: s.id,
+          externalCode: s.externalCode,
+          sum: s.sum,
+        })),
+      });
+    }
+    if (path === "/entity/supply" && req.method === "POST") {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      req.on("end", () => {
+        const body = JSON.parse(raw) as Record<string, unknown>;
+        const positions = (body.positions || []) as {
+          assortment: unknown;
+          quantity: number;
+          price: number;
+        }[];
+        // Required for creation: organization, agent, store (documented).
+        if (
+          req.headers["content-type"] !== "application/json" ||
+          !metaId(body.organization, "organization") ||
+          !metaId(body.agent, "counterparty") ||
+          !metaId(body.store, "store") ||
+          positions.some((x) => !metaId(x.assortment, "product"))
+        )
+          return send(res, 400, {
+            errors: [{ error: "Ошибка формата", code: 2016 }],
+          });
+        const supply = {
+          id: randomUUID(),
+          externalCode: String(body.externalCode),
+          sum: positions.reduce((s, x) => s + x.price * x.quantity, 0),
+          body,
+        };
+        state.supplies.push(supply);
+        // The document is created but the response is lost.
+        if (state.failOnce.supplyLost) {
+          state.failOnce.supplyLost = false;
+          return send(res, 503, { errors: [{ error: "timeout" }] });
+        }
+        send(res, 200, {
+          id: supply.id,
+          externalCode: supply.externalCode,
+          sum: supply.sum,
+        });
+      });
+      return;
+    }
     if (path === "/report/stock/bystore/current")
       return send(res, 200, state.stock);
     if (path === "/entity/webhook" && req.method === "POST") {
@@ -171,6 +300,19 @@ beforeAll(async () => {
       updated: `2026-10-01 10:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}`,
       archived: false,
       uom: i === 7 ? "999" : "796",
+      ...(i === 0
+        ? {
+            buy: { value: 12345, iso: "KZT" },
+            sale: { value: 20000, iso: "KZT" },
+          }
+        : i === 1
+          ? {
+              buy: { value: 5000, iso: "RUB" },
+              sale: { value: 9000, iso: "RUB" },
+            }
+          : i === 2
+            ? { sale: { value: 0, iso: "KZT" } }
+            : {}),
     });
   db = await createMemoryDatabase();
   await migrate(db);
@@ -250,7 +392,11 @@ it("T029: credentials are encrypted at rest, only the owner configures, and a co
   });
   expect(
     o.passports[0].operations.find((x) => x.id === "supply_create"),
-  ).toMatchObject({ implementation: "planned" });
+  ).toMatchObject({
+    implementation: "implemented",
+    verification: "contract_test",
+    live: "not_verified",
+  });
   expect(
     state.requests.every((r) => r.startsWith("GET") || r.startsWith("POST")),
   ).toBe(true);
@@ -286,6 +432,39 @@ it("T030: initial import pages, retries 429/5xx, maps units, records conflicts a
       )
     ).length,
   ).toBe(2);
+});
+it("T030: prices are imported only in KZT minor units; other currencies and MoySklad's 0 stay unknown, never 0", async () => {
+  const rows = await db.query<{
+    sku: string;
+    purchase_price: string | null;
+    sale_price: string | null;
+  }>(
+    "SELECT sku,purchase_price::text,sale_price::text FROM catalog_items WHERE organization_id=$1 AND sku IN ('MS-0','MS-1','MS-2','MS-5') ORDER BY sku",
+    [org],
+  );
+  expect(
+    rows.map((r) => [
+      r.sku,
+      r.purchase_price && String(Number(r.purchase_price)),
+      r.sale_price && String(Number(r.sale_price)),
+    ]),
+  ).toEqual([
+    ["MS-0", "123.45", "200"],
+    ["MS-1", null, null],
+    ["MS-2", null, null],
+    ["MS-5", null, null],
+  ]);
+  const [run] = await db.query<{ stats: Record<string, number> }>(
+    "SELECT stats FROM sync_runs WHERE connection_id=$1 AND kind='initial'",
+    [connection],
+  );
+  expect(run.stats.sale_price_unknown).toBe(149);
+  const catalog = await new InventoryService(db).catalog(owner, org, {
+    q: "MS-1",
+  });
+  expect(
+    catalog.items.find((i: { sku: string }) => i.sku === "MS-1"),
+  ).toMatchObject({ sale_price: null, purchase_price: null });
 });
 it("T030: a local edit is not overwritten by a later remote change until a person resolves the conflict", async () => {
   const [m] = await db.query<{ internal_id: string; external_id: string }>(
@@ -404,6 +583,278 @@ it("T030: a linked warehouse mirrors external stock, rejects local ledger comman
   });
   expect(insight.evidence.sources[0].type).toBe("external_stock");
 });
+it("T030: a receipt into a linked warehouse becomes one MoySklad supply (opt-in, mapped, idempotent), never a local movement", async () => {
+  const ps = new PurchasingService(db);
+  const [link] = await db.query<{ warehouse_id: string }>(
+    "SELECT warehouse_id FROM integration_warehouse_links WHERE connection_id=$1",
+    [connection],
+  );
+  const mirror = link.warehouse_id;
+  const [m] = await db.query<{ internal_id: string; external_id: string }>(
+    "SELECT internal_id,external_id FROM integration_mappings WHERE connection_id=$1 AND entity_type='product' AND state='active' ORDER BY external_id LIMIT 1",
+    [connection],
+  );
+  const supplier = (
+    await ps.createSupplier(owner, org, {
+      key: key(),
+      name: "Поставщик Taraz",
+      contact: "synthetic",
+      paymentTerms: "After invoice",
+      quality: 4,
+      reliability: 4,
+    })
+  ).id;
+  const offer = await ps.createOffer(owner, org, {
+    key: key(),
+    supplierId: supplier,
+    itemId: m.internal_id,
+    supplierSku: "MS-ONE",
+    packQuantity: "1",
+    baseUnit: "pc",
+    packPrice: "100.5",
+    minimumPacks: 1,
+    delivery: "0",
+    leadDays: 1,
+    currency: "KZT",
+    rate: null,
+    rateDate: null,
+    rateSource: "",
+    tax: "included",
+    taxPercent: null,
+    dated: "2026-10-14",
+    validUntil: "2026-12-31",
+    characteristicsConfirmed: true,
+    note: "Synthetic offer",
+  });
+  const order = (
+    await ps.create(owner, org, {
+      key: key(),
+      branchId: branch,
+      warehouseId: mirror,
+      supplierId: supplier,
+      date: "2026-10-14",
+      dueDate: "2026-10-14",
+      budget: "1000",
+      note: "Synthetic order",
+      lines: [{ offerId: offer.id, quantity: "3" }],
+    })
+  ).id;
+  for (const kind of ["submit", "approve", "sent"]) {
+    const o = await ps.get(owner, org, order);
+    await ps.transition(owner, org, order, {
+      key: key(),
+      version: o.order.version,
+      kind,
+      note: "Reviewed order",
+    });
+  }
+  const doc = (
+    await ps.upload(owner, org, {
+      key: key(),
+      orderId: order,
+      filename: "invoice.csv",
+      content: Buffer.from(
+        `name,quantity,unit,price\nТовар,3,pc,100.5\n#${key()}`,
+      ).toString("base64"),
+      externalId: "",
+    })
+  ).id;
+  await ps.review(owner, org, doc, {
+    key: key(),
+    version: 1,
+    number: key(),
+    date: "2026-10-14",
+    dueDate: "2026-10-14",
+    delivery: "0",
+    total: "301.5",
+    lines: [
+      {
+        itemId: m.internal_id,
+        name: "Товар",
+        unit: "pc",
+        quantity: "3",
+        unitPrice: "100.5",
+      },
+    ],
+    note: "Checked against original",
+    acknowledgeDiscrepancies: true,
+  });
+  const lineId = (
+    (await ps.document(owner, org, doc)) as unknown as {
+      lines: { id: string }[];
+    }
+  ).lines[0].id;
+  const receive = async () =>
+    ps.receive(owner, org, order, {
+      key: key(),
+      documentId: doc,
+      version: (await ps.get(owner, org, order)).order.version,
+      note: "Принято по факту",
+      lines: [{ lineId, quantity: "3" }],
+    });
+  // Off by default: the mirror stays read-only and nothing is recorded.
+  await expect(receive()).rejects.toMatchObject({
+    code: "EXTERNAL_SOURCE_OF_TRUTH",
+  });
+  const connVersion = async () =>
+    (await svc.overview(owner, org)).connections.find(
+      (c) => c.id === connection,
+    )!.version as number;
+  let version = await connVersion();
+  await expect(
+    svc.configureSupply(manager, org, connection, {
+      key: key(),
+      version,
+      enabled: true,
+      organizationId: legal,
+    }),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(
+    svc.configureSupply(owner, org, connection, {
+      key: key(),
+      version,
+      enabled: true,
+      organizationId: randomUUID(),
+    }),
+  ).rejects.toMatchObject({ code: "MOYSKLAD_ORGANIZATION_NOT_FOUND" });
+  await svc.configureSupply(owner, org, connection, {
+    key: key(),
+    version,
+    enabled: true,
+    organizationId: legal,
+  });
+  await expect(receive()).rejects.toMatchObject({
+    code: "EXTERNAL_COUNTERPARTY_UNMAPPED",
+  });
+  const parties = await svc.parties(owner, org, connection, {
+    search: "Поставщик",
+  });
+  expect(parties.counterparties.map((x) => x.id)).toEqual([counterparty]);
+  expect(parties.organizations[0].id).toBe(legal);
+  await svc.mapCounterparty(owner, org, connection, {
+    key: key(),
+    supplierId: supplier,
+    counterpartyId: counterparty,
+  });
+  const movementsBefore = await db.query(
+    "SELECT id FROM stock_movements WHERE organization_id=$1 AND warehouse_id=$2",
+    [org, mirror],
+  );
+  await receive();
+  expect((await ps.get(owner, org, order)).order.state).toBe("completed");
+  expect(
+    await db.query(
+      "SELECT id FROM stock_movements WHERE organization_id=$1 AND warehouse_id=$2",
+      [org, mirror],
+    ),
+  ).toEqual(movementsBefore);
+  const [receipt] = await db.query<{
+    movement_id: string | null;
+    value: string;
+  }>(
+    "SELECT r.movement_id,r.value_minor::text value FROM purchase_receipts r JOIN purchase_document_lines l ON l.organization_id=r.organization_id AND l.id=r.document_line_id WHERE l.document_id=$1",
+    [doc],
+  );
+  expect(receipt).toEqual({ movement_id: null, value: "30150" });
+  const [queued] = await db.query<{
+    id: string;
+    state: string;
+    expected_minor: string;
+  }>(
+    "SELECT id,state,expected_minor::text FROM integration_exports WHERE purchase_order_id=$1",
+    [order],
+  );
+  expect(queued).toMatchObject({ state: "pending", expected_minor: "30150" });
+  // The first POST creates the document but its response is lost; the retry finds it by
+  // externalCode instead of creating a second supply.
+  state.failOnce.supplyLost = true;
+  expect(await svc.processExports()).toBe(0);
+  expect(state.supplies).toHaveLength(1);
+  await db.query(
+    "UPDATE integration_exports SET next_attempt_at=now() WHERE id=$1",
+    [queued.id],
+  );
+  const posts = state.requests.filter((r) =>
+    r.startsWith("POST /api/remap/1.2/entity/supply"),
+  ).length;
+  expect(await svc.processExports()).toBe(1);
+  expect(
+    state.requests.filter((r) =>
+      r.startsWith("POST /api/remap/1.2/entity/supply"),
+    ),
+  ).toHaveLength(posts);
+  expect(state.supplies).toHaveLength(1);
+  const body = state.supplies[0].body as {
+    externalCode: string;
+    organization: unknown;
+    agent: unknown;
+    store: unknown;
+    rate: { currency: unknown };
+    positions: { assortment: unknown; quantity: number; price: number }[];
+  };
+  expect(body.externalCode).toBe(`taraz-${queued.id}`);
+  expect(metaId(body.organization, "organization")).toBe(legal);
+  expect(metaId(body.agent, "counterparty")).toBe(counterparty);
+  expect(metaId(body.store, "store")).toBe(store);
+  expect(metaId(body.rate.currency, "currency")).toBe(currencies.KZT);
+  expect(body.positions).toEqual([
+    {
+      assortment: expect.anything(),
+      quantity: 3,
+      price: 10050,
+    },
+  ]);
+  expect(metaId(body.positions[0].assortment, "product")).toBe(m.external_id);
+  const o = await svc.overview(owner, org);
+  expect(o.exports[0]).toMatchObject({
+    state: "sent",
+    external_id: state.supplies[0].id,
+    expected_minor: "30150",
+    external_sum_minor: "30150",
+    warning: null,
+  });
+  // A request MoySklad rejects (here: a store the account does not have) is not retried
+  // forever: it stops as dead, shows up on Today, and only the owner re-queues it.
+  const broken = randomUUID();
+  await db.query(
+    "INSERT INTO integration_exports(id,organization_id,connection_id,kind,source_type,source_id,purchase_order_id,warehouse_id,payload,expected_minor,state,created_by) SELECT $1,organization_id,connection_id,kind,source_type,$2,purchase_order_id,warehouse_id,jsonb_set(payload,'{store}','\"\"'),expected_minor,'pending',created_by FROM integration_exports WHERE id=$3",
+    [broken, randomUUID(), queued.id],
+  );
+  expect(await svc.processExports()).toBe(0);
+  const [dead] = await db.query<{ state: string; error_code: string }>(
+    "SELECT state,error_code FROM integration_exports WHERE id=$1",
+    [broken],
+  );
+  expect(dead).toEqual({
+    state: "dead",
+    error_code: "MOYSKLAD_REQUEST_REJECTED",
+  });
+  const today = await new TodayService(db).today(owner, org);
+  expect(
+    today.sources.find((x) => x.name === "moysklad_writeback"),
+  ).toMatchObject({ status: "export_dead" });
+  await expect(
+    svc.retryExport(manager, org, broken, { key: key() }),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await svc.retryExport(owner, org, broken, { key: key() });
+  await expect(
+    svc.retryExport(owner, org, queued.id, { key: key() }),
+  ).rejects.toMatchObject({ code: "EXPORT_STATE" });
+  await db.query("DELETE FROM integration_exports WHERE id=$1", [broken]);
+  // Turning write-back off makes the mirror read-only again.
+  version = await connVersion();
+  await svc.configureSupply(owner, org, connection, {
+    key: key(),
+    version,
+    enabled: false,
+    organizationId: null,
+  });
+  expect(
+    (await svc.overview(owner, org)).connections.find(
+      (c) => c.id === connection,
+    )!.supply,
+  ).toMatchObject({ enabled: false });
+});
 it("T030: webhooks need the secret URL token, deduplicate requestId and re-read the entity by id only", async () => {
   const target = state.products[20];
   const event = {
@@ -486,7 +937,7 @@ it("T029: auth failures degrade the connection visibly; disconnect erases creden
     code: "INTEGRATION_NOT_CONFIGURED",
   });
   o = await svc.overview(owner, org);
-  expect(
-    o.connections.find((c) => c.id === bad.id),
-  ).toMatchObject({ status: "disconnected" });
+  expect(o.connections.find((c) => c.id === bad.id)).toMatchObject({
+    status: "disconnected",
+  });
 });

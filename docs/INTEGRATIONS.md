@@ -6,21 +6,22 @@
 
 | Поле | Значение |
 | --- | --- |
-| Контракт | [JSON API 1.2](https://dev.moysklad.ru/doc/api/remap/1.2/), разделы general, restrictions, product, store, report/stock, webhook; проверено 14.10.2026 |
+| Контракт | [JSON API 1.2](https://dev.moysklad.ru/doc/api/remap/1.2/), разделы general, restrictions, product, store, report/stock, webhook, currency, organization, counterparty, supply; проверено 14.10.2026 |
 | Аутентификация | `Authorization: Bearer <token>` (токен пользователя или решения); обязательный `Accept-Encoding: gzip` (иначе 415) |
 | Лимиты | 45 единиц за 3 с на пользователя/решение; токен пользователя с 01.09.2026 весит 3, с 01.12.2026 — 4; /report/stock/* — 5; ≤ 5 параллельных запросов на пользователя, ≤ 20 на аккаунт; 429 с `X-Lognex-Retry-After` (мс) |
 | Права | чтение товаров, складов и остатков; администратор аккаунта для вебхуков; вебхуки недоступны на бесплатном тарифе |
-| Чтение | `GET /context/employee`, `GET /entity/store`, `GET /entity/product?limit=100&offset=N&expand=uom&order=updated,asc&filter=updated>=…` (expand только при limit ≤ 100), `GET /entity/product/{id}`, `GET /report/stock/bystore/current?stockType=stock[&changedSince=…]` (без пагинации, changedSince ≤ 24 ч) |
+| Чтение | `GET /context/employee`, `GET /entity/store`, `GET /entity/product?limit=100&offset=N&expand=uom&order=updated,asc&filter=updated>=…` (expand только при limit ≤ 100), `GET /entity/product/{id}`, `GET /report/stock/bystore/current?stockType=stock[&changedSince=…]` (без пагинации, changedSince ≤ 24 ч), `GET /entity/currency` (isoCode), `GET /entity/organization`, `GET /entity/counterparty?search=…&limit=50`, `GET /entity/supply?filter=externalCode=…` |
+| Цены | `buyPrice` и первая `salePrices[]` (тип цены по умолчанию) — в минимальных единицах валюты; берутся только при валюте KZT, ÷ 100; другая валюта, нет валюты или 0 → цена «не указана» (NULL), не 0 |
 | Входящее | вебхук POST с `requestId`; событий без подписи → секретный путь, хеш токена, дедупликация requestId, повторное чтение по id; ответ до обработки (лимит 1500 мс, 3 повтора без пауз) |
-| Запись | `POST /entity/webhook` — только явное действие собственника; `POST /entity/supply` — planned, не включено |
+| Запись | `POST /entity/webhook` — только явное действие собственника; `POST /entity/supply` — выключено по умолчанию; собственник выбирает юрлицо и сопоставляет поставщиков с контрагентами; подтверждённая приёмка на склад-зеркало ставится в очередь `integration_exports` (без локального движения), отправка: поиск по externalCode → один POST (organization, agent, store, rate KZT, positions: assortment, quantity, price в тиынах) → сверка `sum`; 400/404/нет KZT → dead и «Сегодня», повтор — собственник |
 | Владение | каталог импортированных товаров и остаток связанных складов — МойСклад; закупки, задачи, согласования, знания — наше приложение |
 | Конфликты | одинаковый SKU, несопоставленная единица (ОКЕИ 796/166/112/006/356), локальная правка после синхронизации, смена единицы → `sync_conflicts`, решение вручную |
 | Курсоры | товары: `updated` (МСК) с перекрытием 5 мин, постраничная фиксация; остатки: полный снимок, затем changedSince с перекрытием, полный раз в 20 ч |
 | Ошибки | 401/403 → degraded с кодом; 429 → ожидание Retry-After (≤ 10 с), до 3 повторов; 5xx/таймаут → backoff; ошибка не выглядит успехом, журнал `sync_runs` |
 | Отключение | стирает токен и хеш вебхука; связи складов снимаются отдельным действием |
-| Не проверено вживую | аккаунт, тариф и права токена; доставка вебхуков на публичный URL; лимиты под нагрузкой; часовой пояс `updated` для аккаунтов вне МСК |
+| Не проверено вживую | аккаунт, тариф и права токена; доставка вебхуков на публичный URL; лимиты под нагрузкой; часовой пояс `updated` для аккаунтов вне МСК; создание приёмки, НДС по умолчанию и округление суммы в живом аккаунте |
 
-Доказательство: `tests/moysklad-contract.test.ts` — локальный сервер повторяет документированные формы (Bearer, gzip, meta.size/limit/offset, errors[], 429, 503, отчёт остатков, вебхук).
+Доказательство: `tests/moysklad-contract.test.ts` — локальный сервер повторяет документированные формы (Bearer, gzip, meta.size/limit/offset, errors[], 429, 503, отчёт остатков, вебхук, валюты, юрлица, контрагенты, приёмка с externalCode и потерянным ответом на POST).
 
 ## Остальные (T031–T034)
 

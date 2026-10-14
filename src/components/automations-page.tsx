@@ -73,6 +73,17 @@ export function AutomationsPage({
     [selected, setSelected] = useState(""),
     [test, setTest] = useState<Test | null>(null),
     [revision, setRevision] = useState(0),
+    [aiDraft, setAiDraft] = useState<{
+      status: string;
+      draft: {
+        name: string;
+        explanation: string;
+        definition: Record<string, unknown>;
+      } | null;
+      warnings: string[];
+      issues: string[];
+      error_code: string | null;
+    } | null>(null),
     [error, setError] = useState("");
   const refresh = () => setRevision((v) => v + 1);
   useEffect(() => {
@@ -445,6 +456,140 @@ export function AutomationsPage({
                 </ActionForm>
               </details>
             </>
+          )}
+        </section>
+      )}
+      {write && (
+        <section className="panel" aria-labelledby="ai-draft">
+          <h2 id="ai-draft">
+            {t("Описать правило словами (AI)", "Ережені сөзбен сипаттау (AI)")}
+          </h2>
+          <p>
+            {t(
+              "AI предлагает только черновик. Он не сохраняется и не включается сам: проверьте, сохраните, протестируйте и только потом включите.",
+              "AI тек жобаны ұсынады. Ол өздігінен сақталмайды және қосылмайды: тексеріңіз, сақтаңыз, сынаңыз, содан кейін ғана қосыңыз.",
+            )}
+          </p>
+          <ActionForm
+            locale={locale}
+            label={t("Предложить черновик", "Жобаны ұсыну")}
+            submit={async (fd) => {
+              setAiDraft(
+                await api(`${base}/automations/draft`, "POST", {
+                  locale,
+                  text: f(fd, "text"),
+                }),
+              );
+            }}
+          >
+            <Field label={t("Что должно происходить", "Не болуы керек")}>
+              <textarea
+                name="text"
+                required
+                minLength={10}
+                maxLength={1000}
+                rows={3}
+              />
+            </Field>
+          </ActionForm>
+          {aiDraft && (
+            <div role="status">
+              {aiDraft.status === "not_configured" ? (
+                <p>
+                  {t(
+                    "AI-помощник не настроен: ключ модели не задан на сервере или помощник выключен. Создайте правило формой ниже.",
+                    "AI көмекші бапталмаған: серверде модель кілті жоқ немесе көмекші өшірулі. Ережені төмендегі формамен жасаңыз.",
+                  )}
+                </p>
+              ) : aiDraft.draft ? (
+                <>
+                  <p>
+                    <strong>{aiDraft.draft.name}</strong> ·{" "}
+                    {aiDraft.draft.explanation}
+                  </p>
+                  {aiDraft.warnings.includes("unknown_user_removed") && (
+                    <p>
+                      {t(
+                        "Неизвестный сотрудник убран из черновика — выберите исполнителя сами.",
+                        "Белгісіз қызметкер жобадан алынды — орындаушыны өзіңіз таңдаңыз.",
+                      )}
+                    </p>
+                  )}
+                  {aiDraft.warnings.includes("purchase_needs_approval") && (
+                    <p>
+                      {t(
+                        "Закупка будет только предложением: её согласует человек.",
+                        "Сатып алу тек ұсыныс болады: оны адам келіседі.",
+                      )}
+                    </p>
+                  )}
+                  <pre className="procurement-extraction">
+                    {JSON.stringify(aiDraft.draft.definition, null, 2)}
+                  </pre>
+                  <ActionForm
+                    locale={locale}
+                    label={t(
+                      "Сохранить как черновик правила",
+                      "Ереже жобасы ретінде сақтау",
+                    )}
+                    submit={async (fd, key) => {
+                      const r = await api<{ id: string }>(
+                        `${base}/automations`,
+                        "POST",
+                        {
+                          key,
+                          branchId: f(fd, "branchId") || null,
+                          name: aiDraft.draft!.name,
+                          definition: aiDraft.draft!.definition,
+                          note: f(fd, "note"),
+                        },
+                      );
+                      setAiDraft(null);
+                      setSelected(r.id);
+                      refresh();
+                    }}
+                  >
+                    <Field
+                      label={t(
+                        "Филиал (обязателен для задач)",
+                        "Филиал (тапсырма үшін міндетті)",
+                      )}
+                    >
+                      <select name="branchId">
+                        {workspace.branches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                        <option value="">
+                          {t("Вся организация", "Бүкіл ұйым")}
+                        </option>
+                      </select>
+                    </Field>
+                    <Field label={t("Комментарий", "Түсініктеме")}>
+                      <input
+                        name="note"
+                        required
+                        minLength={3}
+                        maxLength={250}
+                        defaultValue={t("Из черновика AI", "AI жобасынан")}
+                      />
+                    </Field>
+                  </ActionForm>
+                </>
+              ) : (
+                <p className="commerce-alert">
+                  {aiDraft.status === "invalid"
+                    ? t(
+                        "AI не смог составить правило в допустимом виде. Уточните описание или используйте форму.",
+                        "AI ережені рұқсат етілген түрде құра алмады. Сипаттаманы нақтылаңыз немесе форманы пайдаланыңыз.",
+                      )
+                    : (aiDraft.error_code &&
+                        executionError(aiDraft.error_code, locale)) ||
+                      stateText(aiDraft.status, locale)}
+                </p>
+              )}
+            </div>
           )}
         </section>
       )}

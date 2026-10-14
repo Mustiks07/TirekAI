@@ -68,6 +68,25 @@ export class TodayService {
           status: "not_configured",
           checked_at: null,
         });
+      // Supply write-back queue: a stopped export needs a person; it is never shown as fine.
+      const [exports] = await tx.query<{
+        dead: number;
+        waiting: number;
+        last: string | null;
+      }>(
+        "SELECT count(*) FILTER (WHERE state='dead')::int dead,count(*) FILTER (WHERE state IN ('pending','failed'))::int waiting,max(sent_at) last FROM integration_exports WHERE organization_id=$1",
+        [org],
+      );
+      if (exports.dead || exports.waiting || exports.last)
+        sources.push({
+          name: "moysklad_writeback",
+          status: exports.dead
+            ? "export_dead"
+            : exports.waiting
+              ? "export_waiting"
+              : "available",
+          checked_at: exports.last,
+        });
       sources.push({
         name: "assistant",
         status: providerStatus().status,
