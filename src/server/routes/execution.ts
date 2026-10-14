@@ -3,6 +3,17 @@ import { AppError } from "../../domain/errors";
 import type { Database } from "../db/database";
 import { TaskService } from "../tasks/service";
 import { KnowledgeService } from "../knowledge/service";
+import { InsightService } from "../decisions/insights";
+import { ProposalService } from "../decisions/proposals";
+import { TodayService } from "../decisions/today";
+import {
+  insightList,
+  insightRow,
+  proposalList,
+  proposalDetail,
+  policyView,
+  todayView,
+} from "../../domain/decisions";
 import {
   knowledgeList,
   knowledgeDetail,
@@ -42,6 +53,8 @@ function checked(schema: ZodType | undefined, data: unknown) {
 const ok = z.object({ ok: z.boolean() });
 const tasks = (c: RouteContext) => new TaskService(c.db);
 const knowledge = (c: RouteContext) => new KnowledgeService(c.db);
+const insights = (c: RouteContext) => new InsightService(c.db);
+const proposals = (c: RouteContext) => new ProposalService(c.db);
 // Organization-scoped routes for T021–T030. Paths are relative to organizations/:id.
 export const executionRoutes: Route[] = [
   {
@@ -220,6 +233,128 @@ export const executionRoutes: Route[] = [
     path: "knowledge/:id/publication",
     schema: commerceResult,
     run: (c) => knowledge(c).publish(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "today",
+    schema: todayView,
+    run: (c) => new TodayService(c.db).today(c.secret, c.org),
+  },
+  {
+    method: "GET",
+    path: "insights",
+    schema: insightList,
+    run: (c) => insights(c).list(c.secret, c.org, c.query),
+  },
+  {
+    method: "POST",
+    path: "insights/refresh",
+    schema: z.object({
+      opened: z.number(),
+      resolved: z.number(),
+      seen: z.number(),
+    }),
+    run: (c) => insights(c).refresh(c.secret, c.org),
+  },
+  {
+    method: "GET",
+    path: "insights/reorder-points",
+    schema: z.object({
+      items: z.array(
+        z.object({
+          warehouse_id: z.uuid(),
+          warehouse_name: z.string(),
+          item_id: z.uuid(),
+          sku: z.string(),
+          name_ru: z.string(),
+          name_kk: z.string(),
+          base_unit: z.string(),
+          minimum: z.string(),
+          safety: z.string(),
+          lead_days: z.number(),
+          version: z.number(),
+        }),
+      ),
+    }),
+    run: (c) => insights(c).reorderPoints(c.secret, c.org, c.query),
+  },
+  {
+    method: "POST",
+    path: "insights/reorder-points",
+    schema: ok,
+    run: (c) => insights(c).setReorderPoint(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "insights/:id",
+    schema: insightRow,
+    run: (c) => insights(c).get(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "insights/:id/commands",
+    schema: commerceResult,
+    run: (c) => insights(c).command(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "insights/:id/proposal",
+    schema: commerceResult,
+    run: (c) => proposals(c).fromInsight(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "proposals",
+    schema: proposalList,
+    run: (c) => proposals(c).list(c.secret, c.org, c.query),
+  },
+  {
+    method: "POST",
+    path: "proposals",
+    schema: commerceResult,
+    run: (c) => proposals(c).create(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "proposals/policy",
+    schema: policyView,
+    run: (c) => proposals(c).policy(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "proposals/policy/limits",
+    schema: ok,
+    run: (c) => proposals(c).setLimit(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "proposals/policy/delegations",
+    schema: commerceResult,
+    run: (c) => proposals(c).delegate(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "proposals/policy/delegations/:id/revoke",
+    schema: ok,
+    run: (c) => proposals(c).revokeDelegation(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "proposals/:id",
+    schema: proposalDetail,
+    run: (c) => proposals(c).get(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "proposals/:id/commands",
+    schema: commerceResult,
+    run: (c) => proposals(c).command(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "proposals/:id/revisions",
+    schema: commerceResult,
+    run: (c) => proposals(c).revise(c.secret, c.org, c.params[0], c.body),
   },
 ];
 // Body size limits for routes that accept uploads (bytes, before base64 decoding checks).

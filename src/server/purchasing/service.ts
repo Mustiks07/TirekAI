@@ -477,13 +477,29 @@ export class PurchasingService {
     id: string,
     input: unknown,
   ) {
+    return this.db.transaction((tx) =>
+      this.transitionInTransaction(tx, secret, org, id, input),
+    );
+  }
+  // `authority` is created only by the proposal service after it re-validated a recorded
+  // approval of the exact parameters; HTTP callers cannot supply it.
+  async transitionInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+    authority?: { proposalId: string; approverId: string },
+  ) {
     const c = purchaseCommand.parse(input);
-    return this.db.transaction(async (tx) => {
+    {
       const s = await sessionAccess(
           tx,
           secret,
           org,
-          c.kind === "approve" ? "purchasing:approve" : "purchasing:write",
+          c.kind === "approve" && !authority
+            ? "purchasing:approve"
+            : "purchasing:write",
         ),
         o = await this.order(tx, org, id, s.branchId, true),
         r = await command(tx, org, c.key, {
@@ -518,9 +534,15 @@ export class PurchasingService {
       await event(tx, org, id, s.actorId, c.kind, c.note);
       await audit(tx, org, s.actorId, `purchase.${c.kind}`, o.branch_id, {
         orderId: id,
+        ...(authority
+          ? {
+              proposalId: authority.proposalId,
+              approverId: authority.approverId,
+            }
+          : {}),
       });
       return r;
-    });
+    }
   }
   async upload(secret: Credential, org: string, input: unknown) {
     const c = documentUpload.parse(input);
