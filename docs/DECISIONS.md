@@ -39,3 +39,13 @@ Outbox и задания находятся в БД. Резервировани�
 ## ADR-010: числа и контракт новых API
 
 [decimal.js](https://mikemcl.github.io/decimal.js/) со своей конфигурацией precision 40 и HALF_UP; вход только десятичными строками, итоговые минимальные денежные единицы bigint. Не округлять цену до умножения количества. Новые API клиентов/импорта проверяют ответы Zod и публикуют [JSON Schema](https://zod.dev/json-schema) из тех же определений. Это частичное выполнение T002: прежние ответы и полная спецификация OpenAPI ещё впереди.
+
+## ADR-011: складской журнал и цена возврата
+
+Для первого собственного склада — средневзвешенная стоимость по SKU/складу. Количества numeric(21,6), окончательные суммы numeric(38,0)/bigint/string, расчёт пропорций precision 80; последнее списание/возврат получает остаток округления. [PostgreSQL numeric](https://www.postgresql.org/docs/current/datatype-numeric.html) вместо floating-point. Преобразования единиц задаются явно на SKU и блокируются после первой команды. Услуги не допускают складских движений. Партии и задние даты не имитируются, остаются открытыми.
+
+Уникальная команда с хешем и [блокировка строки баланса](https://www.postgresql.org/docs/current/explicit-locking.html) в общей транзакции обеспечивают контроль повторов и проверку доступного остатка. Возврат привязан к выдаче; перемещение хранит стоимость в пути до приёмки. PGlite-тесты не объявляются проверкой нескольких PostgreSQL-процессов.
+
+## ADR-012: PWA без кеша бизнес-данных
+
+По [Next.js PWA guide](https://nextjs.org/docs/app/guides/progressive-web-apps) добавлены manifest, PNG-иконки, browser install event и service worker. [Жизненный цикл service worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers) используется для явной активации обновления. Кеш только публичных offline-ресурсов; операции требуют сеть, фонового replay нет. Это позволяет не сохранять контакты, стоимость и сессии в общем кеше устройства. Проверены manifest, offline/reconnect и cache allowlist, но не нативная установка на реальном Android/iOS.

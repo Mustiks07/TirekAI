@@ -5,6 +5,19 @@ import { AppError } from "../domain/errors";
 import { getDatabase } from "./db/database";
 import { Platform } from "./platform";
 import { ImportService } from "./imports/service";
+import { InventoryService } from "./inventory/service";
+import {
+  catalogSchema,
+  stockViewSchema,
+  movementsViewSchema,
+  reservationsViewSchema,
+  transfersViewSchema,
+  warehouseViewSchema,
+  commandResult,
+  inventoryContract,
+  balanceSnapshot,
+  entityResult,
+} from "../domain/inventory";
 import {
   batchViewSchema,
   batchesViewSchema,
@@ -69,11 +82,14 @@ export async function handle(request: NextRequest, path: string[]) {
     }
     const service = new Platform(await getDatabase());
     const imports = new ImportService(await getDatabase());
+    const inventory = new InventoryService(await getDatabase());
     const query = Object.fromEntries(request.nextUrl.searchParams);
     let data: unknown;
     let sessionToken: string | undefined;
     const route = path.join("/");
-    if (method === "GET" && route === "contracts/imports")
+    if (method === "GET" && route === "contracts/inventory")
+      data = inventoryContract();
+    else if (method === "GET" && route === "contracts/imports")
       data = importApiContract();
     else if (method === "GET" && route === "session")
       data = {
@@ -99,7 +115,81 @@ export async function handle(request: NextRequest, path: string[]) {
       data = await service.acceptInvitation(secret, body);
     else if (path[0] === "organizations" && path[1]) {
       const id = path[1];
-      if (path.length === 3 && path[2] === "imports" && method === "POST")
+      if (path.length === 3 && path[2] === "catalog" && method === "GET")
+        data = checked(
+          catalogSchema,
+          await inventory.catalog(secret, id, query),
+        );
+      else if (path.length === 3 && path[2] === "catalog" && method === "POST")
+        data = checked(
+          entityResult,
+          await inventory.saveItem(secret, id, body),
+        );
+      else if (path.length === 4 && path[2] === "catalog" && method === "PATCH")
+        data = checked(
+          entityResult,
+          await inventory.saveItem(secret, id, body, path[3]),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "warehouses" &&
+        method === "GET"
+      )
+        data = checked(
+          warehouseViewSchema,
+          await inventory.warehouses(secret, id, query),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "warehouses" &&
+        method === "POST"
+      )
+        data = checked(
+          entityResult,
+          await inventory.createWarehouse(secret, id, body),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "stock-commands" &&
+        method === "POST"
+      )
+        data = checked(
+          commandResult,
+          await inventory.execute(secret, id, body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "inventory" &&
+        path[3] === "balance" &&
+        method === "GET"
+      )
+        data = checked(
+          balanceSnapshot,
+          await inventory.snapshot(secret, id, query),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "inventory" &&
+        method === "GET" &&
+        ["balances", "movements", "reservations", "transfers"].includes(path[3])
+      ) {
+        const section = path[3] as
+          "balances" | "movements" | "reservations" | "transfers";
+        const schemas = {
+          balances: stockViewSchema,
+          movements: movementsViewSchema,
+          reservations: reservationsViewSchema,
+          transfers: transfersViewSchema,
+        };
+        data = checked(
+          schemas[section],
+          await inventory.view(secret, id, section, query),
+        );
+      } else if (
+        path.length === 3 &&
+        path[2] === "imports" &&
+        method === "POST"
+      )
         data = checked(batchViewSchema, await imports.upload(secret, id, body));
       else if (path.length === 3 && path[2] === "imports" && method === "GET")
         data = checked(

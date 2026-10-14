@@ -43,7 +43,11 @@ export async function actorAccess(
     )
       throw new AppError("FORBIDDEN", 403);
   }
-  return { actorId, branchId: branchId || membership.branch_id };
+  return {
+    actorId,
+    branchId: branchId || membership.branch_id,
+    role: membership.role,
+  };
 }
 export async function sessionAccess(
   tx: Sql,
@@ -65,7 +69,7 @@ export async function audit(
   org: string,
   actor: string,
   action: string,
-  branch: string,
+  branch: string | null,
   details: Record<string, string> = {},
 ) {
   await tx.query(

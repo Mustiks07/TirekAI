@@ -8,7 +8,13 @@ export type Permission =
   | "audit:read"
   | "customers:read"
   | "customers:write"
-  | "imports:write";
+  | "imports:write"
+  | "catalog:read"
+  | "catalog:write"
+  | "inventory:read"
+  | "inventory:write"
+  | "inventory:sell"
+  | "inventory:cost";
 const grants: Record<Role, readonly Permission[]> = {
   owner: [
     "organization:read",
@@ -40,6 +46,36 @@ const grants: Record<Role, readonly Permission[]> = {
   observer: ["organization:read"],
 };
 export function can(role: Role, permission: Permission) {
+  const inventory: Partial<Record<Role, Permission[]>> = {
+    owner: [
+      "catalog:read",
+      "catalog:write",
+      "inventory:read",
+      "inventory:write",
+      "inventory:sell",
+      "inventory:cost",
+    ],
+    manager: [
+      "catalog:read",
+      "catalog:write",
+      "inventory:read",
+      "inventory:write",
+      "inventory:sell",
+      "inventory:cost",
+    ],
+    purchasing: [
+      "catalog:read",
+      "catalog:write",
+      "inventory:read",
+      "inventory:write",
+      "inventory:sell",
+      "inventory:cost",
+    ],
+    sales: ["catalog:read", "inventory:read", "inventory:sell"],
+    finance: ["catalog:read", "inventory:read", "inventory:cost"],
+    observer: ["catalog:read", "inventory:read"],
+  };
+  if (inventory[role]?.includes(permission)) return true;
   return grants[role]?.includes(permission) ?? false;
 }
 export function assertPermission(role: Role, permission: Permission) {

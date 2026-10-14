@@ -51,9 +51,11 @@ import {
 import { api, ApiError } from "@/lib/client";
 import { businessDate } from "@/lib/dates";
 import { CustomersPage } from "./customers-page";
+import { InventoryPage } from "./inventory-page";
 import { can } from "@/domain/permissions";
 
-type Page = "today" | "team" | "organization" | "activity" | "customers";
+type Page =
+  "today" | "team" | "organization" | "activity" | "customers" | "inventory";
 type Modal = "invite" | "newOrg" | "branch" | null;
 const field = (form: FormData, name: string) => String(form.get(name) || "");
 const branchName = (name: string, locale: Locale) =>
@@ -1073,12 +1075,19 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             [
               { id: "today", Icon: LayoutDashboard },
               { id: "customers", Icon: Users },
+              { id: "inventory", Icon: Database },
               { id: "team", Icon: Users },
               { id: "organization", Icon: Building2 },
               { id: "activity", Icon: History },
             ] as const
           )
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
+            .filter(
+              (item) =>
+                item.id !== "inventory" ||
+                (workspace &&
+                  can(workspace.organization.role, "inventory:read")),
+            )
             .filter(
               (item) =>
                 item.id !== "customers" ||
@@ -1172,9 +1181,11 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     ? t.teamNote
                     : page === "customers"
                       ? t.customersNote
-                      : page === "organization"
-                        ? t.orgNote
-                        : t.activityNote}
+                      : page === "inventory"
+                        ? t.inventoryNote
+                        : page === "organization"
+                          ? t.orgNote
+                          : t.activityNote}
               </p>
             </div>
             {page === "today" ? (
@@ -1227,6 +1238,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             </section>
           ) : (
             <>
+              {page === "inventory" &&
+                can(workspace.organization.role, "inventory:read") && (
+                  <InventoryPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
               {page === "customers" &&
                 can(workspace.organization.role, "customers:read") && (
                   <CustomersPage

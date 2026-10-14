@@ -1,4 +1,5 @@
 import { importMigration } from "./import-migration";
+import { inventoryMigration } from "./inventory-migration";
 export const migrations = [
   {
     version: 1,
@@ -49,4 +50,5 @@ CREATE TABLE auth_limits (
 `,
   },
   importMigration,
+  inventoryMigration,
 ];

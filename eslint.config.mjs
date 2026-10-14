@@ -16,6 +16,17 @@ export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
   {
+    files: ["public/sw.js"],
+    languageOptions: {
+      globals: {
+        self: "readonly",
+        caches: "readonly",
+        URL: "readonly",
+        fetch: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx,js,mjs}"],
     languageOptions: {
       globals: {

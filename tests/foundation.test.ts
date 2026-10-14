@@ -49,7 +49,7 @@ afterAll(async () => {
 describe("identity, isolation, and membership lifecycle", () => {
   it("migrates repeatably without changing applied history", async () => {
     await migrate(db);
-    expect(await db.query("SELECT * FROM schema_migrations")).toHaveLength(2);
+    expect(await db.query("SELECT * FROM schema_migrations")).toHaveLength(3);
   });
   it("persists only hashes of passwords and session tokens", async () => {
     const [row] = await db.query<{ password_hash: string }>(
