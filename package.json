@@ -15,12 +15,14 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "worker": "tsx scripts/worker.ts",
-    "format": "prettier --write src tests scripts *.ts *.mjs"
+    "format": "prettier --write src tests scripts *.ts *.mjs",
+    "eval:assistant": "tsx scripts/assistant-eval.ts"
   },
   "engines": {
     "node": ">=22.20.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
     "@electric-sql/pglite": "0.5.9",
     "@fontsource-variable/noto-sans": "5.3.0",
     "@napi-rs/canvas": "1.0.11",

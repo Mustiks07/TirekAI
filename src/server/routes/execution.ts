@@ -7,6 +7,13 @@ import { InsightService } from "../decisions/insights";
 import { ProposalService } from "../decisions/proposals";
 import { TodayService } from "../decisions/today";
 import { AutomationService } from "../automations/service";
+import { AssistantService } from "../assistant/service";
+import {
+  askResult,
+  assistantStatus,
+  conversationList,
+  conversationView,
+} from "../../domain/assistant";
 import {
   ruleList,
   ruleDetail,
@@ -417,6 +424,43 @@ export const executionRoutes: Route[] = [
     path: "automations/:id/commands",
     schema: commerceResult,
     run: (c) => automations(c).command(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "assistant",
+    schema: assistantStatus,
+    run: (c) => new AssistantService(c.db).status(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "assistant/settings",
+    schema: ok,
+    run: (c) =>
+      new AssistantService(c.db).saveSettings(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "assistant/conversations",
+    schema: conversationList,
+    run: (c) => new AssistantService(c.db).conversations(c.secret, c.org),
+  },
+  {
+    method: "GET",
+    path: "assistant/conversations/:id",
+    schema: conversationView,
+    run: (c) =>
+      new AssistantService(c.db).conversation(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "assistant/messages",
+    schema: askResult,
+    run: (c) => new AssistantService(c.db).ask(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "assistant/transcriptions",
+    run: (c) => new AssistantService(c.db).transcribe(c.secret, c.org, c.body),
   },
 ];
 // Body size limits for routes that accept uploads (bytes, before base64 decoding checks).
