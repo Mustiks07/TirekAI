@@ -122,3 +122,45 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Загрузка: JSON с base64, HTTP body до 7.1 МБ; сам файл до 5 МБ, PDF до 5 страниц, изображения до 16 мегапикселей; CSV/TSV до 256 КБ. OCR timeout 90 секунд, максимум два одновременных child process на web-процесс. Остальные JSON-команды ограничены 16 КБ.
 
 Контракты прежних ответов расширены: order inquiry_id/quote_id nullable, customer source_file/source_row nullable для ручных записей, obligation purchase_order_id nullable, calendar kind дополнительно purchase. План закупки уменьшается на связанные подтверждённые обязательства.
+
+## T020–T030: исполнение, знания, AI и интеграции
+
+Маршруты организации собраны в таблице `src/server/routes/execution.ts` (путь после `organizations/:id/`); ответы проверяются Zod из `src/domain/{tasks,knowledge,decisions,automations,assistant}.ts`. Все команды принимают UUID `key` (повтор с тем же телом возвращает прежний результат, с другим — 409 IDEMPOTENCY_CONFLICT) и `version` для изменяемых объектов (409 VERSION_CONFLICT). Права проверяются заново на каждом вызове, в том числе при повторе ключа.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| POST | purchase-documents/:docId/review, review-draft, review-preview | строки с `decision` accept/substitute/reject/separate, `itemId` может быть null для неизвестной строки, `replacesItemId` для замены; preview возвращает total_minor и payable_minor |
+| POST | purchase-documents/:docId/adjustments | key, version, reason, lines[{lineId, baseQuantity, total}]; только purchasing:approve |
+| GET | purchase-documents/:docId | + decisions, adjustments, obligation, parent_document_id, received_value_minor строк |
+| GET/POST | tasks | список (state, scope=mine/all, q) / создание |
+| GET | tasks/:id | задача, чеклист, комментарии, вложения, история, permissions |
+| POST | tasks/:id/commands | assign, start, block, unblock, check, complete(note, operation), verify, return, cancel |
+| POST | tasks/:id/comments, tasks/:id/attachments | комментарий; файл PNG/JPEG/PDF ≤ 2 МБ base64 |
+| GET | tasks/:id/attachments/:attachmentId | файл (base64) после проверки доступа |
+| GET | tasks/assignees, tasks/templates, tasks/schedule, tasks/workload | исполнители в области, шаблоны, рабочее время, нагрузка |
+| POST | tasks/templates, tasks/templates/:id/tasks, tasks/schedule | шаблон, задача из шаблона, рабочее время (организация целиком) |
+| GET/POST | notifications, notifications/read | внутренние уведомления пользователя |
+| GET/POST | knowledge, knowledge/uploads | список/создание текста, загрузка TXT/MD/PDF ≤ 3 МБ |
+| GET | knowledge/search?q= | только опубликованные версии в области пользователя |
+| GET | knowledge/:id[?number=], knowledge/:id/original?number= | документ и версия; оригинал файла |
+| POST | knowledge/:id/versions, knowledge/:id/publication | новая версия; publish(number) или archive |
+| GET | today | ситуации (до 5), задачи, решения, показатели, источники |
+| GET/POST | insights, insights/refresh | список (state, rule) / пересчёт правил |
+| GET/POST | insights/reorder-points | пороги запаса (inventory:write, version) |
+| GET/POST | insights/:id, insights/:id/commands, insights/:id/proposal | ситуация; acknowledge/dismiss; черновик предложения |
+| GET/POST | proposals, proposals/:id, proposals/:id/commands, proposals/:id/revisions | submit, approve/reject(paramVersion, note), execute, cancel; изменение параметров |
+| GET/POST | proposals/policy, proposals/policy/limits, proposals/policy/delegations, …/:id/revoke | лимиты (owner), делегирование |
+| GET/POST | automations, automations/:id, automations/:id/versions, automations/:id/tests, automations/:id/commands | правила, версии, тест, activate/pause/disable |
+| GET/POST | automations/templates, automations/executions, automations/executions/:id/retry | шаблоны, журнал, повтор ручного разбора |
+| GET | assistant | статус провайдера/речи, настройки, потребление, инструменты |
+| POST | assistant/settings | только owner |
+| GET | assistant/conversations, assistant/conversations/:id | только свои разговоры |
+| POST | assistant/messages | key, conversationId, locale, text → сообщение со status/sources/tool_calls/unverified_numbers |
+| POST | assistant/transcriptions | key, locale, mime, audio ≤ 2 МБ; без провайдера 503 VOICE_NOT_CONFIGURED |
+| GET/POST | integrations | обзор с паспортами / настройка токена (owner); токен вебхука возвращается один раз |
+| POST | integrations/:id/check, sync, disconnect, links, links/:warehouseId/remove; GET integrations/:id/stores | проверка, синхронизация, отключение, связь складов |
+| POST | integrations/conflicts/:id | kept_local / took_remote |
+
+Публичный входящий маршрут: `POST /api/integrations/moysklad/:connectionId/:token?requestId=…` — без сессии и Origin, тело ≤ 64 КБ, токен сравнивается по хешу, повтор requestId возвращает `{accepted:true, duplicate:true}`. Обработка выполняется worker.
+
+Основные новые ошибки: 409 TASK_STATE, PROPOSAL_STATE, PARAMS_CHANGED, APPROVAL_REQUIRED, APPROVAL_REVOKED, RULE_NOT_TESTED, EXTERNAL_SOURCE_OF_TRUTH, WAREHOUSE_HAS_LEDGER; 403 SELF_APPROVAL, APPROVAL_LIMIT; 422 LINE_DECISION_REQUIRED, UNIT_MISMATCH, CHECKLIST_INCOMPLETE, EVIDENCE_REQUIRED, EVIDENCE_NOT_MET, NO_COMPARABLE_OFFER, QUANTITY_BELOW_RECEIVED, VALUE_BELOW_RECEIVED, OBLIGATION_PAID_EXCEEDS; 503 CREDENTIAL_STORAGE_NOT_CONFIGURED, VOICE_NOT_CONFIGURED. Тексты RU/KK — `src/lib/execution-i18n.ts`.

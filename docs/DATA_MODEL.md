@@ -66,3 +66,21 @@
 Миграция 6 (`crm-migration.ts`): crm_commands, crm_pipelines, inquiries, quotes, quote_items, crm_events; customers получает kind/responsible_id/consents и nullable provenance. sales_orders связан с inquiry_id/quote_id. Quote snapshots и исторические item links сохраняют единицы и цены. Конвертация в заказ выполняется в одной транзакции.
 
 После публикации миграции 1–6 не менять: checksum истории обязателен. Следующая миграция — 7.
+
+## Миграции 7–13 (T020–T030)
+
+Миграция 7 (`reconciliation-migration.ts`): `purchase_documents.parent_document_id` (дочерний документ отдельной закупки делит оригинал; уникальность хеша и номера/даты — только для корневых), `purchase_document_lines.purchase_line_id` (замена SKU приходуется на заказанную строку), `document_line_decisions` (substitute/reject/separate с позицией строки, суммой, связью с отдельным заказом), `purchase_document_adjustments` (до/после, дельта долга, предупреждения). Долг = сумма принятых строк + доставка; отклонённые и отдельные строки в него не входят. Стоимость прихода = накопленная доля − уже проведённая сумма receipts; последняя часть получает точный остаток.
+
+Миграция 8 (`tasks-migration.ts`): `execution_commands` (идемпотентность), `domain_events` (transactional outbox: topic, entity, payload, origin_chain_id, depth, dedupe_key UNIQUE), `notifications`, `tasks` (+ чеклист, комментарии, вложения BYTEA с SHA256, события), `task_templates`, `work_schedules`. Периодическая задача уникальна по `recurrence_key`, задача из предложения/автоматизации — по (source, source_id).
+
+Миграция 9 (`knowledge-migration.ts`): `knowledge_documents` (state, latest/published_version, audience, review_due, branch null = вся организация) и неизменяемые `knowledge_versions` (+ оригинал файла). GIN-индекс `to_tsvector('simple')`.
+
+Миграция 10 (`decisions-migration.ts`): `reorder_points`; `insights` (активная ситуация уникальна по fingerprint; evidence с фактами/расчётом/источниками; скрытая ситуация не открывается снова, пока условие не исчезнет); `insight_runs`; `action_proposals` (params, params_hash канонического JSON, param_version, amount_minor, state, outcome); `approvals` (решение по конкретной param_version); `approval_limits`; `approval_delegations`.
+
+Миграция 11 (`automation-migration.ts`): `automation_rules` (активна только при tested_version = current_version), `automation_rule_versions`, `automation_test_runs`, `automation_executions` (UNIQUE(rule_id, event_id), lease, attempts, dead).
+
+Миграция 12 (`assistant-migration.ts`): `assistant_settings`, `assistant_conversations`, `assistant_messages` (status, sources, tool_calls, unverified_numbers), `assistant_usage` (tokens, latency, status). Аудио и ключи провайдера в БД не хранятся.
+
+Миграция 13 (`integrations-migration.ts`): `integration_connections` (status, credentials AES-GCM, hint, hash токена вебхука, ownership, verification), `integration_mappings` (external_id ↔ internal_id, external_updated, local_version), `integration_warehouse_links`, `external_stock` (зеркало остатка связанного склада), `sync_cursors`, `sync_runs`, `integration_inbox` (UNIQUE(connection, requestId)), `sync_conflicts`.
+
+Источник истины: для связанного склада остаток — МойСклад (`external_stock`), складские команды по нему запрещены; для остальных — собственный журнал. Каталог импортированных товаров обновляется из МойСклад, но локальная правка после синхронизации создаёт конфликт. Задачи, согласования, закупки и знания ведутся у нас. Следующая миграция — 14; миграции 1–13 после публикации не менять.
