@@ -1,6 +1,7 @@
 import { setTimeout } from "node:timers/promises";
 import { createPostgresDatabase } from "../src/server/db/database";
 import { ImportWorker } from "../src/server/jobs/worker";
+import { ExecutionWorker } from "../src/server/jobs/execution-worker";
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
@@ -18,12 +19,17 @@ if (
   throw new Error("Local supervisor required");
 const db = local ? null : createPostgresDatabase(process.env.DATABASE_URL!);
 const worker = db ? new ImportWorker(db) : null;
-console.log(`Import worker started (PID ${process.pid}); stop with Ctrl+C.`);
+const execution = db ? new ExecutionWorker(db) : null;
+console.log(
+  `Worker started (imports, tasks, situations, automations) (PID ${process.pid}); stop with Ctrl+C.`,
+);
 let unavailable = false;
 while (!stopping) {
   try {
-    if (worker) await worker.runOnce();
-    else {
+    if (worker) {
+      await worker.runOnce();
+      await execution!.runOnce();
+    } else {
       const response = await fetch(
         `${process.env.APP_ORIGIN}/api/internal/worker`,
         {

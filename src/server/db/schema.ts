@@ -7,6 +7,7 @@ import { reconciliationMigration } from "./reconciliation-migration";
 import { tasksMigration } from "./tasks-migration";
 import { knowledgeMigration } from "./knowledge-migration";
 import { decisionsMigration } from "./decisions-migration";
+import { automationMigration } from "./automation-migration";
 export const migrations = [
   {
     version: 1,
@@ -65,4 +66,5 @@ CREATE TABLE auth_limits (
   tasksMigration,
   knowledgeMigration,
   decisionsMigration,
+  automationMigration,
 ];

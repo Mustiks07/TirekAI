@@ -250,23 +250,36 @@ export class ProposalService {
   ) {
     idSchema.parse(insightId);
     const key = idSchema.parse((input as { key?: unknown })?.key);
-    return this.db.transaction(async (tx) => {
-      const s = await sessionAccess(tx, secret, org, "insights:read");
-      const insight = await new InsightService(this.db).load(
-        tx,
-        org,
-        insightId,
-        s,
-      );
-      const draft = await this.suggest(tx, org, insight);
-      return this.createInTransaction(
-        tx,
-        secret,
-        org,
-        { key, insightId, submit: false, ...draft },
-        "situation",
-      );
-    });
+    return this.db.transaction((tx) =>
+      this.fromInsightInTransaction(tx, secret, org, insightId, key),
+    );
+  }
+  async fromInsightInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    insightId: string,
+    key: string,
+    origin: "situation" | "automation" | "assistant" = "situation",
+    submit = false,
+    chain?: Chain,
+  ) {
+    const s = await sessionAccess(tx, secret, org, "insights:read");
+    const insight = await new InsightService(this.db).load(
+      tx,
+      org,
+      insightId,
+      s,
+    );
+    const draft = await this.suggest(tx, org, insight);
+    return this.createInTransaction(
+      tx,
+      secret,
+      org,
+      { key, insightId, submit, ...draft },
+      origin,
+      chain,
+    );
   }
   private async suggest(tx: Sql, org: string, insight: InsightRow) {
     const f = insight.evidence.facts;

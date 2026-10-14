@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "../../../../server/db/database";
 import { ImportWorker } from "../../../../server/jobs/worker";
+import { ExecutionWorker } from "../../../../server/jobs/execution-worker";
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   const expected = process.env.LOCAL_WORKER_SECRET || "";
@@ -17,8 +18,11 @@ export async function POST(request: NextRequest) {
   )
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   try {
+    const db = await getDatabase();
+    const imports = await new ImportWorker(db).runOnce();
+    const execution = await new ExecutionWorker(db).runOnce();
     return NextResponse.json(
-      await new ImportWorker(await getDatabase()).runOnce(),
+      { ...imports, execution },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch {

@@ -6,6 +6,14 @@ import { KnowledgeService } from "../knowledge/service";
 import { InsightService } from "../decisions/insights";
 import { ProposalService } from "../decisions/proposals";
 import { TodayService } from "../decisions/today";
+import { AutomationService } from "../automations/service";
+import {
+  ruleList,
+  ruleDetail,
+  testResult,
+  executionList,
+  automationTemplates,
+} from "../../domain/automations";
 import {
   insightList,
   insightRow,
@@ -55,6 +63,7 @@ const tasks = (c: RouteContext) => new TaskService(c.db);
 const knowledge = (c: RouteContext) => new KnowledgeService(c.db);
 const insights = (c: RouteContext) => new InsightService(c.db);
 const proposals = (c: RouteContext) => new ProposalService(c.db);
+const automations = (c: RouteContext) => new AutomationService(c.db);
 // Organization-scoped routes for T021–T030. Paths are relative to organizations/:id.
 export const executionRoutes: Route[] = [
   {
@@ -355,6 +364,59 @@ export const executionRoutes: Route[] = [
     path: "proposals/:id/revisions",
     schema: commerceResult,
     run: (c) => proposals(c).revise(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "automations",
+    schema: ruleList,
+    run: (c) => automations(c).list(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "automations",
+    schema: commerceResult,
+    run: (c) => automations(c).create(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "automations/templates",
+    run: async () => ({ items: automationTemplates }),
+  },
+  {
+    method: "GET",
+    path: "automations/executions",
+    schema: executionList,
+    run: (c) => automations(c).executions(c.secret, c.org, c.query),
+  },
+  {
+    method: "POST",
+    path: "automations/executions/:id/retry",
+    schema: commerceResult,
+    run: (c) => automations(c).retry(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "automations/:id",
+    schema: ruleDetail,
+    run: (c) => automations(c).get(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "automations/:id/versions",
+    schema: commerceResult,
+    run: (c) => automations(c).revise(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "automations/:id/tests",
+    schema: testResult,
+    run: (c) => automations(c).test(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "automations/:id/commands",
+    schema: commerceResult,
+    run: (c) => automations(c).command(c.secret, c.org, c.params[0], c.body),
   },
 ];
 // Body size limits for routes that accept uploads (bytes, before base64 decoding checks).
