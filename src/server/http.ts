@@ -6,6 +6,19 @@ import { getDatabase } from "./db/database";
 import { Platform } from "./platform";
 import { ImportService } from "./imports/service";
 import { InventoryService } from "./inventory/service";
+import { CommerceService } from "./commerce/service";
+import {
+  ordersView,
+  orderView,
+  accountsView,
+  ledgerView,
+  obligationsView,
+  financeSummary,
+  customerOptions,
+  commerceResult,
+  commerceContract,
+  calendarView,
+} from "../domain/commerce";
 import {
   catalogSchema,
   stockViewSchema,
@@ -83,11 +96,14 @@ export async function handle(request: NextRequest, path: string[]) {
     const service = new Platform(await getDatabase());
     const imports = new ImportService(await getDatabase());
     const inventory = new InventoryService(await getDatabase());
+    const commerce = new CommerceService(await getDatabase());
     const query = Object.fromEntries(request.nextUrl.searchParams);
     let data: unknown;
     let sessionToken: string | undefined;
     const route = path.join("/");
-    if (method === "GET" && route === "contracts/inventory")
+    if (method === "GET" && route === "contracts/commerce")
+      data = commerceContract();
+    else if (method === "GET" && route === "contracts/inventory")
       data = inventoryContract();
     else if (method === "GET" && route === "contracts/imports")
       data = importApiContract();
@@ -115,7 +131,83 @@ export async function handle(request: NextRequest, path: string[]) {
       data = await service.acceptInvitation(secret, body);
     else if (path[0] === "organizations" && path[1]) {
       const id = path[1];
-      if (path.length === 3 && path[2] === "catalog" && method === "GET")
+      if (
+        path.length === 3 &&
+        path[2] === "order-customers" &&
+        method === "GET"
+      )
+        data = checked(
+          customerOptions,
+          await commerce.customers(secret, id, query),
+        );
+      else if (path.length === 3 && path[2] === "orders" && method === "GET")
+        data = checked(ordersView, await commerce.list(secret, id, query));
+      else if (path.length === 3 && path[2] === "orders" && method === "POST")
+        data = checked(commerceResult, await commerce.create(secret, id, body));
+      else if (path.length === 4 && path[2] === "orders" && method === "GET")
+        data = checked(
+          orderView,
+          await commerce.get(secret, id, path[3], query),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "orders" &&
+        path[4] === "commands" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await commerce.transition(secret, id, path[3], body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "finance" &&
+        method === "GET" &&
+        ["accounts", "ledger", "obligations", "summary", "calendar"].includes(
+          path[3],
+        )
+      ) {
+        const section = path[3] as
+          "accounts" | "ledger" | "obligations" | "summary" | "calendar";
+        const schemas = {
+          accounts: accountsView,
+          ledger: ledgerView,
+          obligations: obligationsView,
+          summary: financeSummary,
+          calendar: calendarView,
+        };
+        data = checked(
+          schemas[section],
+          await commerce[section](secret, id, query),
+        );
+      } else if (
+        path.length === 4 &&
+        path[2] === "finance" &&
+        path[3] === "accounts" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await commerce.createAccount(secret, id, body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "finance" &&
+        path[3] === "obligations" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await commerce.createObligation(secret, id, body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "finance" &&
+        path[3] === "commands" &&
+        method === "POST"
+      )
+        data = checked(commerceResult, await commerce.money(secret, id, body));
+      else if (path.length === 3 && path[2] === "catalog" && method === "GET")
         data = checked(
           catalogSchema,
           await inventory.catalog(secret, id, query),

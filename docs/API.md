@@ -57,3 +57,34 @@
 Sales имеет чтение каталога/остатков, issue/reserve/release/return; без purchase_price и value_minor в ответах. Owner/manager/purchasing имеют write/cost, finance — read/cost, observer — read без стоимости. Филиальная роль не может изменять общий каталог; каждый склад и обе стороны перемещения проверяются сервером. Employee пока не имеет складских прав.
 
 Ошибки: 409 ITEM_EXISTS/VERSION_CONFLICT/UNIT_LOCKED/INSUFFICIENT_STOCK/RESERVATION_MISMATCH/TRANSFER_STATE/RETURN_EXCEEDS/COUNT_BELOW_RESERVED/IDEMPOTENCY_CONFLICT; 422 UNIT_NOT_ALLOWED/QUANTITY_PRECISION/SERVICE_NO_STOCK/SAME_WAREHOUSE/COUNT_COST_REQUIRED/STOCK_LIMIT. Повторная корректная команда возвращает `{id,kind,reused:true}`. Недопустимая команда не сохраняет частичных изменений.
+
+
+## Заказы и финансы: контракты 1.3
+
+`GET /api/v1/contracts/commerce` публикует схемы из `src/domain/commerce.ts`. Выходы всех новых HTTP-методов проверяются Zod. Денежные суммы ответа — строковые целые тиыны; ввод цены до 6 знаков после точки, ввод фактической оплаты до 2. Все POST используют key UUID, хеш нормализованного запроса и возвращают `{id,reused}`. Ошибка откатывает всю транзакцию. Права повторно проверяются даже при повторе ключа.
+
+Пути ниже после `/api/v1/organizations/:id`:
+
+| Метод | Путь | Поля / результат |
+| --- | --- | --- |
+| GET | order-customers | branchId/q/page/limit; id/name клиентов для выбора |
+| GET | orders | branchId/q/page/limit; суммы, долги, состояние и версия |
+| POST | orders | key/branchId/customerId/warehouseId/dueDate/delivery/note/taxMode=excluded; lines[1..30]: itemId/quantity/unit/price/discount |
+| GET | orders/:orderId | order, lines, events, eventPagination; page/limit управляют историей |
+| POST | orders/:orderId/commands | key/version/note/kind; confirm, cancel, fulfill(lineId/quantity/serviceCost?), return(eventId/quantity) |
+| GET | finance/accounts | branchId; счета с фактическими балансами |
+| POST | finance/accounts | key/branchId/name/opening; начальный баланс отдельной записью журнала, максимум 100 счетов |
+| GET | finance/ledger | branchId/q/page/limit; записи с order_id/obligation_id |
+| GET | finance/obligations | branchId/q/page/limit; поставщик, срок, сумма/оплата |
+| POST | finance/obligations | key/branchId/supplier/amount/dueDate/note |
+| POST | finance/commands | key/accountId/amount/note/kind; детали ниже |
+| GET | finance/summary | branchId; сводка за весь период, отдельные revenue/cost/cash/debt/profit/margin/markup и признаки неполноты |
+| GET | finance/calendar | branchId/days(1..365)/delayDays(0..365)/expensePercent(0..300); база/сценарий по дням и исходные документы, максимум 5000 |
+
+Денежные команды: payment/refund требуют orderId; supplier_payment — obligationId; income/expense — category/counterparty; expense дополнительно operating boolean; transfer — destinationId. Все суммы положительны, направление задаёт kind. Счёт оплаты и документ должны быть одного филиала. Переводы между филиалами доступны только роли с областью обоих счетов. Связанные заказы/обязательства нельзя подменить чужими ID.
+
+Заказы: owner/manager/sales читают и изменяют; finance/observer только читают. Финансы: owner/manager/finance читают и изменяют. Sales/observer не получают cost_minor в событиях заказа; финансовые API им недоступны. Цена продажи доступна в заказе. Отдельные старые складские команды для заказных резервов/выдач отклоняются ORDER_OPERATION_REQUIRED.
+
+Состояния: draft → confirmed → partial → fulfilled; draft/confirmed/partial → cancelled. Возврат — отдельное событие, не стирает исполнение. Строки после создания не редактируются: ошибочный черновик отменяют и создают новый. delivery/pickup — выбранный ручной способ исполнения, без подключения службы доставки. serviceCost — стоимость всей исполняемой части услуги, только роль с inventory:cost; отсутствие означает неизвестную стоимость.
+
+Основные ошибки: VERSION_CONFLICT, IDEMPOTENCY_CONFLICT, ORDER_STATE, CUSTOMER_SCOPE, WAREHOUSE_SCOPE, ACCOUNT_SCOPE, DUPLICATE_LINE, QUANTITY_EXCEEDS, RETURN_EXCEEDS, PAYMENT_EXCEEDS, REFUND_EXCEEDS, INSUFFICIENT_STOCK, INSUFFICIENT_MONEY, ACCOUNT_EXISTS, ACCOUNT_LIMIT, SAME_ACCOUNT, AMOUNT_LIMIT, CALENDAR_LIMIT. Запросы с неподдерживаемыми полями/задними датами отклоняются. Финансовый импорт, сторнирование прочих расходов и полноценный OpenAPI пока не реализованы.

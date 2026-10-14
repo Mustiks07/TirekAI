@@ -10,6 +10,7 @@ import { Platform } from "../src/server/platform";
 import { InventoryService } from "../src/server/inventory/service";
 import { ImportService } from "../src/server/imports/service";
 import { ImportWorker } from "../src/server/jobs/worker";
+import { CommerceService } from "../src/server/commerce/service";
 const url = process.env.SMB_POSTGRES_TEST_URL;
 if (
   !url ||
@@ -81,7 +82,7 @@ it("runs all migrations on PostgreSQL without modifying applied history", async 
   await migrate(other);
   expect(
     await db.query("SELECT version FROM schema_migrations ORDER BY version"),
-  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
 });
 it("allows one reservation of the final unit through independent pools", async () => {
   const id = await item();
@@ -238,4 +239,136 @@ it("rolls back an in-flight business write after terminating its database backen
       [id],
     ),
   ).toEqual([{ quantity: "1.000000" }]);
+});
+
+async function saleFixture() {
+  const batch = await queued(`sale${randomUUID().slice(0, 8)}`),
+    worker = new ImportWorker(db);
+  await worker.dispatch();
+  await worker.runOnce();
+  await worker.runOnce();
+  const [customer] = await db.query<{ id: string }>(
+    "SELECT id FROM customers WHERE source_batch_id=$1 LIMIT 1",
+    [batch],
+  );
+  const itemId = await item();
+  await new InventoryService(db).execute(
+    owner.token,
+    org,
+    command(itemId, "receipt", { unitCost: "20" }),
+  );
+  const make = () =>
+    new CommerceService(db).create(owner.token, org, {
+      key: randomUUID(),
+      branchId: branch,
+      customerId: customer.id,
+      warehouseId: warehouse,
+      dueDate: "2030-01-01",
+      delivery: "pickup",
+      taxMode: "excluded",
+      note: "Concurrent order",
+      lines: [{ itemId, quantity: "1", unit: "pc", price: "100" }],
+    });
+  return { make, itemId };
+}
+it("confirms only one competing order for the last unit and rolls back the other", async () => {
+  const f = await saleFixture(),
+    a = await f.make(),
+    b = await f.make();
+  const confirm = (database: Database, id: string) =>
+    new CommerceService(database).transition(owner.token, org, id, {
+      key: randomUUID(),
+      version: 1,
+      kind: "confirm",
+      note: "Concurrent confirmation",
+    });
+  const results = await Promise.allSettled([
+    confirm(db, a.id),
+    confirm(other, b.id),
+  ]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { code: "INSUFFICIENT_STOCK" },
+  });
+  const rows = await db.query<{ state: string }>(
+    "SELECT state FROM sales_orders WHERE id=ANY($1::uuid[])",
+    [[a.id, b.id]],
+  );
+  expect(rows.map((r) => r.state).sort()).toEqual(["confirmed", "draft"]);
+});
+it("prevents concurrent overpayment and deduplicates repeated payment delivery", async () => {
+  const f = await saleFixture(),
+    a = await f.make(),
+    s = new CommerceService(db);
+  await s.transition(owner.token, org, a.id, {
+    key: randomUUID(),
+    version: 1,
+    kind: "confirm",
+    note: "Confirm order",
+  });
+  const account = (
+    await s.createAccount(owner.token, org, {
+      key: randomUUID(),
+      branchId: branch,
+      name: randomUUID(),
+      opening: "0",
+    })
+  ).id;
+  const pay = (database: Database, key: string, amount: string) =>
+    new CommerceService(database).money(owner.token, org, {
+      key,
+      accountId: account,
+      orderId: a.id,
+      kind: "payment",
+      amount,
+      note: "Concurrent payment",
+    });
+  const results = await Promise.allSettled([
+    pay(db, randomUUID(), "75"),
+    pay(other, randomUUID(), "75"),
+  ]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { code: "PAYMENT_EXCEEDS" },
+  });
+  const key = randomUUID(),
+    repeats = await Promise.all([pay(db, key, "25"), pay(other, key, "25")]);
+  expect(repeats[0].id).toBe(repeats[1].id);
+  expect(repeats.map((r) => r.reused).sort()).toEqual([false, true]);
+  expect((await s.get(owner.token, org, a.id)).order.paid_minor).toBe("10000");
+});
+it("prevents two independent connections from spending the same last account balance", async () => {
+  const s = new CommerceService(db),
+    account = (
+      await s.createAccount(owner.token, org, {
+        key: randomUUID(),
+        branchId: branch,
+        name: randomUUID(),
+        opening: "10",
+      })
+    ).id;
+  const spend = (database: Database) =>
+    new CommerceService(database).money(owner.token, org, {
+      key: randomUUID(),
+      kind: "expense",
+      accountId: account,
+      amount: "10",
+      category: "Operating",
+      counterparty: "Synthetic vendor",
+      operating: true,
+      note: "Concurrent expense",
+    });
+  const results = await Promise.allSettled([spend(db), spend(other)]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { code: "INSUFFICIENT_MONEY" },
+  });
+  expect(
+    (
+      await db.query(
+        "SELECT balance_minor::text FROM money_accounts WHERE id=$1",
+        [account],
+      )
+    )[0].balance_minor,
+  ).toBe("0");
 });

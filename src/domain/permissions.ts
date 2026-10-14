@@ -14,7 +14,11 @@ export type Permission =
   | "inventory:read"
   | "inventory:write"
   | "inventory:sell"
-  | "inventory:cost";
+  | "inventory:cost"
+  | "orders:read"
+  | "orders:write"
+  | "finance:read"
+  | "finance:write";
 const grants: Record<Role, readonly Permission[]> = {
   owner: [
     "organization:read",
@@ -46,6 +50,14 @@ const grants: Record<Role, readonly Permission[]> = {
   observer: ["organization:read"],
 };
 export function can(role: Role, permission: Permission) {
+  const commerce: Partial<Record<Role, Permission[]>> = {
+    owner: ["orders:read", "orders:write", "finance:read", "finance:write"],
+    manager: ["orders:read", "orders:write", "finance:read", "finance:write"],
+    sales: ["orders:read", "orders:write"],
+    finance: ["orders:read", "finance:read", "finance:write"],
+    observer: ["orders:read"],
+  };
+  if (commerce[role]?.includes(permission)) return true;
   const inventory: Partial<Record<Role, Permission[]>> = {
     owner: [
       "catalog:read",

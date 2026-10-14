@@ -11,14 +11,14 @@
 | REQ CRM 02 | T009,T013,T034 | Не создан | planned |
 | REQ CRM 03 | T013 | Не создан | planned |
 | REQ CRM 04 | T013,T027 | Не создан | planned |
-| REQ CRM 05 | T014 | Не создан | planned |
+| REQ CRM 05 | T014 | commerce.test.ts, postgres.integration.ts, e2e/commerce.spec.ts | verified_test: заказ/резерв/частичное исполнение/отмена/возврат, автор/время; ручная выдача/доставка |
 | REQ CRM 06 | T023 | Не создан | planned |
 | REQ INV 01 | T010 | inventory.test.ts, e2e/inventory.spec.ts | SKU, RU/KK, категория/штрихкод/вариант, единицы, цены, товар/услуга verified_test; импорт каталога впереди |
 | REQ INV 02 | T010 | inventory.test.ts | Склады/филиалы verified_test; партии, сроки, серийные номера и ячейки не реализованы |
 | REQ INV 03 | T011,T012 | inventory.test.ts, e2e/inventory.spec.ts | Приёмка, выдача, резерв, путь/приёмка, инвентаризация, возврат по выдаче; возврат поставщику и отдельное списание впереди |
 | REQ INV 04 | T012 | inventory.test.ts | physical/reserved/available и in_transit разделены; локально verified_test |
 | REQ INV 05 | T012 | inventory.test.ts, postgres.integration.ts | Последний резерв один успешный в PGlite и PostgreSQL с двумя пулами; owner exception отрицательного остатка впереди |
-| REQ INV 06 | T011,T016 | inventory.test.ts | Средневзвешенная, точные суммы, исходная стоимость возврата verified_test; партийная оценка/задний пересчёт/финансовые отчёты впереди |
+| REQ INV 06 | T011,T016 | inventory.test.ts | Средневзвешенная, точные суммы, исходная стоимость возврата verified_test; базовая финансовая сводка реализована; партийная оценка/задний пересчёт впереди |
 | REQ INV 07 | T042 | Не создан | planned |
 | REQ PUR 01 | T017 | Не создан | planned |
 | REQ PUR 02 | T017 | Не создан | planned |
@@ -28,10 +28,10 @@
 | REQ PUR 06 | T019 | Не создан | planned |
 | REQ PUR 07 | T020 | Не создан | planned |
 | REQ PUR 08 | T019,T020 | Не создан | planned |
-| REQ FIN 01 | T015 | Не создан | planned |
-| REQ FIN 02 | T015 | Не создан | planned |
-| REQ FIN 03 | T016 | Не создан | planned |
-| REQ FIN 04 | T016 | Не создан | planned |
+| REQ FIN 01 | T015 | commerce.test.ts, e2e/commerce.spec.ts | Счета, поступления/расходы, категории, контрагенты, документы/сроки; импорт и банковский адаптер впереди |
+| REQ FIN 02 | T015 | commerce.test.ts, postgres.integration.ts, e2e/commerce.spec.ts | Частичная оплата/возврат, ручные обязательства/долги; выручка/деньги/прибыль раздельно |
+| REQ FIN 03 | T016 | commerce.test.ts, e2e/commerce.spec.ts | Decimal, скидки/возвраты, маржа/наценка/нулевые знаменатели; неизвестные затраты и неполные расходы отмечены; налоговый режим excluded |
+| REQ FIN 04 | T016 | commerce.test.ts, e2e/commerce.spec.ts | Календарь/просрочки/задержка поступлений/изменение выплат без мутаций; регулярные платежи и сохранение сценариев впереди |
 | REQ FIN 05 | T048 | Не создан | planned |
 | REQ OPS 01 | T021 | Не создан | planned |
 | REQ OPS 02 | T021 | Не создан | planned |
@@ -68,7 +68,7 @@
 | REQ AUT 06 | T025 | Не создан | planned |
 | AC 01 | T003,T004 | tests/foundation.test.ts; tests/e2e/foundation.spec.ts | Локальный срез; полная приёмка впереди |
 | AC 02 | T009 | imports.test.ts, restart.test.ts, postgres.integration.ts, e2e/imports.spec.ts | verified_test: клиенты CSV/TSV, preview/partial/replay/source/date; PostgreSQL два пула без дублей |
-| AC 03 | T010–T016 | Не создан | planned |
+| AC 03 | T010–T016 | commerce.test.ts, postgres.integration.ts, e2e/commerce.spec.ts | verified_test: ручной заказ → частичное исполнение → частичная оплата → возврат с согласованными остатками/суммами; обращения/предложения T013 ещё впереди |
 | AC 04 | T018,T023,T024 | Не создан | planned |
 | AC 05 | T017,T020 | Не создан | planned |
 | AC 06 | T016 | Не создан | planned |

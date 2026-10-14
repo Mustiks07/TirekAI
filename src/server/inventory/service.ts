@@ -110,7 +110,7 @@ export class InventoryService {
             unitsChanged &&
             (
               await tx.query(
-                "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
+                "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
                 [org, id],
               )
             ).length
@@ -260,6 +260,18 @@ export class InventoryService {
     });
   }
   async execute(secret: string, org: string, input: unknown) {
+    return this.db.transaction((tx) =>
+      this.executeInTransaction(tx, secret, org, input),
+    );
+  }
+  // Internal composition only: HTTP callers cannot provide linkedOrderId.
+  async executeInTransaction(
+    tx: Sql,
+    secret: string,
+    org: string,
+    input: unknown,
+    linkedOrderId?: string,
+  ) {
     const c = stockCommand.parse(input);
     const permission: Permission = [
       "issue",
@@ -270,9 +282,23 @@ export class InventoryService {
       ? "inventory:sell"
       : "inventory:write";
     const hash = createHash("sha256").update(JSON.stringify(c)).digest("hex");
-    return this.db.transaction(async (tx) => {
+    {
       const scope = await sessionAccess(tx, secret, org, permission),
         warehouse = await this.warehouse(tx, org, c.warehouseId, scope);
+      const source =
+        "reservationId" in c
+          ? c.reservationId
+          : "movementId" in c
+            ? c.movementId
+            : undefined;
+      if (source) {
+        const [link] = await tx.query<{ order_id: string }>(
+          "SELECT order_id FROM order_stock_links WHERE organization_id=$1 AND object_id=$2",
+          [org, source],
+        );
+        if (link && link.order_id !== linkedOrderId)
+          throw new AppError("ORDER_OPERATION_REQUIRED", 409);
+      }
       if (c.kind === "dispatch")
         await this.warehouse(tx, org, c.destinationId, scope);
       const [item] = await tx.query<Item>(
@@ -505,7 +531,7 @@ export class InventoryService {
         { itemId: c.itemId, operationId: resultId },
       );
       return { ...result, reused: false };
-    });
+    }
   }
   async snapshot(secret: string, org: string, input: unknown) {
     const q = stockQuery
