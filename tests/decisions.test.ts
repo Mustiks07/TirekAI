@@ -249,7 +249,7 @@ it("T023/T024: low stock → evidence → draft purchase → approval → execut
     state: "approved",
     total_minor: "13200",
   });
-  expect(order.events.map((e: { kind: string }) => e.kind).sort()).toEqual([
+  expect(order.events.map((e) => String(e.kind)).sort()).toEqual([
     "approve",
     "created",
     "submit",
