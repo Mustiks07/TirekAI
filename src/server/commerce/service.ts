@@ -268,7 +268,12 @@ export class CommerceService {
       ],
     );
   }
-  async transition(secret: Credential, org: string, id: string, input: unknown) {
+  async transition(
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+  ) {
     const c = orderCommand.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "orders:write"),

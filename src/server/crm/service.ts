@@ -384,7 +384,12 @@ export class CrmService {
     if (!i) throw new AppError("NOT_FOUND", 404);
     return i;
   }
-  async transition(secret: Credential, org: string, id: string, input: unknown) {
+  async transition(
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+  ) {
     const c = inquiryCommand.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:write"),
@@ -507,7 +512,12 @@ export class CrmService {
     if (!q) throw new AppError("NOT_FOUND", 404);
     return q;
   }
-  async saveQuote(secret: Credential, org: string, input: unknown, id?: string) {
+  async saveQuote(
+    secret: Credential,
+    org: string,
+    input: unknown,
+    id?: string,
+  ) {
     const c = id ? quoteUpdate.parse(input) : quoteInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:write"),

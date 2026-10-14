@@ -76,7 +76,9 @@ function canonical(value: unknown): unknown {
   return value;
 }
 export const paramsHash = (params: unknown) =>
-  createHash("sha256").update(JSON.stringify(canonical(params))).digest("hex");
+  createHash("sha256")
+    .update(JSON.stringify(canonical(params)))
+    .digest("hex");
 const hash = paramsHash;
 export class ProposalService {
   constructor(private db: Database) {}
