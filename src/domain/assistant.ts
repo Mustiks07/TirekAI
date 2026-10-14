@@ -117,11 +117,11 @@ export function answerNumbers(text: string) {
       " ",
     );
   const found =
-    cleaned.match(/\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?/g) || [];
+    cleaned.match(/\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?/g) || [];
   return [
     ...new Set(
       found
-        .map((n) => norm(n.replace(/[   ]/g, "").replace(",", ".")))
+        .map((n) => norm(n.replace(/[ \u00a0\u202f]/g, "").replace(",", ".")))
         .filter((n): n is string => n !== null),
     ),
   ];
