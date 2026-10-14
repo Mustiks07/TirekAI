@@ -137,6 +137,8 @@ export const orderSchema = z.object({
   number: z.number().int(),
   branch_id: z.uuid(),
   customer_id: z.uuid(),
+  inquiry_id: z.uuid().nullable(),
+  quote_id: z.uuid().nullable(),
   customer_name: z.string(),
   warehouse_id: z.uuid(),
   state: z.enum(["draft", "confirmed", "partial", "fulfilled", "cancelled"]),
@@ -222,6 +224,7 @@ export const obligationSchema = z.object({
   id: z.uuid(),
   branch_id: z.uuid(),
   supplier: z.string(),
+  purchase_order_id: z.uuid().nullable(),
   amount_minor: minor,
   paid_minor: minor,
   due_date: date,
@@ -269,7 +272,7 @@ export const calendarView = z.object({
   documents: z.array(
     z.object({
       id: z.uuid(),
-      kind: z.enum(["order", "supplier"]),
+      kind: z.enum(["order", "supplier", "purchase"]),
       name: z.string(),
       due_date: date,
       amount_minor: minor,

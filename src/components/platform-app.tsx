@@ -53,6 +53,7 @@ import { businessDate } from "@/lib/dates";
 import { CustomersPage } from "./customers-page";
 import { InventoryPage } from "./inventory-page";
 import { CommercePage } from "./commerce-page";
+import { PurchasingPage } from "./purchasing-page";
 import { can } from "@/domain/permissions";
 
 type Page =
@@ -63,7 +64,8 @@ type Page =
   | "customers"
   | "inventory"
   | "orders"
-  | "finance";
+  | "finance"
+  | "purchasing";
 type Modal = "invite" | "newOrg" | "branch" | null;
 const field = (form: FormData, name: string) => String(form.get(name) || "");
 const branchName = (name: string, locale: Locale) =>
@@ -1086,12 +1088,19 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               { id: "inventory", Icon: Database },
               { id: "orders", Icon: CheckCheck },
               { id: "finance", Icon: ArrowRight },
+              { id: "purchasing", Icon: Building2 },
               { id: "team", Icon: Users },
               { id: "organization", Icon: Building2 },
               { id: "activity", Icon: History },
             ] as const
           )
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
+            .filter(
+              (item) =>
+                item.id !== "purchasing" ||
+                (workspace &&
+                  can(workspace.organization.role, "purchasing:read")),
+            )
             .filter(
               (item) =>
                 item.id !== "orders" ||
@@ -1203,13 +1212,15 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                       ? t.customersNote
                       : page === "orders"
                         ? t.ordersNote
-                        : page === "finance"
-                          ? t.financeNote
-                          : page === "inventory"
-                            ? t.inventoryNote
-                            : page === "organization"
-                              ? t.orgNote
-                              : t.activityNote}
+                        : page === "purchasing"
+                          ? t.purchasingNote
+                          : page === "finance"
+                            ? t.financeNote
+                            : page === "inventory"
+                              ? t.inventoryNote
+                              : page === "organization"
+                                ? t.orgNote
+                                : t.activityNote}
               </p>
             </div>
             {page === "today" ? (
@@ -1262,6 +1273,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             </section>
           ) : (
             <>
+              {page === "purchasing" &&
+                can(workspace.organization.role, "purchasing:read") && (
+                  <PurchasingPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
               {(page === "orders" || page === "finance") &&
                 can(
                   workspace.organization.role,

@@ -279,7 +279,7 @@ export class ImportService {
       );
       const items = await tx.query<Customer>(
         `SELECT c.id,c.branch_id,c.external_id,c.name,c.email,c.phone,c.version,c.created_at,c.updated_at,b.filename AS source_file,c.source_row
-        FROM customers c JOIN import_batches b ON b.id=c.source_batch_id AND b.organization_id=c.organization_id
+        FROM customers c LEFT JOIN import_batches b ON b.id=c.source_batch_id AND b.organization_id=c.organization_id
         WHERE c.organization_id=$1 AND ($2::uuid IS NULL OR c.branch_id=$2) ORDER BY c.created_at DESC,c.id DESC LIMIT $3 OFFSET $4`,
         [org, scope.branchId, query.limit, (query.page - 1) * query.limit],
       );

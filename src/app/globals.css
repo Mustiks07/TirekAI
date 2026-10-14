@@ -3166,3 +3166,13 @@ fieldset {
   font-size: 14px;
   font-weight: 600;
 }
+/* Procurement uses the shared commerce forms and responsive panels. */
+.procurement-offer,.procurement-review-line { border: 1px solid var(--border, #dfe5e1); border-radius: 12px; padding: 16px; margin-block: 12px; min-width: 0; }
+.procurement-offer h3 { margin-top: 0; }
+.procurement-offer button { margin-top: 12px; }
+.procurement-page details { margin-block: 16px; }
+.procurement-page summary { cursor: pointer; font-weight: 600; padding-block: 10px; }
+.procurement-page .procurement-extraction { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; background: #f5f7f5; padding: 16px; border-radius: 8px; }
+.procurement-page .commerce-row { flex-wrap: wrap; overflow-wrap: anywhere; }
+.procurement-submit { align-self: end; }
+.procurement-review-line .commerce-field { margin-block: 12px; }

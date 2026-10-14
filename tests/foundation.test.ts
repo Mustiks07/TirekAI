@@ -8,6 +8,7 @@ import {
 import { Platform } from "../src/server/platform";
 import { digest, verifyPassword } from "../src/server/auth/crypto";
 import { can } from "../src/domain/permissions";
+import { migrations } from "../src/server/db/schema";
 
 let db: Database;
 let platform: Platform;
@@ -49,7 +50,9 @@ afterAll(async () => {
 describe("identity, isolation, and membership lifecycle", () => {
   it("migrates repeatably without changing applied history", async () => {
     await migrate(db);
-    expect(await db.query("SELECT * FROM schema_migrations")).toHaveLength(4);
+    expect(await db.query("SELECT * FROM schema_migrations")).toHaveLength(
+      migrations.length,
+    );
   });
   it("persists only hashes of passwords and session tokens", async () => {
     const [row] = await db.query<{ password_hash: string }>(

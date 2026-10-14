@@ -70,7 +70,7 @@
 | AC 02 | T009 | imports.test.ts, restart.test.ts, postgres.integration.ts, e2e/imports.spec.ts | verified_test: клиенты CSV/TSV, preview/partial/replay/source/date; PostgreSQL два пула без дублей |
 | AC 03 | T010–T016 | commerce.test.ts, postgres.integration.ts, e2e/commerce.spec.ts | verified_test: ручной заказ → частичное исполнение → частичная оплата → возврат с согласованными остатками/суммами; обращения/предложения T013 ещё впереди |
 | AC 04 | T018,T023,T024 | Не создан | planned |
-| AC 05 | T017,T020 | Не создан | planned |
+| AC 05 | T017,T020 | tests/purchasing.test.ts; tests/e2e/purchasing.spec.ts; postgres.integration.ts | Проверен локальный срез; остаток в AGENT_HANDOFF.md |
 | AC 06 | T016 | Не создан | planned |
 | AC 07 | T021–T025 | Не создан | planned |
 | AC 08 | T035–T038 | Не создан | planned |

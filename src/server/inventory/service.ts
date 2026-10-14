@@ -110,7 +110,7 @@ export class InventoryService {
             unitsChanged &&
             (
               await tx.query(
-                "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
+                "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM supplier_offers WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT quote_id id FROM quote_items WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
                 [org, id],
               )
             ).length
@@ -271,6 +271,7 @@ export class InventoryService {
     org: string,
     input: unknown,
     linkedOrderId?: string,
+    receiptValueMinor?: bigint,
   ) {
     const c = stockCommand.parse(input);
     const permission: Permission = [
@@ -281,7 +282,22 @@ export class InventoryService {
     ].includes(c.kind)
       ? "inventory:sell"
       : "inventory:write";
-    const hash = createHash("sha256").update(JSON.stringify(c)).digest("hex");
+    if (
+      receiptValueMinor !== undefined &&
+      (c.kind !== "receipt" ||
+        receiptValueMinor < 0n ||
+        receiptValueMinor >= 10n ** 38n)
+    )
+      throw new AppError("INVALID_INPUT", 422);
+    const hash = createHash("sha256")
+      .update(
+        JSON.stringify(
+          receiptValueMinor === undefined
+            ? c
+            : { ...c, receiptValueMinor: receiptValueMinor.toString() },
+        ),
+      )
+      .digest("hex");
     {
       const scope = await sessionAccess(tx, secret, org, permission),
         warehouse = await this.warehouse(tx, org, c.warehouseId, scope);
@@ -346,7 +362,7 @@ export class InventoryService {
       };
       if (c.kind === "receipt") {
         qty = amount;
-        value = lineAmount(c.unitCost, c.quantity);
+        value = receiptValueMinor ?? lineAmount(c.unitCost, c.quantity);
       }
       if (c.kind === "issue" || c.kind === "dispatch") {
         if (c.kind === "issue" && c.reservationId) {

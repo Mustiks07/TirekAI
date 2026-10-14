@@ -663,9 +663,16 @@ export function CustomersPage({
                 </div>
                 <div className="customer-source">
                   <span>{t.source}</span>
-                  <strong>{c.source_file}</strong>
+                  <strong>
+                    {c.source_file ||
+                      (locale === "ru" ? "Создан вручную" : "Қолмен құрылды")}
+                  </strong>
                   <small>
-                    {t.row} {c.source_row} ·{" "}
+                    {c.source_row && (
+                      <>
+                        {t.row} {c.source_row} ·{" "}
+                      </>
+                    )}
                     {businessDate(new Date(c.created_at), locale, org.timezone)}
                   </small>
                 </div>

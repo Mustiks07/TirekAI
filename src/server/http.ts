@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../domain/errors";
 import { getDatabase } from "./db/database";
@@ -7,6 +7,27 @@ import { Platform } from "./platform";
 import { ImportService } from "./imports/service";
 import { InventoryService } from "./inventory/service";
 import { CommerceService } from "./commerce/service";
+import { PurchasingService } from "./purchasing/service";
+import { CrmService } from "./crm/service";
+import { quotePdf } from "./crm/pdf";
+import {
+  crmCustomers,
+  inquiriesView,
+  quotesView,
+  quoteRow,
+  crmHistory,
+  pipelineInput,
+} from "../domain/crm";
+import {
+  supplierList,
+  comparison,
+  purchaseList,
+  purchaseDetail,
+  documentList,
+  documentView,
+  needView,
+  budgetView,
+} from "../domain/purchasing";
 import {
   ordersView,
   orderView,
@@ -80,7 +101,12 @@ export async function handle(request: NextRequest, path: string[]) {
             path[2] === "imports" &&
             method === "POST"
               ? 512 * 1024
-              : 16384;
+              : path.length === 3 &&
+                  path[0] === "organizations" &&
+                  path[2] === "purchase-documents" &&
+                  method === "POST"
+                ? 7_100_000
+                : 16384;
           if (size > limit) {
             await reader.cancel();
             throw new AppError("TOO_LARGE", 413);
@@ -97,6 +123,8 @@ export async function handle(request: NextRequest, path: string[]) {
     const imports = new ImportService(await getDatabase());
     const inventory = new InventoryService(await getDatabase());
     const commerce = new CommerceService(await getDatabase());
+    const purchasing = new PurchasingService(await getDatabase());
+    const crm = new CrmService(await getDatabase());
     const query = Object.fromEntries(request.nextUrl.searchParams);
     let data: unknown;
     let sessionToken: string | undefined;
@@ -139,6 +167,295 @@ export async function handle(request: NextRequest, path: string[]) {
         data = checked(
           customerOptions,
           await commerce.customers(secret, id, query),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "pipeline" &&
+        method === "GET"
+      )
+        data = checked(pipelineInput, await crm.pipeline(secret, id));
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "pipeline" &&
+        method === "POST"
+      )
+        data = await crm.savePipeline(secret, id, body);
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "customers" &&
+        method === "GET"
+      )
+        data = checked(crmCustomers, await crm.customers(secret, id, query));
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "customers" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await crm.createCustomer(secret, id, body),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "crm" &&
+        path[3] === "customers" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await crm.profile(secret, id, path[4], body),
+        );
+      else if (
+        path.length === 6 &&
+        path[2] === "crm" &&
+        path[3] === "customers" &&
+        path[5] === "history" &&
+        method === "GET"
+      )
+        data = checked(
+          crmHistory,
+          await crm.history(secret, id, path[4], query),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "inquiries" &&
+        method === "GET"
+      )
+        data = checked(inquiriesView, await crm.inquiries(secret, id, query));
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "inquiries" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await crm.createInquiry(secret, id, body),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "crm" &&
+        path[3] === "inquiries" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await crm.transition(secret, id, path[4], body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "quotes" &&
+        method === "GET"
+      )
+        data = checked(quotesView, await crm.quotes(secret, id, query));
+      else if (
+        path.length === 4 &&
+        path[2] === "crm" &&
+        path[3] === "quotes" &&
+        method === "POST"
+      )
+        data = checked(commerceResult, await crm.saveQuote(secret, id, body));
+      else if (
+        path.length === 5 &&
+        path[2] === "crm" &&
+        path[3] === "quotes" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await crm.saveQuote(secret, id, body, path[4]),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "crm" &&
+        path[3] === "quotes" &&
+        method === "GET"
+      )
+        data = checked(quoteRow, await crm.quote(secret, id, path[4]));
+      else if (
+        path.length === 6 &&
+        path[2] === "crm" &&
+        path[3] === "quotes" &&
+        path[5] === "convert" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await crm.convert(secret, id, path[4], body),
+        );
+      else if (
+        path.length === 6 &&
+        path[2] === "crm" &&
+        path[3] === "quotes" &&
+        path[5] === "pdf" &&
+        method === "GET"
+      ) {
+        const q = quoteRow.parse(
+          JSON.parse(JSON.stringify(await crm.quote(secret, id, path[4]))),
+        );
+        const locale = z.enum(["ru", "kk"]).default("ru").parse(query.locale),
+          buffer = await quotePdf(q, locale);
+        return new NextResponse(new Uint8Array(buffer), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="quote-${q.number}-v${q.version}-${locale}.pdf"`,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      } else if (
+        path.length === 3 &&
+        path[2] === "suppliers" &&
+        method === "GET"
+      )
+        data = checked(
+          supplierList,
+          await purchasing.suppliers(secret, id, query),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "suppliers" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.createSupplier(secret, id, body),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "supplier-offers" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.createOffer(secret, id, body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "purchasing" &&
+        path[3] === "compare" &&
+        method === "POST"
+      )
+        data = checked(comparison, await purchasing.compare(secret, id, body));
+      else if (
+        path.length === 4 &&
+        path[2] === "purchasing" &&
+        path[3] === "need" &&
+        method === "POST"
+      )
+        data = checked(needView, await purchasing.need(secret, id, body));
+      else if (
+        path.length === 4 &&
+        path[2] === "purchasing" &&
+        path[3] === "budget" &&
+        method === "POST"
+      )
+        data = checked(budgetView, await purchasing.budget(secret, id, body));
+      else if (path.length === 3 && path[2] === "purchases" && method === "GET")
+        data = checked(purchaseList, await purchasing.list(secret, id, query));
+      else if (
+        path.length === 3 &&
+        path[2] === "purchases" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.create(secret, id, body),
+        );
+      else if (path.length === 4 && path[2] === "purchases" && method === "GET")
+        data = checked(
+          purchaseDetail,
+          await purchasing.get(secret, id, path[3], query),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "purchases" &&
+        path[4] === "commands" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.transition(secret, id, path[3], body),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "purchases" &&
+        path[4] === "receipts" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.receive(secret, id, path[3], body),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "purchase-documents" &&
+        method === "GET"
+      )
+        data = checked(
+          documentList,
+          await purchasing.documents(secret, id, query),
+        );
+      else if (
+        path.length === 3 &&
+        path[2] === "purchase-documents" &&
+        method === "POST"
+      )
+        data = checked(
+          commerceResult,
+          await purchasing.upload(secret, id, body),
+        );
+      else if (
+        path.length === 4 &&
+        path[2] === "purchase-documents" &&
+        method === "GET"
+      )
+        data = checked(
+          documentView,
+          await purchasing.document(secret, id, path[3]),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "purchase-documents" &&
+        path[4] === "original" &&
+        method === "GET"
+      )
+        data = checked(
+          z.object({ filename: z.string(), content: z.string() }),
+          await purchasing.document(secret, id, path[3], true),
+        );
+      else if (
+        path.length === 5 &&
+        path[2] === "purchase-documents" &&
+        ["review", "review-draft", "review-preview"].includes(path[4]) &&
+        method === "POST"
+      )
+        data = checked(
+          path[4] === "review-preview"
+            ? z.object({
+                id: z.uuid(),
+                reused: z.boolean(),
+                total_minor: z.string(),
+                discrepancies: z.array(z.string()),
+              })
+            : commerceResult,
+          await purchasing.review(
+            secret,
+            id,
+            path[3],
+            body,
+            path[4] === "review-preview"
+              ? "preview"
+              : path[4] === "review-draft"
+                ? "draft"
+                : "approve",
+          ),
         );
       else if (path.length === 3 && path[2] === "orders" && method === "GET")
         data = checked(ordersView, await commerce.list(secret, id, query));

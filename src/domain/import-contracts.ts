@@ -118,8 +118,8 @@ export const customerSchema = customerFields.extend({
   version: z.number().int().positive(),
   created_at: isoDate,
   updated_at: isoDate,
-  source_file: z.string(),
-  source_row: z.number().int().positive(),
+  source_file: z.string().nullable(),
+  source_row: z.number().int().positive().nullable(),
 });
 export const customersViewSchema = z.object({
   items: z.array(customerSchema),

@@ -88,3 +88,37 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Состояния: draft → confirmed → partial → fulfilled; draft/confirmed/partial → cancelled. Возврат — отдельное событие, не стирает исполнение. Строки после создания не редактируются: ошибочный черновик отменяют и создают новый. delivery/pickup — выбранный ручной способ исполнения, без подключения службы доставки. serviceCost — стоимость всей исполняемой части услуги, только роль с inventory:cost; отсутствие означает неизвестную стоимость.
 
 Основные ошибки: VERSION_CONFLICT, IDEMPOTENCY_CONFLICT, ORDER_STATE, CUSTOMER_SCOPE, WAREHOUSE_SCOPE, ACCOUNT_SCOPE, DUPLICATE_LINE, QUANTITY_EXCEEDS, RETURN_EXCEEDS, PAYMENT_EXCEEDS, REFUND_EXCEEDS, INSUFFICIENT_STOCK, INSUFFICIENT_MONEY, ACCOUNT_EXISTS, ACCOUNT_LIMIT, SAME_ACCOUNT, AMOUNT_LIMIT, CALENDAR_LIMIT. Запросы с неподдерживаемыми полями/задними датами отклоняются. Финансовый импорт, сторнирование прочих расходов и полноценный OpenAPI пока не реализованы.
+
+## Закупки и CRM: срез передачи
+
+Источник точных полей и схем: `src/domain/purchasing.ts`, `src/domain/crm.ts`; маршрутизация — `src/server/http.ts`. Базовый путь `/api/v1/organizations/:id`. Новые бизнес-команды используют key UUID, версии редактируемых документов, авторизацию и транзакционный audit. Денежные итоги — строковые тиыны, количества — decimal строки.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET/POST | suppliers | Поставщики |
+| POST | supplier-offers | Снимок предложения |
+| POST | purchasing/compare, purchasing/need, purchasing/budget | Расчёты без изменения учёта |
+| GET/POST | purchases | Список / создание заказа |
+| GET | purchases/:id | Заказ, строки, история |
+| POST | purchases/:id/commands, purchases/:id/receipts | Состояния / фактическая приёмка |
+| GET/POST | purchase-documents | Список / загрузка оригинала |
+| GET | purchase-documents/:id, purchase-documents/:id/original | Документ / оригинал filename+base64 |
+| POST | purchase-documents/:id/review-preview | Сверка без записи |
+| POST | purchase-documents/:id/review-draft | Версия исправлений без обязательства |
+| POST | purchase-documents/:id/review | Подтверждение и обязательство, без склада |
+| GET/POST | crm/pipeline | Стадии / настройка owner/manager |
+| GET/POST | crm/customers | Список / ручной клиент |
+| POST | crm/customers/:id | Профиль, ответственный, согласия |
+| GET | crm/customers/:id/history | История |
+| GET/POST | crm/inquiries | Обращения |
+| POST | crm/inquiries/:id | Смена стадии с основанием |
+| GET/POST | crm/quotes | Предложения |
+| GET/POST | crm/quotes/:id | Чтение / новая версия |
+| POST | crm/quotes/:id/convert | Единственный связанный черновик заказа |
+| GET | crm/quotes/:id/pdf?locale=ru\|kk | Binary PDF attachment |
+
+Закупки читают owner/manager/purchasing/finance; изменяют owner/manager/purchasing; согласуют owner/manager. CRM использует customers permissions и область филиала; finance не получает CRM-доступ. После превращения предложение не редактируется. Оригиналы доступны только авторизованно, публичных ссылок нет.
+
+Загрузка: JSON с base64, HTTP body до 7.1 МБ; сам файл до 5 МБ, PDF до 5 страниц, изображения до 16 мегапикселей; CSV/TSV до 256 КБ. OCR timeout 90 секунд, максимум два одновременных child process на web-процесс. Остальные JSON-команды ограничены 16 КБ.
+
+Контракты прежних ответов расширены: order inquiry_id/quote_id nullable, customer source_file/source_row nullable для ручных записей, obligation purchase_order_id nullable, calendar kind дополнительно purchase. План закупки уменьшается на связанные подтверждённые обязательства.

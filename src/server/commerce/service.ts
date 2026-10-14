@@ -25,7 +25,7 @@ const D = Decimal.clone({ precision: 80, rounding: Decimal.ROUND_HALF_UP });
 type Scope = Awaited<ReturnType<typeof sessionAccess>>;
 type Line = OrderView["lines"][number];
 const target = `CASE WHEN o.state='draft' THEN 0 WHEN o.state='cancelled' THEN o.revenue_minor ELSE o.total_minor+coalesce((SELECT sum(e.revenue_minor) FROM sales_events e WHERE e.organization_id=o.organization_id AND e.order_id=o.id AND e.kind='return'),0) END`;
-const orderColumns = `o.id,o.number,o.branch_id,o.customer_id,c.name customer_name,o.warehouse_id,o.state,o.version,o.due_date::text,o.delivery,o.note,o.tax_mode,o.total_minor::text,o.revenue_minor::text,o.paid_minor::text,greatest(o.revenue_minor-o.paid_minor,0)::text receivable_minor,greatest(o.paid_minor-(${target}),0)::text credit_minor,greatest((${target})-o.paid_minor,0)::text expected_minor,o.created_at`;
+const orderColumns = `o.id,o.number,o.branch_id,o.customer_id,o.inquiry_id,o.quote_id,c.name customer_name,o.warehouse_id,o.state,o.version,o.due_date::text,o.delivery,o.note,o.tax_mode,o.total_minor::text,o.revenue_minor::text,o.paid_minor::text,greatest(o.revenue_minor-o.paid_minor,0)::text receivable_minor,greatest(o.paid_minor-(${target}),0)::text credit_minor,greatest((${target})-o.paid_minor,0)::text expected_minor,o.created_at`;
 const lineColumns =
   "id,item_id,sku,name_ru,name_kk,kind,unit,base_unit,quantity::text,base_quantity::text,price::text,discount::text,total_minor::text,fulfilled::text,returned::text,reservation_id";
 async function command(tx: Sql, org: string, key: string, payload: unknown) {
@@ -132,8 +132,18 @@ export class CommerceService {
     });
   }
   async create(secret: string, org: string, input: unknown) {
+    return this.db.transaction((tx) =>
+      this.createInTransaction(tx, secret, org, input),
+    );
+  }
+  async createInTransaction(
+    tx: Sql,
+    secret: string,
+    org: string,
+    input: unknown,
+  ) {
     const c = orderInput.parse(input);
-    return this.db.transaction(async (tx) => {
+    {
       const s = await sessionAccess(
           tx,
           secret,
@@ -221,7 +231,7 @@ export class CommerceService {
         orderId: r.id,
       });
       return r;
-    });
+    }
   }
   private async event(
     tx: Sql,
@@ -771,7 +781,7 @@ export class CommerceService {
       );
       return {
         items: await tx.query(
-          `SELECT id,branch_id,supplier,amount_minor::text,paid_minor::text,due_date::text,note FROM supplier_obligations WHERE ${where} ORDER BY due_date,id LIMIT $4 OFFSET $5`,
+          `SELECT id,branch_id,supplier,purchase_order_id,amount_minor::text,paid_minor::text,due_date::text,note FROM supplier_obligations WHERE ${where} ORDER BY due_date,id LIMIT $4 OFFSET $5`,
           [org, s.branchId, q.q, q.limit, (q.page - 1) * q.limit],
         ),
         pagination: pagination(q.page, q.limit, count.total),
@@ -793,13 +803,13 @@ export class CommerceService {
         opening: string;
         documents: {
           id: string;
-          kind: "order" | "supplier";
+          kind: "order" | "supplier" | "purchase";
           name: string;
           due_date: string;
           amount_minor: string;
         }[];
       }>(
-        `WITH settings AS (SELECT (now() AT TIME ZONE timezone)::date today FROM organizations WHERE id=$1), docs AS (SELECT o.id,'order' kind,c.name,o.due_date,greatest((${target})-o.paid_minor,0)::text amount_minor FROM sales_orders o JOIN customers c ON c.organization_id=o.organization_id AND c.id=o.customer_id WHERE o.organization_id=$1 AND ($2::uuid IS NULL OR o.branch_id=$2) AND o.state<>'draft' UNION ALL SELECT id,'supplier',supplier,due_date,(amount_minor-paid_minor)::text FROM supplier_obligations WHERE organization_id=$1 AND ($2::uuid IS NULL OR branch_id=$2)), planned AS (SELECT id,kind,name,due_date::text,amount_minor FROM docs WHERE amount_minor::numeric>0 AND due_date<=(SELECT today FROM settings)+$3::int ORDER BY due_date,id LIMIT 5001) SELECT today::text,(SELECT coalesce(sum(balance_minor),0)::text FROM money_accounts WHERE organization_id=$1 AND ($2::uuid IS NULL OR branch_id=$2)) opening,coalesce((SELECT jsonb_agg(planned) FROM planned),'[]'::jsonb) documents FROM settings`,
+        `WITH settings AS (SELECT (now() AT TIME ZONE timezone)::date today FROM organizations WHERE id=$1), docs AS (SELECT o.id,'order' kind,c.name,o.due_date,greatest((${target})-o.paid_minor,0)::text amount_minor FROM sales_orders o JOIN customers c ON c.organization_id=o.organization_id AND c.id=o.customer_id WHERE o.organization_id=$1 AND ($2::uuid IS NULL OR o.branch_id=$2) AND o.state<>'draft' UNION ALL SELECT id,'supplier',supplier,due_date,(amount_minor-paid_minor)::text FROM supplier_obligations WHERE organization_id=$1 AND ($2::uuid IS NULL OR branch_id=$2) UNION ALL SELECT p.id,'purchase',s.name,p.due_date,greatest(p.total_minor-coalesce((SELECT sum(b.amount_minor) FROM supplier_obligations b WHERE b.organization_id=p.organization_id AND b.purchase_order_id=p.id),0),0)::text FROM purchase_orders p JOIN suppliers s ON s.organization_id=p.organization_id AND s.id=p.supplier_id WHERE p.organization_id=$1 AND ($2::uuid IS NULL OR p.branch_id=$2) AND p.state IN ('approved','sent','partial')), planned AS (SELECT id,kind,name,due_date::text,amount_minor FROM docs WHERE amount_minor::numeric>0 AND due_date<=(SELECT today FROM settings)+$3::int ORDER BY due_date,id LIMIT 5001) SELECT today::text,(SELECT coalesce(sum(balance_minor),0)::text FROM money_accounts WHERE organization_id=$1 AND ($2::uuid IS NULL OR branch_id=$2)) opening,coalesce((SELECT jsonb_agg(planned) FROM planned),'[]'::jsonb) documents FROM settings`,
         [org, s.branchId, q.days - 1],
       );
       if (data.documents.length > 5000)

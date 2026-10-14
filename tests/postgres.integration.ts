@@ -11,6 +11,125 @@ import { InventoryService } from "../src/server/inventory/service";
 import { ImportService } from "../src/server/imports/service";
 import { ImportWorker } from "../src/server/jobs/worker";
 import { CommerceService } from "../src/server/commerce/service";
+import { PurchasingService } from "../src/server/purchasing/service";
+import { documentView } from "../src/domain/purchasing";
+import { migrations } from "../src/server/db/schema";
+
+it("two independent pools cannot receive the same remaining invoice quantity twice", async () => {
+  const s = new PurchasingService(db),
+    sku = await item(),
+    date = "2026-10-14",
+    supplier = (
+      await s.createSupplier(owner.token, org, {
+        key: randomUUID(),
+        name: randomUUID(),
+        contact: "Test",
+        paymentTerms: "On invoice",
+        quality: 4,
+        reliability: 4,
+      })
+    ).id;
+  const offer = (
+    await s.createOffer(owner.token, org, {
+      key: randomUUID(),
+      supplierId: supplier,
+      itemId: sku,
+      supplierSku: "Single",
+      packQuantity: "1",
+      baseUnit: "pc",
+      packPrice: "10",
+      minimumPacks: 1,
+      delivery: "0",
+      leadDays: 1,
+      currency: "KZT",
+      rate: null,
+      rateDate: null,
+      rateSource: "",
+      tax: "included",
+      taxPercent: null,
+      dated: date,
+      validUntil: date,
+      characteristicsConfirmed: true,
+      note: "Concurrent receipt test",
+    })
+  ).id;
+  const id = (
+    await s.create(owner.token, org, {
+      key: randomUUID(),
+      branchId: branch,
+      warehouseId: warehouse,
+      supplierId: supplier,
+      date,
+      dueDate: date,
+      budget: "10",
+      note: "Concurrent test",
+      lines: [{ offerId: offer, quantity: "1" }],
+    })
+  ).id;
+  let version = 1;
+  for (const kind of ["submit", "approve", "sent"])
+    await s.transition(owner.token, org, id, {
+      key: randomUUID(),
+      version: version++,
+      kind,
+      note: "Approved manually",
+    });
+  const doc = (
+    await s.upload(owner.token, org, {
+      key: randomUUID(),
+      orderId: id,
+      filename: "invoice.csv",
+      content: Buffer.from(`name,qty,price\n${sku},1,10`).toString("base64"),
+      externalId: randomUUID(),
+    })
+  ).id;
+  await s.review(owner.token, org, doc, {
+    key: randomUUID(),
+    version: 1,
+    number: randomUUID(),
+    date,
+    dueDate: date,
+    delivery: "0",
+    total: "10",
+    lines: [
+      {
+        itemId: sku,
+        name: "Single unit",
+        unit: "pc",
+        quantity: "1",
+        unitPrice: "10",
+      },
+    ],
+    note: "Compared invoice",
+    acknowledgeDiscrepancies: false,
+  });
+  const d = documentView.parse(
+    JSON.parse(JSON.stringify(await s.document(owner.token, org, doc))),
+  );
+  const input = {
+    key: randomUUID(),
+    version: 4,
+    documentId: doc,
+    note: "One unit physically accepted",
+    lines: [{ lineId: d.lines[0].id, quantity: "1" }],
+  };
+  const results = await Promise.all([
+    s.receive(owner.token, org, id, input),
+    new PurchasingService(other).receive(owner.token, org, id, input),
+  ]);
+  expect(results.filter((r) => r.reused)).toHaveLength(1);
+  expect(
+    (
+      await db.query(
+        "SELECT quantity::text,value_minor::text FROM stock_balances WHERE organization_id=$1 AND item_id=$2",
+        [org, sku],
+      )
+    )[0],
+  ).toEqual({ quantity: "1.000000", value_minor: "1000" });
+  await expect(
+    s.receive(owner.token, org, id, { ...input, key: randomUUID() }),
+  ).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
+});
 const url = process.env.SMB_POSTGRES_TEST_URL;
 if (
   !url ||
@@ -82,7 +201,7 @@ it("runs all migrations on PostgreSQL without modifying applied history", async 
   await migrate(other);
   expect(
     await db.query("SELECT version FROM schema_migrations ORDER BY version"),
-  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+  ).toEqual(migrations.map(({ version }) => ({ version })));
 });
 it("allows one reservation of the final unit through independent pools", async () => {
   const id = await item();
