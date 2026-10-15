@@ -323,7 +323,8 @@ test("situation → draft purchase → second-person approval → execution; tas
   ).toBeVisible();
   // T029/T030: passports and status without a live account.
   await nav(page, "Подключения");
-  await expect(page.getByText("Не подключено", { exact: true })).toBeVisible();
+  // T031–T034 added one status per connector: none of them is connected here.
+  await expect(page.getByText("Не подключено", { exact: true })).toHaveCount(5);
   await expect(
     page.getByText(/GET \/report\/stock\/bystore\/current/),
   ).toBeVisible();
@@ -432,6 +433,19 @@ test("situation → draft purchase → second-person approval → execution; tas
       (o: { purchase_order_id: string }) => o.purchase_order_id === purchase,
     ),
   ).toMatchObject({ amount_minor: "13200" });
+  // T039: the promotion page states what is not connected and has no false "published" state.
+  await nav(page, "Продвижение");
+  await expect(page.locator("#marketing-title")).toHaveText("Продвижение");
+  await expect(
+    page.getByText("Акций пока нет.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/генератор изображений не подключены/),
+  ).toBeVisible();
+  expect(
+    (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
+      .violations,
+  ).toEqual([]);
   // Accessibility, KK and mobile widths on the new Today screen.
   await nav(page, "Сегодня");
   expect(
