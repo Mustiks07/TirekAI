@@ -82,7 +82,12 @@ function wrapPglite(pg: PGlite, release?: () => Promise<void>): Database {
   };
 }
 export function createPostgresDatabase(url: string): Database {
-  const pool = new Pool({ connectionString: url, max: 10 });
+  // Pool size per process; DATABASE_POOL_MAX lets operations match max_connections (T051/T053).
+  const max = Number(process.env.DATABASE_POOL_MAX || 10);
+  const pool = new Pool({
+    connectionString: url,
+    max: Number.isInteger(max) && max >= 1 && max <= 100 ? max : 10,
+  });
   const wrap = (client: Pool | PoolClient): Sql => ({
     async query<T>(sql: string, params: unknown[] = []) {
       const result = await client.query(sql, params);

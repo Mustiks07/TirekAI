@@ -23,6 +23,7 @@ import {
 } from "@/domain/inventory";
 import { can } from "@/domain/permissions";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { dictionary, errorText } from "@/lib/i18n";
 import {
   inventoryWords,
@@ -64,7 +65,7 @@ export function InventoryPage({
     [catalogPage, setCatalogPage] = useState(1),
     [section, setSection] = useState<Section>("balances"),
     [stockPage, setStockPage] = useState(1),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const [stock, setStock] = useState<
     StockView | MovementsView | ReservationsView | TransfersView | null
   >(null);

@@ -1,0 +1,47 @@
+{
+  "task": "T051",
+  "date": "2026-10-15T16:11:48.528Z",
+  "environment": {
+    "os": "linux 6.18.44-fc-v114",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "node": "v22.22.0"
+  },
+  "engine": "local tesseract.js rus+kaz+eng in a child process (no external service)",
+  "results": {
+    "scanned_pdf": {
+      "bytes": 17405,
+      "sequentialMs": [
+        1552,
+        1378,
+        1348
+      ],
+      "parallel2Ms": 1483,
+      "thirdConcurrent": "DOCUMENT_PROCESSOR_BUSY",
+      "eventLoopMaxDelayMs": 41
+    },
+    "png_ocr": {
+      "bytes": 26359,
+      "sequentialMs": [
+        799,
+        1141,
+        821
+      ],
+      "parallel2Ms": 922,
+      "thirdConcurrent": "DOCUMENT_PROCESSOR_BUSY",
+      "eventLoopMaxDelayMs": 50
+    },
+    "csv_500_rows": {
+      "bytes": 12798,
+      "sequentialMs": [
+        9,
+        6,
+        6
+      ],
+      "parallel2Ms": 13,
+      "thirdConcurrent": "accepted",
+      "eventLoopMaxDelayMs": 0
+    }
+  },
+  "note": "Upload of a purchase document waits for this extraction in the request; the form shows a busy state while other screens keep working (child process, measured event-loop delay)."
+}

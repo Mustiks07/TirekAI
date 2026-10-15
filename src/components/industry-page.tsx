@@ -10,6 +10,7 @@ import type {
   Recipe,
 } from "@/server/industry/types";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText, profileNames } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import {
@@ -77,7 +78,7 @@ export function IndustryPage({
     [orders, setOrders] = useState<Option[]>([]),
     [inquiries, setInquiries] = useState<Option[]>([]),
     [action, setAction] = useState(""),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),

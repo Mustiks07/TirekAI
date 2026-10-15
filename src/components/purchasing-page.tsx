@@ -20,6 +20,7 @@ import {
   type DocumentView,
 } from "@/domain/purchasing";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { moneyText, quantityText, inventoryError } from "@/lib/inventory-i18n";
 import { can } from "@/domain/permissions";
@@ -283,7 +284,7 @@ export function PurchasingPage({
         workspace.branches[0]?.id ||
         "",
     ),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [search, setSearch] = useState(""),
     [page, setPage] = useState(1),
     [loading, setLoading] = useState(true),

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { can } from "@/domain/permissions";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { executionError } from "@/lib/execution-i18n";
 import { moneyText } from "@/lib/inventory-i18n";
@@ -72,7 +73,7 @@ export function ChannelOrders({
     [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]),
     [settling, setSettling] = useState(""),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const refresh = () => setRevision((v) => v + 1);
   const msg = (code: string) =>
     executionError(code, locale) || errorText(code, locale);

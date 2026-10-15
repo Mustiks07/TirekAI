@@ -19,6 +19,7 @@ import type {
 } from "@/domain/commerce";
 import { can } from "@/domain/permissions";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { inventoryError, moneyText, quantityText } from "@/lib/inventory-i18n";
 import { businessDate } from "@/lib/dates";
@@ -116,7 +117,7 @@ export function CommercePage({
   const [branch, setBranch] = useState(
       initialBranchId || workspace.branches[0]?.id || "",
     ),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [page, setPage] = useState(1),
     [query, setQuery] = useState("");
   const [orders, setOrders] = useState<OrdersView | null>(null),

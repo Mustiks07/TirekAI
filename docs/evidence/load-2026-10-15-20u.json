@@ -1,0 +1,249 @@
+{
+  "task": "T051",
+  "date": "2026-10-15T16:09:09.600Z",
+  "environment": {
+    "os": "linux 6.18.44-fc-v114",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "memoryGb": 16,
+    "node": "v22.22.0",
+    "postgres": "PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu",
+    "pgBin": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+    "app": "next start (production build), 1 web process, DATABASE_POOL_MAX=20; 1 worker process",
+    "network": "loopback; load generator on the same host",
+    "next": "16.4.0"
+  },
+  "dataset": {
+    "skus": 1000,
+    "branches": 2,
+    "warehouses": 2,
+    "users": 21,
+    "customers": 300,
+    "historyDays": 90,
+    "counts": {
+      "catalog_items": 1000,
+      "stock_receipts": 1500,
+      "customers": 300,
+      "orders_created": 2150,
+      "orders_confirmed": 2150,
+      "issues": 4390,
+      "payments": 2150,
+      "returns": 108,
+      "refunds": 98,
+      "business_operations": 12546
+    },
+    "auditRowsAfterRun": 45334,
+    "seedSeconds": 42,
+    "note": "Operations via application services; timestamps shifted back over 90 days afterwards (fixture backdating)."
+  },
+  "run": {
+    "users": 20,
+    "durationSeconds": 121,
+    "thinkMs": 0,
+    "mode": "closed loop, no think time",
+    "changePollingPerUserSeconds": 1
+  },
+  "totals": {
+    "requests": 42825,
+    "errors": 0,
+    "requestsPerSecond": 354
+  },
+  "reads": {
+    "count": 31491,
+    "p50": 42.33515900000202,
+    "p95": 79.07270000001881,
+    "p99": 117.31674199999543,
+    "max": 321.24533800000063,
+    "mean": 46.1
+  },
+  "commands": {
+    "count": 11334,
+    "p50": 77.5269660000049,
+    "p95": 182.62340899999253,
+    "p99": 235.4440420000028,
+    "max": 442.0399200000029,
+    "mean": 93.6
+  },
+  "byName": {
+    "catalog.search": {
+      "count": 4412,
+      "p50": 37.58575599998585,
+      "p95": 57.81629600000451,
+      "p99": 77.95905399999901,
+      "max": 210.3233479999908,
+      "mean": 38.9,
+      "errors": 0,
+      "statuses": []
+    },
+    "changes": {
+      "count": 2295,
+      "p50": 45.38820400000259,
+      "p95": 77.5433389999962,
+      "p99": 127.12319199999911,
+      "max": 190.4928370000125,
+      "mean": 48.8,
+      "errors": 0,
+      "statuses": []
+    },
+    "customers.list": {
+      "count": 1269,
+      "p50": 38.79155100000207,
+      "p95": 59.86652099998901,
+      "p99": 77.56680700001016,
+      "max": 194.95293100000708,
+      "mean": 40,
+      "errors": 0,
+      "statuses": []
+    },
+    "finance.calendar": {
+      "count": 960,
+      "p50": 55.83561199999531,
+      "p95": 84.85076599998865,
+      "p99": 111.32069000000047,
+      "max": 237.77053599999635,
+      "mean": 58,
+      "errors": 0,
+      "statuses": []
+    },
+    "finance.ledger": {
+      "count": 932,
+      "p50": 45.622663999994984,
+      "p95": 69.66356899999664,
+      "p99": 99.63406300000497,
+      "max": 236.16651500000444,
+      "mean": 48,
+      "errors": 0,
+      "statuses": []
+    },
+    "finance.summary": {
+      "count": 958,
+      "p50": 51.14760799999931,
+      "p95": 77.8760540000003,
+      "p99": 108.65157499999623,
+      "max": 293.8216500000053,
+      "mean": 53.8,
+      "errors": 0,
+      "statuses": []
+    },
+    "inventory.balances": {
+      "count": 4426,
+      "p50": 40.2902929999982,
+      "p95": 62.324588999996195,
+      "p99": 86.12233099999867,
+      "max": 256.110050999996,
+      "mean": 41.9,
+      "errors": 0,
+      "statuses": []
+    },
+    "knowledge.list": {
+      "count": 4452,
+      "p50": 34.902553000007174,
+      "p95": 55.370475999996415,
+      "p99": 74.28945100000419,
+      "max": 224.66878000000725,
+      "mean": 36.4,
+      "errors": 0,
+      "statuses": []
+    },
+    "money.payment": {
+      "count": 740,
+      "p50": 58.765549000003375,
+      "p95": 84.17927899998904,
+      "p99": 115.14248999999836,
+      "max": 176.47825100000773,
+      "mean": 59.8,
+      "errors": 0,
+      "statuses": []
+    },
+    "order.confirm": {
+      "count": 3542,
+      "p50": 128.06631399999605,
+      "p95": 203.84419499999785,
+      "p99": 264.30774600000586,
+      "max": 370.7640460000039,
+      "mean": 132.4,
+      "errors": 0,
+      "statuses": []
+    },
+    "order.create": {
+      "count": 3542,
+      "p50": 64.26752300000226,
+      "p95": 97.071157999977,
+      "p99": 138.13516600000003,
+      "max": 405.2026890000052,
+      "mean": 66.4,
+      "errors": 0,
+      "statuses": []
+    },
+    "order.get": {
+      "count": 741,
+      "p50": 43.260883000009926,
+      "p95": 66.47782400000142,
+      "p99": 95.77892399999837,
+      "max": 202.28619900000922,
+      "mean": 44.7,
+      "errors": 0,
+      "statuses": []
+    },
+    "order.issue": {
+      "count": 741,
+      "p50": 161.33064699999522,
+      "p95": 223.15551699999924,
+      "p99": 267.09028700001363,
+      "max": 371.0355649999983,
+      "mean": 163.1,
+      "errors": 0,
+      "statuses": []
+    },
+    "orders.list": {
+      "count": 3183,
+      "p50": 52.6896459999989,
+      "p95": 77.17628099999274,
+      "p99": 103.05045400001109,
+      "max": 321.24533800000063,
+      "mean": 54.1,
+      "errors": 0,
+      "statuses": []
+    },
+    "stock.receipt": {
+      "count": 2769,
+      "p50": 67.23736600001575,
+      "p95": 100.19408999999723,
+      "p99": 133.86076300000423,
+      "max": 442.0399200000029,
+      "mean": 69.2,
+      "errors": 0,
+      "statuses": []
+    },
+    "tasks.list": {
+      "count": 4568,
+      "p50": 37.38856600000872,
+      "p95": 57.92728499999794,
+      "p99": 78.31585500000074,
+      "max": 291.3365180000037,
+      "mean": 38.7,
+      "errors": 0,
+      "statuses": []
+    },
+    "today": {
+      "count": 3295,
+      "p50": 64.02744600000005,
+      "p95": 120.07895300000382,
+      "p99": 150.27240700000402,
+      "max": 301.86622799999896,
+      "mean": 71.2,
+      "errors": 0,
+      "statuses": []
+    }
+  },
+  "invariants": {
+    "negativeOrOverReservedBalances": 0,
+    "accountsNotEqualToEntries": 0
+  },
+  "targets": {
+    "readsP95Ms": 1000,
+    "commandsP95Ms": 2000,
+    "readsMet": true,
+    "commandsMet": true
+  }
+}

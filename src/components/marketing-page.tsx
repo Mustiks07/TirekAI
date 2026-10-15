@@ -4,6 +4,7 @@ import type { Locale, Workspace } from "@/domain/contracts";
 import type { CampaignData, Evaluation } from "@/domain/marketing";
 import { can } from "@/domain/permissions";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { executionError } from "@/lib/execution-i18n";
 import { moneyText } from "@/lib/inventory-i18n";
@@ -808,7 +809,7 @@ export function MarketingPage({
         lift: string;
       }[];
     } | null>(null),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const refresh = () => setRevision((v) => v + 1);
   const msg = (code: string) =>
     executionError(code, locale) || errorText(code, locale);

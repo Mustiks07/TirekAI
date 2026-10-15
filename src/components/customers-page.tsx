@@ -11,6 +11,7 @@ import type {
 } from "@/domain/import-contracts";
 import { MAX_IMPORT_BYTES } from "@/domain/import-contracts";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText, dictionary } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 
@@ -171,7 +172,7 @@ export function CustomersPage({
   );
   const [page, setPage] = useState(1),
     [historyPage, setHistoryPage] = useState(1),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const [customers, setCustomers] = useState<CustomersView | null>(null),
     [history, setHistory] = useState<BatchesView | null>(null);
   const [result, setResult] = useState<BatchView | null>(null),
@@ -224,7 +225,7 @@ export function CustomersPage({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [base, result, revision]);
+  }, [base, result, revision, setRevision]);
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     setError(null);

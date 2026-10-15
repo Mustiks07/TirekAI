@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { Warehouse } from "@/domain/inventory";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import { executionError, stateText } from "@/lib/execution-i18n";
@@ -202,7 +203,7 @@ export function IntegrationsPage({
     [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const refresh = () => setRevision((v) => v + 1);
   const msg = (code: string) =>
     executionError(code, locale) || errorText(code, locale);

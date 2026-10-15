@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { TaskDetail, TaskRow } from "@/domain/tasks";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import { can } from "@/domain/permissions";
@@ -56,7 +57,7 @@ export function TasksPage({
     [templates, setTemplates] = useState<
       { id: string; name: string; recurrence: string; active: boolean }[]
     >([]),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [error, setError] = useState("");
   const refresh = () => setRevision((v) => v + 1);
   const post = (path: string, body: unknown) =>
@@ -736,7 +737,7 @@ function WorkSettings({ base, locale }: { base: string; locale: Locale }) {
         returned_30d: number;
       }[];
     } | null>(null),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   useEffect(() => {
     api<typeof s>(`${base}/tasks/schedule`)
       .then(setS)

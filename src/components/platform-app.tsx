@@ -75,6 +75,7 @@ import { VideoPage } from "./video-page";
 import { OutcomesPage } from "./outcomes-page";
 import { IndustryPage } from "./industry-page";
 import { MarketingPage } from "./marketing-page";
+import { LiveSync } from "@/lib/live";
 import { can } from "@/domain/permissions";
 
 type Page =
@@ -1281,506 +1282,508 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           </div>
         </header>
         <main id="main-content" className="content">
-          <div className="page-heading">
-            <div>
-              <div className="page-kicker">
-                {currentOrg
-                  ? profileNames[locale][currentOrg.profile]
-                  : t.workspace}
-              </div>
-              <h1>
-                {t[page]}
-                <span className="heading-dot">.</span>
-              </h1>
-              <p>
-                {page === "today"
-                  ? t.todayNote
-                  : page === "tasks"
-                    ? t.tasksNote
-                    : page === "approvals"
-                      ? t.approvalsNote
-                      : page === "knowledge"
-                        ? t.knowledgeNote
-                        : page === "automations"
-                          ? t.automationsNote
-                          : page === "assistant"
-                            ? t.assistantNote
-                            : page === "integrations"
-                              ? t.integrationsNote
-                              : page === "video"
-                                ? t.videoNote
-                                : page === "marketing"
-                                  ? t.marketingNote
-                                  : page === "industry"
-                                    ? t.industryNote
-                                    : page === "outcomes"
-                                      ? t.outcomesNote
-                                      : page === "team"
-                                        ? t.teamNote
-                                        : page === "customers"
-                                          ? t.customersNote
-                                          : page === "orders"
-                                            ? t.ordersNote
-                                            : page === "purchasing"
-                                              ? t.purchasingNote
-                                              : page === "finance"
-                                                ? t.financeNote
-                                                : page === "inventory"
-                                                  ? t.inventoryNote
-                                                  : page === "organization"
-                                                    ? t.orgNote
-                                                    : t.activityNote}
-              </p>
-            </div>
-            {page === "today" ? (
-              <span className="date-chip">
-                <Clock3 size={15} />
-                {businessDate(
-                  new Date(),
-                  locale,
-                  currentOrg?.timezone || "Asia/Qyzylorda",
-                )}
-              </span>
-            ) : page === "team" && workspace?.canManageTeam ? (
-              <button
-                className="button primary"
-                onClick={() => setModal("invite")}
-              >
-                <Plus size={17} />
-                {t.invite}
-              </button>
-            ) : null}
-          </div>
-          {invitationPanel}
-          <ErrorNotice error={error} locale={locale} />
-          {notice && (
-            <div className="success-notice" role="status">
-              <CircleCheck size={18} />
-              {notice}
-              <button
-                className="icon-button"
-                aria-label={t.dismiss}
-                onClick={() => setNotice("")}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {!ready ? (
-            <section className="panel">
-              <ErrorNotice error={workspaceError} locale={locale} />
-              {workspaceError ? (
-                <button className="button secondary" onClick={refresh}>
-                  {t.retry}
-                </button>
-              ) : (
-                <div className="empty">
-                  <LoaderCircle className="spin" />
-                  {t.loading}
+          <LiveSync organizationId={organizationId}>
+            <div className="page-heading">
+              <div>
+                <div className="page-kicker">
+                  {currentOrg
+                    ? profileNames[locale][currentOrg.profile]
+                    : t.workspace}
                 </div>
-              )}
-            </section>
-          ) : (
-            <>
-              {page === "purchasing" &&
-                can(workspace.organization.role, "purchasing:read") && (
-                  <PurchasingPage
-                    key={workspace.organization.id}
-                    initialOrderId={
-                      focusedPurchase?.org === workspace.organization.id
-                        ? focusedPurchase.id
-                        : undefined
-                    }
-                    initialBranchId={
-                      focusedPurchase?.org === workspace.organization.id
-                        ? focusedPurchase.branchId
-                        : undefined
-                    }
-                    workspace={workspace}
-                    locale={locale}
-                  />
+                <h1>
+                  {t[page]}
+                  <span className="heading-dot">.</span>
+                </h1>
+                <p>
+                  {page === "today"
+                    ? t.todayNote
+                    : page === "tasks"
+                      ? t.tasksNote
+                      : page === "approvals"
+                        ? t.approvalsNote
+                        : page === "knowledge"
+                          ? t.knowledgeNote
+                          : page === "automations"
+                            ? t.automationsNote
+                            : page === "assistant"
+                              ? t.assistantNote
+                              : page === "integrations"
+                                ? t.integrationsNote
+                                : page === "video"
+                                  ? t.videoNote
+                                  : page === "marketing"
+                                    ? t.marketingNote
+                                    : page === "industry"
+                                      ? t.industryNote
+                                      : page === "outcomes"
+                                        ? t.outcomesNote
+                                        : page === "team"
+                                          ? t.teamNote
+                                          : page === "customers"
+                                            ? t.customersNote
+                                            : page === "orders"
+                                              ? t.ordersNote
+                                              : page === "purchasing"
+                                                ? t.purchasingNote
+                                                : page === "finance"
+                                                  ? t.financeNote
+                                                  : page === "inventory"
+                                                    ? t.inventoryNote
+                                                    : page === "organization"
+                                                      ? t.orgNote
+                                                      : t.activityNote}
+                </p>
+              </div>
+              {page === "today" ? (
+                <span className="date-chip">
+                  <Clock3 size={15} />
+                  {businessDate(
+                    new Date(),
+                    locale,
+                    currentOrg?.timezone || "Asia/Qyzylorda",
+                  )}
+                </span>
+              ) : page === "team" && workspace?.canManageTeam ? (
+                <button
+                  className="button primary"
+                  onClick={() => setModal("invite")}
+                >
+                  <Plus size={17} />
+                  {t.invite}
+                </button>
+              ) : null}
+            </div>
+            {invitationPanel}
+            <ErrorNotice error={error} locale={locale} />
+            {notice && (
+              <div className="success-notice" role="status">
+                <CircleCheck size={18} />
+                {notice}
+                <button
+                  className="icon-button"
+                  aria-label={t.dismiss}
+                  onClick={() => setNotice("")}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+            {!ready ? (
+              <section className="panel">
+                <ErrorNotice error={workspaceError} locale={locale} />
+                {workspaceError ? (
+                  <button className="button secondary" onClick={refresh}>
+                    {t.retry}
+                  </button>
+                ) : (
+                  <div className="empty">
+                    <LoaderCircle className="spin" />
+                    {t.loading}
+                  </div>
                 )}
-              {(page === "orders" || page === "finance") &&
-                can(
-                  workspace.organization.role,
-                  page === "orders" ? "orders:read" : "finance:read",
-                ) && (
-                  <CommercePage
-                    initialOrderId={
-                      focusedOrder?.org === workspace.organization.id
-                        ? focusedOrder.id
-                        : undefined
-                    }
-                    initialBranchId={
-                      focusedOrder?.org === workspace.organization.id
-                        ? focusedOrder.branchId
-                        : undefined
-                    }
-                    key={`${workspace.organization.id}-${page}`}
-                    workspace={workspace}
-                    locale={locale}
-                    mode={page}
-                  />
-                )}
-              {page === "orders" &&
-                can(workspace.organization.role, "orders:read") && (
-                  <ChannelOrders
-                    key={`${workspace.organization.id}-kaspi`}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "finance" &&
-                can(workspace.organization.role, "finance:read") && (
-                  <BankStatements
-                    key={`${workspace.organization.id}-bank`}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "inventory" &&
-                can(workspace.organization.role, "inventory:read") && (
-                  <InventoryPage
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "customers" &&
-                can(workspace.organization.role, "customers:read") && (
-                  <CustomersPage
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "tasks" && (
-                <TasksPage
-                  key={workspace.organization.id}
-                  workspace={workspace}
-                  locale={locale}
-                />
-              )}
-              {page === "approvals" && (
-                <ApprovalsPage
-                  key={workspace.organization.id}
-                  workspace={workspace}
-                  locale={locale}
-                />
-              )}
-              {page === "knowledge" && (
-                <KnowledgePage
-                  key={workspace.organization.id}
-                  workspace={workspace}
-                  locale={locale}
-                />
-              )}
-              {page === "automations" &&
-                can(workspace.organization.role, "automations:read") && (
-                  <AutomationsPage
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "assistant" && (
-                <AssistantPage
-                  key={workspace.organization.id}
-                  workspace={workspace}
-                  locale={locale}
-                />
-              )}
-              {page === "outcomes" &&
-                can(workspace.organization.role, "outcomes:read") && (
-                  <OutcomesPage
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                    onOpenOrder={(id, branchId) => {
-                      navigate("finance");
-                      setFocusedOrder({
-                        id,
-                        branchId,
-                        org: workspace.organization.id,
-                      });
-                    }}
-                  />
-                )}
-              {page === "industry" &&
-                can(workspace.organization.role, "industry:read") && (
-                  <IndustryPage
-                    onOpenPurchase={(id, branchId) => {
-                      navigate("purchasing");
-                      setFocusedPurchase({
-                        id,
-                        branchId,
-                        org: workspace.organization.id,
-                      });
-                    }}
-                    onOpenOrder={(id, branchId) => {
-                      navigate("finance");
-                      setFocusedOrder({
-                        id,
-                        branchId,
-                        org: workspace.organization.id,
-                      });
-                    }}
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "video" &&
-                can(workspace.organization.role, "video:read") && (
-                  <VideoPage
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "marketing" &&
-                can(workspace.organization.role, "marketing:read") && (
-                  <MarketingPage
-                    key={workspace.organization.id}
-                    workspace={workspace}
-                    locale={locale}
-                  />
-                )}
-              {page === "integrations" &&
-                can(workspace.organization.role, "integrations:read") && (
-                  <IntegrationsPage
+              </section>
+            ) : (
+              <>
+                {page === "purchasing" &&
+                  can(workspace.organization.role, "purchasing:read") && (
+                    <PurchasingPage
+                      key={workspace.organization.id}
+                      initialOrderId={
+                        focusedPurchase?.org === workspace.organization.id
+                          ? focusedPurchase.id
+                          : undefined
+                      }
+                      initialBranchId={
+                        focusedPurchase?.org === workspace.organization.id
+                          ? focusedPurchase.branchId
+                          : undefined
+                      }
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {(page === "orders" || page === "finance") &&
+                  can(
+                    workspace.organization.role,
+                    page === "orders" ? "orders:read" : "finance:read",
+                  ) && (
+                    <CommercePage
+                      initialOrderId={
+                        focusedOrder?.org === workspace.organization.id
+                          ? focusedOrder.id
+                          : undefined
+                      }
+                      initialBranchId={
+                        focusedOrder?.org === workspace.organization.id
+                          ? focusedOrder.branchId
+                          : undefined
+                      }
+                      key={`${workspace.organization.id}-${page}`}
+                      workspace={workspace}
+                      locale={locale}
+                      mode={page}
+                    />
+                  )}
+                {page === "orders" &&
+                  can(workspace.organization.role, "orders:read") && (
+                    <ChannelOrders
+                      key={`${workspace.organization.id}-kaspi`}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "finance" &&
+                  can(workspace.organization.role, "finance:read") && (
+                    <BankStatements
+                      key={`${workspace.organization.id}-bank`}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "inventory" &&
+                  can(workspace.organization.role, "inventory:read") && (
+                    <InventoryPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "customers" &&
+                  can(workspace.organization.role, "customers:read") && (
+                    <CustomersPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "tasks" && (
+                  <TasksPage
                     key={workspace.organization.id}
                     workspace={workspace}
                     locale={locale}
                   />
                 )}
-              {page === "today" && (
-                <TodayBoard
-                  key={workspace.organization.id}
-                  workspace={workspace}
-                  locale={locale}
-                  onNavigate={(d: Destination) => navigate(d)}
-                />
-              )}
-              {page === "today" && (
-                <Today
-                  workspace={workspace}
-                  locale={locale}
-                  onNavigate={navigate}
-                  onInvite={() => setModal("invite")}
-                />
-              )}
-              {page === "activity" && (
-                <section className="panel">
-                  <Activity workspace={workspace} locale={locale} />
-                </section>
-              )}
-              {page === "team" && (
-                <>
+                {page === "approvals" && (
+                  <ApprovalsPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
+                {page === "knowledge" && (
+                  <KnowledgePage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
+                {page === "automations" &&
+                  can(workspace.organization.role, "automations:read") && (
+                    <AutomationsPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "assistant" && (
+                  <AssistantPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
+                {page === "outcomes" &&
+                  can(workspace.organization.role, "outcomes:read") && (
+                    <OutcomesPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                      onOpenOrder={(id, branchId) => {
+                        navigate("finance");
+                        setFocusedOrder({
+                          id,
+                          branchId,
+                          org: workspace.organization.id,
+                        });
+                      }}
+                    />
+                  )}
+                {page === "industry" &&
+                  can(workspace.organization.role, "industry:read") && (
+                    <IndustryPage
+                      onOpenPurchase={(id, branchId) => {
+                        navigate("purchasing");
+                        setFocusedPurchase({
+                          id,
+                          branchId,
+                          org: workspace.organization.id,
+                        });
+                      }}
+                      onOpenOrder={(id, branchId) => {
+                        navigate("finance");
+                        setFocusedOrder({
+                          id,
+                          branchId,
+                          org: workspace.organization.id,
+                        });
+                      }}
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "video" &&
+                  can(workspace.organization.role, "video:read") && (
+                    <VideoPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "marketing" &&
+                  can(workspace.organization.role, "marketing:read") && (
+                    <MarketingPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "integrations" &&
+                  can(workspace.organization.role, "integrations:read") && (
+                    <IntegrationsPage
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                    />
+                  )}
+                {page === "today" && (
+                  <TodayBoard
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                    onNavigate={(d: Destination) => navigate(d)}
+                  />
+                )}
+                {page === "today" && (
+                  <Today
+                    workspace={workspace}
+                    locale={locale}
+                    onNavigate={navigate}
+                    onInvite={() => setModal("invite")}
+                  />
+                )}
+                {page === "activity" && (
                   <section className="panel">
-                    <div className="panel-heading">
-                      <h3>
-                        {t.members}
-                        <span className="inline-count">
-                          {workspace.members.length}
-                        </span>
-                      </h3>
-                      <span className="tag">
-                        <ShieldCheck size={13} />
-                        {t.access}
-                      </span>
-                    </div>
-                    {!["owner", "manager"].includes(
-                      workspace.organization.role,
-                    ) && <p className="muted">{t.onlySelf}</p>}
-                    <div className="member-list">
-                      {workspace.members.map((member, i) => (
-                        <div className="member-row" key={member.id}>
-                          <span className={`member-avatar color-${i % 3}`}>
-                            {member.name.slice(0, 1)}
-                          </span>
-                          <div className="member-identity">
-                            <strong>
-                              {member.name}
-                              {member.user_id === session.user!.id && (
-                                <small>{t.you}</small>
-                              )}
-                            </strong>
-                            <span>{member.email}</span>
-                          </div>
-                          <div className="member-role">
-                            <span>{roleNames[locale][member.role]}</span>
-                            <small>
-                              {member.branch_name
-                                ? branchName(member.branch_name, locale)
-                                : t.allBranches}
-                            </small>
-                          </div>
-                          <span className="member-status">
-                            <span className="status-dot" />
-                            {t.active}
-                          </span>
-                          {workspace.canManageTeam &&
-                            member.role !== "owner" && (
-                              <button
-                                className="text-button danger-text"
-                                onClick={() => setRemoveMember(member)}
-                              >
-                                {t.remove}
-                              </button>
-                            )}
-                        </div>
-                      ))}
-                    </div>
+                    <Activity workspace={workspace} locale={locale} />
                   </section>
-                  {workspace.canManageTeam && (
-                    <section className="panel spaced-panel">
+                )}
+                {page === "team" && (
+                  <>
+                    <section className="panel">
                       <div className="panel-heading">
-                        <h3>{t.pendingInvites}</h3>
-                        <span className="muted-tag">
-                          48 {locale === "ru" ? "часов" : "сағат"}
+                        <h3>
+                          {t.members}
+                          <span className="inline-count">
+                            {workspace.members.length}
+                          </span>
+                        </h3>
+                        <span className="tag">
+                          <ShieldCheck size={13} />
+                          {t.access}
                         </span>
                       </div>
-                      {workspace.invitations.length ? (
-                        workspace.invitations.map((inv) => (
-                          <div className="invitation-row" key={inv.id}>
-                            <div>
-                              <strong>{inv.email}</strong>
+                      {!["owner", "manager"].includes(
+                        workspace.organization.role,
+                      ) && <p className="muted">{t.onlySelf}</p>}
+                      <div className="member-list">
+                        {workspace.members.map((member, i) => (
+                          <div className="member-row" key={member.id}>
+                            <span className={`member-avatar color-${i % 3}`}>
+                              {member.name.slice(0, 1)}
+                            </span>
+                            <div className="member-identity">
+                              <strong>
+                                {member.name}
+                                {member.user_id === session.user!.id && (
+                                  <small>{t.you}</small>
+                                )}
+                              </strong>
+                              <span>{member.email}</span>
+                            </div>
+                            <div className="member-role">
+                              <span>{roleNames[locale][member.role]}</span>
                               <small>
-                                {roleNames[locale][inv.role]} ·{" "}
-                                {inv.branch_id
-                                  ? branchName(
-                                      workspace.branches.find(
-                                        (b) => b.id === inv.branch_id,
-                                      )?.name || "",
-                                      locale,
-                                    )
+                                {member.branch_name
+                                  ? branchName(member.branch_name, locale)
                                   : t.allBranches}
                               </small>
                             </div>
-                            <span
-                              className={`pill ${inv.status === "pending" ? "amber" : ""}`}
-                            >
-                              {t[inv.status]}
+                            <span className="member-status">
+                              <span className="status-dot" />
+                              {t.active}
                             </span>
-                            {inv.status === "pending" && (
-                              <button
-                                className="text-button"
-                                onClick={async () => {
-                                  try {
-                                    await api(
-                                      `organizations/${organizationId}/invitations/${inv.id}`,
-                                      "DELETE",
-                                    );
-                                    await reloadSession();
-                                  } catch (e) {
-                                    setError(e);
-                                  }
-                                }}
-                              >
-                                {t.revoke}
-                              </button>
-                            )}
+                            {workspace.canManageTeam &&
+                              member.role !== "owner" && (
+                                <button
+                                  className="text-button danger-text"
+                                  onClick={() => setRemoveMember(member)}
+                                >
+                                  {t.remove}
+                                </button>
+                              )}
                           </div>
-                        ))
-                      ) : (
-                        <div className="empty">
-                          <Users size={26} />
-                          <p>{t.noInvites}</p>
+                        ))}
+                      </div>
+                    </section>
+                    {workspace.canManageTeam && (
+                      <section className="panel spaced-panel">
+                        <div className="panel-heading">
+                          <h3>{t.pendingInvites}</h3>
+                          <span className="muted-tag">
+                            48 {locale === "ru" ? "часов" : "сағат"}
+                          </span>
                         </div>
+                        {workspace.invitations.length ? (
+                          workspace.invitations.map((inv) => (
+                            <div className="invitation-row" key={inv.id}>
+                              <div>
+                                <strong>{inv.email}</strong>
+                                <small>
+                                  {roleNames[locale][inv.role]} ·{" "}
+                                  {inv.branch_id
+                                    ? branchName(
+                                        workspace.branches.find(
+                                          (b) => b.id === inv.branch_id,
+                                        )?.name || "",
+                                        locale,
+                                      )
+                                    : t.allBranches}
+                                </small>
+                              </div>
+                              <span
+                                className={`pill ${inv.status === "pending" ? "amber" : ""}`}
+                              >
+                                {t[inv.status]}
+                              </span>
+                              {inv.status === "pending" && (
+                                <button
+                                  className="text-button"
+                                  onClick={async () => {
+                                    try {
+                                      await api(
+                                        `organizations/${organizationId}/invitations/${inv.id}`,
+                                        "DELETE",
+                                      );
+                                      await reloadSession();
+                                    } catch (e) {
+                                      setError(e);
+                                    }
+                                  }}
+                                >
+                                  {t.revoke}
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="empty">
+                            <Users size={26} />
+                            <p>{t.noInvites}</p>
+                          </div>
+                        )}
+                      </section>
+                    )}
+                  </>
+                )}
+                {page === "organization" && (
+                  <div className="settings-grid">
+                    <section className="panel">
+                      <div className="panel-heading">
+                        <h3>{t.organization}</h3>
+                        <span className="tag">{t.testData}</span>
+                      </div>
+                      {workspace.canManageOrganization ? (
+                        <Form
+                          key={organizationId}
+                          locale={locale}
+                          submit={t.save}
+                          onSubmit={async (data) => {
+                            await api(
+                              `organizations/${organizationId}`,
+                              "PATCH",
+                              {
+                                name: field(data, "name"),
+                                profile: field(data, "profile"),
+                                timezone: field(data, "timezone"),
+                              },
+                            );
+                            await reloadSession();
+                            setNotice(t.saved);
+                          }}
+                        >
+                          <OrganizationFields
+                            locale={locale}
+                            organization={workspace.organization}
+                          />
+                        </Form>
+                      ) : (
+                        <>
+                          <p className="muted">{t.ownerOnly}</p>
+                          <dl className="details-list">
+                            <dt>{t.orgName}</dt>
+                            <dd>{workspace.organization.name}</dd>
+                            <dt>{t.profile}</dt>
+                            <dd>
+                              {
+                                profileNames[locale][
+                                  workspace.organization.profile
+                                ]
+                              }
+                            </dd>
+                            <dt>{t.timezone}</dt>
+                            <dd>{workspace.organization.timezone}</dd>
+                            <dt>{t.currency}</dt>
+                            <dd>KZT</dd>
+                          </dl>
+                        </>
                       )}
                     </section>
-                  )}
-                </>
-              )}
-              {page === "organization" && (
-                <div className="settings-grid">
-                  <section className="panel">
-                    <div className="panel-heading">
-                      <h3>{t.organization}</h3>
-                      <span className="tag">{t.testData}</span>
-                    </div>
-                    {workspace.canManageOrganization ? (
-                      <Form
-                        key={organizationId}
-                        locale={locale}
-                        submit={t.save}
-                        onSubmit={async (data) => {
-                          await api(
-                            `organizations/${organizationId}`,
-                            "PATCH",
-                            {
-                              name: field(data, "name"),
-                              profile: field(data, "profile"),
-                              timezone: field(data, "timezone"),
-                            },
-                          );
-                          await reloadSession();
-                          setNotice(t.saved);
-                        }}
-                      >
-                        <OrganizationFields
-                          locale={locale}
-                          organization={workspace.organization}
-                        />
-                      </Form>
-                    ) : (
-                      <>
-                        <p className="muted">{t.ownerOnly}</p>
-                        <dl className="details-list">
-                          <dt>{t.orgName}</dt>
-                          <dd>{workspace.organization.name}</dd>
-                          <dt>{t.profile}</dt>
-                          <dd>
-                            {
-                              profileNames[locale][
-                                workspace.organization.profile
-                              ]
-                            }
-                          </dd>
-                          <dt>{t.timezone}</dt>
-                          <dd>{workspace.organization.timezone}</dd>
-                          <dt>{t.currency}</dt>
-                          <dd>KZT</dd>
-                        </dl>
-                      </>
-                    )}
-                  </section>
-                  <section className="panel">
-                    <div className="panel-heading">
-                      <h3>{t.branches}</h3>
-                      <span className="inline-count">
-                        {workspace.branches.length}
-                      </span>
-                    </div>
-                    {workspace.branches.map((b) => (
-                      <div className="branch-row" key={b.id}>
-                        <span className="branch-icon">
-                          <MapPin size={19} />
+                    <section className="panel">
+                      <div className="panel-heading">
+                        <h3>{t.branches}</h3>
+                        <span className="inline-count">
+                          {workspace.branches.length}
                         </span>
-                        <strong>{branchName(b.name, locale)}</strong>
                       </div>
-                    ))}
-                    {workspace.canManageOrganization && (
-                      <button
-                        className="button secondary full-width"
-                        onClick={() => setModal("branch")}
-                      >
-                        <Plus size={16} />
-                        {t.addBranch}
-                      </button>
-                    )}
-                  </section>
-                </div>
-              )}
-            </>
-          )}
-          <footer className="content-footer">
-            <span>{t.foundationNote}</span>
-            <span>
-              {currentOrg?.currency} · {currentOrg?.timezone}
-            </span>
-          </footer>
+                      {workspace.branches.map((b) => (
+                        <div className="branch-row" key={b.id}>
+                          <span className="branch-icon">
+                            <MapPin size={19} />
+                          </span>
+                          <strong>{branchName(b.name, locale)}</strong>
+                        </div>
+                      ))}
+                      {workspace.canManageOrganization && (
+                        <button
+                          className="button secondary full-width"
+                          onClick={() => setModal("branch")}
+                        >
+                          <Plus size={16} />
+                          {t.addBranch}
+                        </button>
+                      )}
+                    </section>
+                  </div>
+                )}
+              </>
+            )}
+            <footer className="content-footer">
+              <span>{t.foundationNote}</span>
+              <span>
+                {currentOrg?.currency} · {currentOrg?.timezone}
+              </span>
+            </footer>
+          </LiveSync>
         </main>
       </div>
       {modal === "newOrg" && (

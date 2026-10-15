@@ -4,6 +4,7 @@ import Decimal from "decimal.js";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { OutcomeView } from "@/domain/outcomes";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { industryText, industryLabels } from "@/lib/industry-i18n";
 type Option = { id: string; name: string };
@@ -24,7 +25,7 @@ export function OutcomesPage({
     ),
     [from, setFrom] = useState(today.slice(0, 7) + "-01"),
     [to, setTo] = useState(today),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const [view, setView] = useState<OutcomeView | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
