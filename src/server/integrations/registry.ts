@@ -306,20 +306,73 @@ export const passports: Passport[] = [
     disconnect:
       "Owner disconnects: the login and password are erased; imported catalogue items stay.",
   },
-  ...[
-    ["cash_bank", "Кассы и банки", "T033"],
-    ["messaging_kaspi", "Каналы и Kaspi", "T034"],
-  ].map(([provider, name, task]) => ({
-    provider,
-    name,
-    contract: null,
-    auth: "not defined",
-    limits: [],
-    ownership: {},
-    operations: [],
-    unverified: [
-      `${task}: adapter not implemented; official contract to be checked`,
+  {
+    provider: "cash_bank",
+    name: "Кассы и банки",
+    contract: {
+      source: "https://v8.1c.ru/edi/edi_stnd/100/101.htm",
+      checked: "2026-10-15",
+      version: "1CClientBankExchange 1.02/1.03",
+    },
+    auth: "file exchange: the statement is exported from the bank's client and uploaded by a person with finance rights",
+    limits: ["file ≤ 2 MB; encodings Windows (cp1251), DOS (cp866) or UTF-8"],
+    ownership: { bank_movements: "external", money_ledger: "internal" },
+    operations: [
+      {
+        id: "statement_import",
+        direction: "inbound",
+        entity: "bank statement",
+        endpoint:
+          "POST /api/v1/organizations/{org}/bank/statements (1CClientBankExchange)",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "account sections checked (opening + in − out = closing, turnovers); lines deduplicated across overlapping statements; posting only by a person through the money command",
+      },
+      {
+        id: "cash_register",
+        direction: "read",
+        entity: "fiscal receipts (OFD)",
+        endpoint: "—",
+        implementation: "planned",
+        verification: "none",
+        live: "not_verified",
+        notes:
+          "not_configured: no verified official OFD/cash-register contract selected; sales are entered through orders",
+      },
+      {
+        id: "bank_api",
+        direction: "read",
+        entity: "bank API",
+        endpoint: "—",
+        implementation: "planned",
+        verification: "none",
+        live: "not_verified",
+        notes:
+          "direct bank APIs need a bank agreement and its contract; not connected",
+      },
     ],
-    disconnect: "n/a",
-  })),
+    unverified: [
+      "statements exported by specific Kazakhstan banks (field variants)",
+      "cash register / OFD exchange",
+    ],
+    disconnect:
+      "Nothing is stored except uploaded statements and decisions; no credentials are kept.",
+  },
+  ...[["messaging_kaspi", "Каналы и Kaspi", "T034"]].map(
+    ([provider, name, task]) => ({
+      provider,
+      name,
+      contract: null,
+      auth: "not defined",
+      limits: [],
+      ownership: {},
+      operations: [],
+      unverified: [
+        `${task}: adapter not implemented; official contract to be checked`,
+      ],
+      disconnect: "n/a",
+    }),
+  ),
 ];

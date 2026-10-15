@@ -11,6 +11,7 @@ import { AssistantService } from "../assistant/service";
 import { IntegrationService } from "../integrations/service";
 import { Bitrix24Service } from "../integrations/bitrix24-service";
 import { OneCService } from "../integrations/onec-service";
+import { BankService } from "../bank/service";
 import {
   askResult,
   assistantStatus,
@@ -586,6 +587,35 @@ export const executionRoutes: Route[] = [
       ),
   },
   {
+    method: "GET",
+    path: "bank/statements",
+    run: (c) => new BankService(c.db).statements(c.secret, c.org, c.query),
+  },
+  {
+    method: "POST",
+    path: "bank/statements",
+    schema: z.object({ id: z.uuid(), reused: z.boolean() }),
+    run: (c) => new BankService(c.db).upload(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "bank/statements/:id",
+    run: (c) => new BankService(c.db).statement(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "bank/accounts",
+    schema: ok,
+    run: (c) => new BankService(c.db).setBankAccount(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "bank/lines/:id",
+    schema: commerceResult,
+    run: (c) =>
+      new BankService(c.db).decide(c.secret, c.org, c.params[0], c.body),
+  },
+  {
     method: "POST",
     path: "integrations/onec",
     schema: z.object({
@@ -665,6 +695,7 @@ export const executionRoutes: Route[] = [
 // Body size limits for routes that accept uploads (bytes, before base64 decoding checks).
 export const uploadLimits: { method: string; path: string; limit: number }[] = [
   { method: "POST", path: "tasks/:id/attachments", limit: 2_900_000 },
+  { method: "POST", path: "bank/statements", limit: 2_900_000 },
 ];
 function match(pattern: string, path: string[]) {
   const parts = pattern.split("/");

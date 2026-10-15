@@ -67,6 +67,7 @@ import { ApprovalsPage } from "./approvals-page";
 import { AutomationsPage } from "./automations-page";
 import { AssistantPage } from "./assistant-page";
 import { IntegrationsPage } from "./integrations-page";
+import { BankStatements } from "./bank-statements";
 import { can } from "@/domain/permissions";
 
 type Page =
@@ -1343,6 +1344,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     workspace={workspace}
                     locale={locale}
                     mode={page}
+                  />
+                )}
+              {page === "finance" &&
+                can(workspace.organization.role, "finance:read") && (
+                  <BankStatements
+                    key={`${workspace.organization.id}-bank`}
+                    workspace={workspace}
+                    locale={locale}
                   />
                 )}
               {page === "inventory" &&

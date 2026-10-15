@@ -128,6 +128,9 @@ const opNames: Record<string, [string, string]> = {
   events: ["Входящие события", "Кіріс оқиғалар"],
   deal_write: ["Запись сделок", "Мәмілелерді жазу"],
   write: ["Запись", "Жазу"],
+  statement_import: ["Импорт банковской выписки", "Банк үзіндісін импорттау"],
+  cash_register: ["Онлайн-касса (ОФД)", "Онлайн-касса (ОФД)"],
+  bank_api: ["API банка", "Банк API"],
 };
 const exportStates: Record<string, [string, string]> = {
   pending: ["ждёт отправки", "жіберуді күтеді"],

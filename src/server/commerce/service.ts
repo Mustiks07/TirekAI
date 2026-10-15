@@ -631,115 +631,126 @@ export class CommerceService {
   }
   async money(secret: Credential, org: string, input: unknown) {
     const c = moneyCommand.parse(input);
-    return this.db.transaction(async (tx) => {
-      const s = await sessionAccess(tx, secret, org, "finance:write");
-      const o =
-        "orderId" in c
-          ? await this.order(tx, org, c.orderId, s, true)
-          : undefined;
-      const [ob] =
-        "obligationId" in c
-          ? await tx.query<{
-              id: string;
-              branch_id: string;
-              supplier: string;
-              amount_minor: string;
-              paid_minor: string;
-            }>(
-              "SELECT id,branch_id,supplier,amount_minor::text,paid_minor::text FROM supplier_obligations WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3) FOR UPDATE",
-              [org, c.obligationId, s.branchId],
-            )
-          : [];
-      if ("obligationId" in c && !ob) throw new AppError("NOT_FOUND", 404);
-      const ids = [
-        c.accountId,
-        ...(c.kind === "transfer" ? [c.destinationId] : []),
-      ].sort();
-      if (new Set(ids).size !== ids.length)
-        throw new AppError("SAME_ACCOUNT", 422);
-      const accounts = await tx.query<{
-        id: string;
-        branch_id: string;
-        balance_minor: string;
-      }>(
-        "SELECT id,branch_id,balance_minor::text FROM money_accounts WHERE organization_id=$1 AND id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR branch_id=$3) ORDER BY id FOR UPDATE",
-        [org, ids, s.branchId],
-      );
-      if (accounts.length !== ids.length) throw new AppError("NOT_FOUND", 404);
-      const account = accounts.find((a) => a.id === c.accountId)!;
-      if (
-        (o && o.branch_id !== account.branch_id) ||
-        (ob && ob.branch_id !== account.branch_id)
-      )
-        throw new AppError("ACCOUNT_SCOPE", 422);
-      const r = await command(tx, org, c.key, {
-        operation: "money.command",
-        ...c,
-      });
-      if (r.reused) return r;
-      const value = minorUnits(c.amount),
-        out = ["refund", "supplier_payment", "expense", "transfer"].includes(
-          c.kind,
-        ),
-        signed = out ? -value : value;
-      if (out && BigInt(account.balance_minor) < value)
-        throw new AppError("INSUFFICIENT_MONEY", 409);
-      if (BigInt(account.balance_minor) + signed >= 10n ** 38n)
-        throw new AppError("AMOUNT_LIMIT", 422);
-      if (o) {
-        if (o.state === "draft") throw new AppError("ORDER_STATE", 409);
-        if (c.kind === "payment" && value > BigInt(o.expected_minor))
-          throw new AppError("PAYMENT_EXCEEDS", 409);
-        if (c.kind === "refund" && value > BigInt(o.paid_minor))
-          throw new AppError("REFUND_EXCEEDS", 409);
-        await tx.query(
-          "UPDATE sales_orders SET paid_minor=paid_minor+$3,version=version+1 WHERE organization_id=$1 AND id=$2",
-          [org, o.id, signed.toString()],
-        );
-        await this.event(tx, org, o.id, s, c.kind, c.note, { id: r.id });
-      }
-      if (ob) {
-        if (value > BigInt(ob.amount_minor) - BigInt(ob.paid_minor))
-          throw new AppError("PAYMENT_EXCEEDS", 409);
-        await tx.query(
-          "UPDATE supplier_obligations SET paid_minor=paid_minor+$3 WHERE organization_id=$1 AND id=$2",
-          [org, ob.id, value.toString()],
-        );
-      }
-      await this.entry(tx, org, s, r, c.accountId, c.kind, signed, c.note, {
-        order: o?.id,
-        obligation: ob?.id,
-        category: "category" in c ? c.category : undefined,
-        counterparty:
-          o?.customer_name ||
-          ob?.supplier ||
-          ("counterparty" in c ? c.counterparty : undefined),
-        operating: c.kind === "expense" && c.operating,
-      });
-      if (c.kind === "transfer") {
-        const dest = accounts.find((a) => a.id === c.destinationId)!;
-        if (BigInt(dest.balance_minor) + value >= 10n ** 38n)
-          throw new AppError("AMOUNT_LIMIT", 422);
-        await this.entry(
-          tx,
-          org,
-          s,
-          { ...r, id: randomUUID() },
-          c.destinationId,
-          c.kind,
-          value,
-          c.note,
-        );
-        if (dest.branch_id !== account.branch_id)
-          await audit(tx, org, s.actorId, "money.transfer", dest.branch_id, {
-            entryId: r.id,
-          });
-      }
-      await audit(tx, org, s.actorId, `money.${c.kind}`, account.branch_id, {
-        entryId: r.id,
-      });
-      return r;
+    return this.db.transaction((tx) =>
+      this.moneyInTransaction(tx, secret, org, c),
+    );
+  }
+  // Composition for bank statements (T033) and channel payouts (T040): same rights, scope,
+  // idempotency and audit as the form, inside the caller's transaction.
+  async moneyInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    input: unknown,
+  ) {
+    const c = moneyCommand.parse(input);
+    const s = await sessionAccess(tx, secret, org, "finance:write");
+    const o =
+      "orderId" in c
+        ? await this.order(tx, org, c.orderId, s, true)
+        : undefined;
+    const [ob] =
+      "obligationId" in c
+        ? await tx.query<{
+            id: string;
+            branch_id: string;
+            supplier: string;
+            amount_minor: string;
+            paid_minor: string;
+          }>(
+            "SELECT id,branch_id,supplier,amount_minor::text,paid_minor::text FROM supplier_obligations WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3) FOR UPDATE",
+            [org, c.obligationId, s.branchId],
+          )
+        : [];
+    if ("obligationId" in c && !ob) throw new AppError("NOT_FOUND", 404);
+    const ids = [
+      c.accountId,
+      ...(c.kind === "transfer" ? [c.destinationId] : []),
+    ].sort();
+    if (new Set(ids).size !== ids.length)
+      throw new AppError("SAME_ACCOUNT", 422);
+    const accounts = await tx.query<{
+      id: string;
+      branch_id: string;
+      balance_minor: string;
+    }>(
+      "SELECT id,branch_id,balance_minor::text FROM money_accounts WHERE organization_id=$1 AND id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR branch_id=$3) ORDER BY id FOR UPDATE",
+      [org, ids, s.branchId],
+    );
+    if (accounts.length !== ids.length) throw new AppError("NOT_FOUND", 404);
+    const account = accounts.find((a) => a.id === c.accountId)!;
+    if (
+      (o && o.branch_id !== account.branch_id) ||
+      (ob && ob.branch_id !== account.branch_id)
+    )
+      throw new AppError("ACCOUNT_SCOPE", 422);
+    const r = await command(tx, org, c.key, {
+      operation: "money.command",
+      ...c,
     });
+    if (r.reused) return r;
+    const value = minorUnits(c.amount),
+      out = ["refund", "supplier_payment", "expense", "transfer"].includes(
+        c.kind,
+      ),
+      signed = out ? -value : value;
+    if (out && BigInt(account.balance_minor) < value)
+      throw new AppError("INSUFFICIENT_MONEY", 409);
+    if (BigInt(account.balance_minor) + signed >= 10n ** 38n)
+      throw new AppError("AMOUNT_LIMIT", 422);
+    if (o) {
+      if (o.state === "draft") throw new AppError("ORDER_STATE", 409);
+      if (c.kind === "payment" && value > BigInt(o.expected_minor))
+        throw new AppError("PAYMENT_EXCEEDS", 409);
+      if (c.kind === "refund" && value > BigInt(o.paid_minor))
+        throw new AppError("REFUND_EXCEEDS", 409);
+      await tx.query(
+        "UPDATE sales_orders SET paid_minor=paid_minor+$3,version=version+1 WHERE organization_id=$1 AND id=$2",
+        [org, o.id, signed.toString()],
+      );
+      await this.event(tx, org, o.id, s, c.kind, c.note, { id: r.id });
+    }
+    if (ob) {
+      if (value > BigInt(ob.amount_minor) - BigInt(ob.paid_minor))
+        throw new AppError("PAYMENT_EXCEEDS", 409);
+      await tx.query(
+        "UPDATE supplier_obligations SET paid_minor=paid_minor+$3 WHERE organization_id=$1 AND id=$2",
+        [org, ob.id, value.toString()],
+      );
+    }
+    await this.entry(tx, org, s, r, c.accountId, c.kind, signed, c.note, {
+      order: o?.id,
+      obligation: ob?.id,
+      category: "category" in c ? c.category : undefined,
+      counterparty:
+        o?.customer_name ||
+        ob?.supplier ||
+        ("counterparty" in c ? c.counterparty : undefined),
+      operating: c.kind === "expense" && c.operating,
+    });
+    if (c.kind === "transfer") {
+      const dest = accounts.find((a) => a.id === c.destinationId)!;
+      if (BigInt(dest.balance_minor) + value >= 10n ** 38n)
+        throw new AppError("AMOUNT_LIMIT", 422);
+      await this.entry(
+        tx,
+        org,
+        s,
+        { ...r, id: randomUUID() },
+        c.destinationId,
+        c.kind,
+        value,
+        c.note,
+      );
+      if (dest.branch_id !== account.branch_id)
+        await audit(tx, org, s.actorId, "money.transfer", dest.branch_id, {
+          entryId: r.id,
+        });
+    }
+    await audit(tx, org, s.actorId, `money.${c.kind}`, account.branch_id, {
+      entryId: r.id,
+    });
+    return r;
   }
   async ledger(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
