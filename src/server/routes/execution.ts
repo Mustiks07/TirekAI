@@ -13,6 +13,7 @@ import { Bitrix24Service } from "../integrations/bitrix24-service";
 import { OneCService } from "../integrations/onec-service";
 import { BankService } from "../bank/service";
 import { VideoService } from "../video/service";
+import { MarketingService } from "../marketing/service";
 import { TelegramService } from "../integrations/telegram-service";
 import { KaspiService } from "../integrations/kaspi-service";
 import {
@@ -79,6 +80,7 @@ const knowledge = (c: RouteContext) => new KnowledgeService(c.db);
 const insights = (c: RouteContext) => new InsightService(c.db);
 const proposals = (c: RouteContext) => new ProposalService(c.db);
 const automations = (c: RouteContext) => new AutomationService(c.db);
+const marketing = (c: RouteContext) => new MarketingService(c.db);
 // Organization-scoped routes for T021–T030. Paths are relative to organizations/:id.
 export const executionRoutes: Route[] = [
   {
@@ -667,6 +669,107 @@ export const executionRoutes: Route[] = [
   },
   {
     method: "GET",
+    path: "marketing/campaigns",
+    run: (c) => marketing(c).list(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns",
+    schema: commerceResult,
+    run: (c) => marketing(c).create(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "marketing/evaluate",
+    run: (c) => marketing(c).evaluate(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "marketing/campaigns/:id",
+    run: (c) => marketing(c).get(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "PATCH",
+    path: "marketing/campaigns/:id",
+    schema: commerceResult,
+    run: (c) => marketing(c).update(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns/:id/decisions",
+    schema: commerceResult,
+    run: (c) => marketing(c).decide(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "marketing/campaigns/:id/template",
+    run: (c) => marketing(c).template(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns/:id/images",
+    schema: commerceResult,
+    run: (c) => marketing(c).uploadImage(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns/:id/images/generate",
+    run: (c) => marketing(c).generateImage(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "marketing/campaigns/:id/images/:id",
+    schema: z.object({ mime: z.string(), content: z.string() }),
+    run: (c) => marketing(c).image(c.secret, c.org, c.params[0], c.params[1]),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns/:id/exports",
+    schema: z.object({
+      publicationId: z.uuid(),
+      reused: z.boolean(),
+      filename: z.string(),
+      mime: z.literal("application/pdf"),
+      content: z.string(),
+    }),
+    run: (c) =>
+      marketing(c).exportMaterial(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns/:id/publications",
+    schema: z.object({
+      id: z.uuid(),
+      reused: z.boolean(),
+      state: z.enum(["queued", "not_configured", "blocked"]),
+      recipients: z.number().int(),
+      reason: z.string().nullable(),
+    }),
+    run: (c) => marketing(c).publish(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "marketing/campaigns/:id/spend",
+    schema: commerceResult,
+    run: (c) => marketing(c).setSpend(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "marketing/campaigns/:id/analysis",
+    run: (c) => marketing(c).analysis(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "marketing/segments/preview",
+    run: (c) => marketing(c).previewSegment(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "marketing/recommendations",
+    run: (c) => marketing(c).recommendations(c.secret, c.org, c.query),
+  },
+  {
+    method: "GET",
     path: "bank/statements",
     run: (c) => new BankService(c.db).statements(c.secret, c.org, c.query),
   },
@@ -871,6 +974,7 @@ export const executionRoutes: Route[] = [
 export const uploadLimits: { method: string; path: string; limit: number }[] = [
   { method: "POST", path: "tasks/:id/attachments", limit: 2_900_000 },
   { method: "POST", path: "bank/statements", limit: 2_900_000 },
+  { method: "POST", path: "marketing/campaigns/:id/images", limit: 2_900_000 },
 ];
 function match(pattern: string, path: string[]) {
   const parts = pattern.split("/");

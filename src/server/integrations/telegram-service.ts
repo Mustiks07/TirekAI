@@ -380,27 +380,68 @@ export class TelegramService {
       if (r.reused) return r;
       if (conn.disconnected_at || !conn.settings.outbound)
         throw new AppError("MESSAGING_DISABLED", 409);
-      const [customer] = await tx.query<{ messenger: boolean }>(
-        "SELECT (consents->>'messenger')::boolean messenger FROM customers WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3)",
-        [org, c.customerId, s.branchId],
+      const queued = await this.queueInTransaction(
+        tx,
+        org,
+        s.actorId,
+        conn,
+        c.customerId,
+        c.text,
+        { id: r.id, branchId: s.branchId },
       );
-      if (!customer) throw new AppError("NOT_FOUND", 404);
-      const [chat] = await tx.query<{ external_id: string }>(
-        "SELECT external_id FROM integration_mappings WHERE connection_id=$1 AND entity_type='chat' AND internal_id=$2 AND state='active' ORDER BY updated_at DESC LIMIT 1",
-        [conn.id, c.customerId],
-      );
-      if (!chat) throw new AppError("MESSENGER_NOT_LINKED", 409);
-      // No consent, no message: the check repeats when the worker sends.
-      if (!customer.messenger) throw new AppError("NO_CONSENT", 409);
-      await tx.query(
-        "INSERT INTO messaging_messages(id,organization_id,connection_id,chat_id,customer_id,direction,text,state,created_by) VALUES($1,$2,$3,$4,$5,'out',$6,'queued',$7)",
-        [r.id, org, conn.id, chat.external_id, c.customerId, c.text, s.actorId],
-      );
+      if (queued === "not_found") throw new AppError("NOT_FOUND", 404);
+      if (queued === "not_linked")
+        throw new AppError("MESSENGER_NOT_LINKED", 409);
+      if (queued === "no_consent") throw new AppError("NO_CONSENT", 409);
       await audit(tx, org, s.actorId, "messaging.queued", null, {
         messageId: r.id,
       });
       return r;
     });
+  }
+  // Composition for other services (T039 campaign publication): the same consent and chat checks
+  // as send, inside the caller's transaction. The worker repeats them before sending.
+  async queueInTransaction(
+    tx: Sql,
+    org: string,
+    actorId: string,
+    conn: ConnectionRow,
+    customerId: string,
+    text: string,
+    options: {
+      id?: string;
+      branchId?: string | null;
+      publicationId?: string;
+    } = {},
+  ): Promise<"queued" | "not_found" | "not_linked" | "no_consent"> {
+    if (conn.disconnected_at || !conn.settings.outbound)
+      throw new AppError("MESSAGING_DISABLED", 409);
+    const [customer] = await tx.query<{ messenger: boolean }>(
+      "SELECT (consents->>'messenger')::boolean messenger FROM customers WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3)",
+      [org, customerId, options.branchId ?? null],
+    );
+    if (!customer) return "not_found";
+    const [chat] = await tx.query<{ external_id: string }>(
+      "SELECT external_id FROM integration_mappings WHERE connection_id=$1 AND entity_type='chat' AND internal_id=$2 AND state='active' ORDER BY updated_at DESC LIMIT 1",
+      [conn.id, customerId],
+    );
+    if (!chat) return "not_linked";
+    // No consent, no message: the check repeats when the worker sends.
+    if (!customer.messenger) return "no_consent";
+    await tx.query(
+      "INSERT INTO messaging_messages(id,organization_id,connection_id,chat_id,customer_id,direction,text,state,created_by,publication_id) VALUES($1,$2,$3,$4,$5,'out',$6,'queued',$7,$8)",
+      [
+        options.id ?? randomUUID(),
+        org,
+        conn.id,
+        chat.external_id,
+        customerId,
+        text,
+        actorId,
+        options.publicationId ?? null,
+      ],
+    );
+    return "queued";
   }
   async processOutbox(limit = 20) {
     const due = await this.db.query<{

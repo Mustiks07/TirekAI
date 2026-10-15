@@ -71,6 +71,7 @@ import { AssistantPage } from "./assistant-page";
 import { IntegrationsPage } from "./integrations-page";
 import { BankStatements } from "./bank-statements";
 import { VideoPage } from "./video-page";
+import { MarketingPage } from "./marketing-page";
 import { can } from "@/domain/permissions";
 
 type Page =
@@ -1426,6 +1427,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               {page === "video" &&
                 can(workspace.organization.role, "video:read") && (
                   <VideoPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
+              {page === "marketing" &&
+                can(workspace.organization.role, "marketing:read") && (
+                  <MarketingPage
                     key={workspace.organization.id}
                     workspace={workspace}
                     locale={locale}

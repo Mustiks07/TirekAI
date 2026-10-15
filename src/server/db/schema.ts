@@ -15,6 +15,7 @@ import { connectorsMigration } from "./connectors-migration";
 import { bankMigration } from "./bank-migration";
 import { channelsMigration } from "./channels-migration";
 import { videoMigration } from "./video-migration";
+import { marketingMigration } from "./marketing-migration";
 export const migrations = [
   {
     version: 1,
@@ -81,4 +82,5 @@ CREATE TABLE auth_limits (
   bankMigration,
   channelsMigration,
   videoMigration,
+  marketingMigration,
 ];
