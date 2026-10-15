@@ -3413,3 +3413,98 @@ fieldset {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+.industry-page {
+  display: grid;
+  gap: 20px;
+}
+.industry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.industry-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: 20px;
+}
+.industry-layout > .panel {
+  padding: 20px;
+  min-width: 0;
+}
+.industry-list {
+  display: grid;
+  gap: 8px;
+  max-height: 700px;
+  overflow: auto;
+}
+.industry-card {
+  display: grid;
+  text-align: left;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line, #d7ddd8);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  color: inherit;
+  width: 100%;
+}
+.industry-card.selected {
+  border-color: var(--accent, #18684c);
+  background: #eaf4ef;
+}
+.industry-card span {
+  font-size: 12px;
+}
+.industry-detail {
+  overflow-wrap: anywhere;
+}
+.industry-detail form {
+  margin-top: 24px;
+}
+.industry-detail fieldset {
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid #d7ddd8;
+  border-radius: 12px;
+}
+.industry-detail select[multiple] {
+  min-height: 110px;
+}
+.industry-page select,
+.industry-page input,
+.industry-page textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+.industry-page details {
+  margin: 16px 0;
+}
+.industry-page label {
+  display: grid;
+  gap: 6px;
+}
+.industry-detail label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+}
+.industry-detail input[type="checkbox"] {
+  width: auto;
+}
+@media (max-width: 800px) {
+  .industry-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .industry-list {
+    max-height: 260px;
+  }
+  .industry-actions .button {
+    flex: 1 1 140px;
+  }
+  .industry-page .section-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+}

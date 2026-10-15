@@ -733,6 +733,15 @@ export class CrmService {
         });
       if (r.reused) return r;
       if (q.order_id) throw new AppError("QUOTE_CONVERTED", 409);
+      if (
+        (
+          await tx.query(
+            "SELECT id FROM industry_documents WHERE organization_id=$1 AND kind='project' AND data->>'quoteId'=$2",
+            [org, id],
+          )
+        ).length
+      )
+        throw new AppError("QUOTE_CONVERTED", 409);
       if (q.version !== c.version) throw new AppError("VERSION_CONFLICT", 409);
       const [clock] = await tx.query<{ today: string }>(
         "SELECT (now() AT TIME ZONE timezone)::date::text today FROM organizations WHERE id=$1",

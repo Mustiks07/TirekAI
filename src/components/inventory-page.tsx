@@ -250,6 +250,14 @@ export function InventoryPage({
           ? { unitCost: field(f, "unitCost") }
           : {}),
         ...(o.kind === "count" ? { version: o.version } : {}),
+        ...(["receipt", "count"].includes(o.kind) && field(f, "lotCode")
+          ? {
+              lot: {
+                code: field(f, "lotCode"),
+                expiresOn: field(f, "expiresOn") || null,
+              },
+            }
+          : {}),
         ...(o.reservationId ? { reservationId: o.reservationId } : {}),
         ...(o.transferId ? { transferId: o.transferId } : {}),
         ...(o.movementId ? { movementId: o.movementId } : {}),
@@ -528,6 +536,20 @@ export function InventoryPage({
                       ))}
                   </select>
                 </label>
+              )}
+              {["receipt", "count"].includes(operation.kind) && (
+                <>
+                  <label>
+                    {locale === "ru"
+                      ? "Код новой партии (если ведётся партийный учёт)"
+                      : "Жаңа партия коды (партиялық есеп жүргізілсе)"}
+                    <input name="lotCode" maxLength={120} />
+                  </label>
+                  <label>
+                    {locale === "ru" ? "Годен до" : "Жарамдылық мерзімі"}
+                    <input type="date" name="expiresOn" />
+                  </label>
+                </>
               )}
               {(operation.transferId ||
                 operation.reservationId ||

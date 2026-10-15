@@ -1897,6 +1897,15 @@ export function PurchasingPage({
                               .map((l) => ({
                                 lineId: l.id,
                                 quantity: f(d, l.id),
+                                ...(f(d, `lot-${l.id}`)
+                                  ? {
+                                      lot: {
+                                        code: f(d, `lot-${l.id}`),
+                                        expiresOn:
+                                          f(d, `expiry-${l.id}`) || null,
+                                      },
+                                    }
+                                  : {}),
                               })),
                           });
                           refresh();
@@ -1914,6 +1923,17 @@ export function PurchasingPage({
                                 "",
                                 false,
                               )}
+                              <label>
+                                {t(
+                                  "Партия (если ведётся партийный учёт)",
+                                  "Партия (партиялық есеп жүргізілсе)",
+                                )}
+                                <input name={`lot-${l.id}`} maxLength={120} />
+                              </label>
+                              <label>
+                                {t("Годен до", "Жарамдылық мерзімі")}
+                                <input name={`expiry-${l.id}`} type="date" />
+                              </label>
                             </div>
                           ))}
                         {note}

@@ -14,6 +14,8 @@ import { CommerceService } from "../src/server/commerce/service";
 import { PurchasingService } from "../src/server/purchasing/service";
 import { documentView } from "../src/domain/purchasing";
 import { migrations } from "../src/server/db/schema";
+import { IndustryService } from "../src/server/industry/service";
+import { CrmService } from "../src/server/crm/service";
 
 it("two independent pools cannot receive the same remaining invoice quantity twice", async () => {
   const s = new PurchasingService(db),
@@ -657,4 +659,97 @@ it("T020: two connections approving the same document with a separate-purchase d
       [doc],
     ),
   ).toHaveLength(1);
+});
+
+it("T042: independent connections cannot double-book shared resources", async () => {
+  const organization = (
+    await p.createOrganization(owner.token, {
+      name: "Услуги параллельно",
+      profile: "services",
+    })
+  ).id;
+  const b = (await p.workspace(owner.token, organization)).branches[0].id,
+    inventory = new InventoryService(db),
+    svc = new IndustryService(db);
+  const wh = (
+    await inventory.createWarehouse(owner.token, organization, {
+      branchId: b,
+      name: "Склад",
+    })
+  ).id;
+  const service = (
+    await inventory.saveItem(owner.token, organization, {
+      sku: randomUUID(),
+      name_ru: "Услуга",
+      kind: "service",
+      base_unit: "pc",
+      purchase_price: null,
+      sale_price: "10",
+    })
+  ).id;
+  const customer = (
+    await new CrmService(db).createCustomer(owner.token, organization, {
+      key: randomUUID(),
+      branchId: b,
+      name: "Тестовый клиент",
+      email: "",
+      phone: "",
+      kind: "person",
+      responsibleId: null,
+      consents: { email: false, sms: false, messenger: false },
+      consentNote: "Синтетические данные",
+    })
+  ).id;
+  const resources: string[] = [];
+  for (const kind of ["specialist", "workplace"])
+    resources.push(
+      (
+        await svc.command(owner.token, organization, {
+          key: randomUUID(),
+          branchId: b,
+          kind: "resource",
+          title: kind,
+          resourceKind: kind,
+          capacity: 1,
+          bufferMinutes: 5,
+          days: [1, 2, 3, 4, 5, 6, 7],
+          opens: "00:00",
+          closes: "23:59",
+        })
+      ).id,
+    );
+  const input = () => ({
+    key: randomUUID(),
+    branchId: b,
+    kind: "appointment",
+    customerId: customer,
+    serviceItemId: service,
+    price: "10",
+    warehouseId: wh,
+    materials: [],
+    resources,
+    startsAt: "2026-10-15T09:00:00Z",
+    endsAt: "2026-10-15T10:00:00Z",
+    note: "Параллельная запись",
+  });
+  const results = await Promise.allSettled([
+    svc.command(owner.token, organization, input()),
+    new IndustryService(other).command(owner.token, organization, input()),
+  ]);
+  expect(results.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((x) => x.status === "rejected")).toMatchObject({
+    reason: { code: "RESOURCE_CONFLICT" },
+  });
+  expect(
+    await db.query(
+      "SELECT id FROM industry_documents WHERE organization_id=$1 AND kind='appointment'",
+      [organization],
+    ),
+  ).toHaveLength(1);
+  expect(
+    await db.query(
+      "SELECT document_id FROM industry_slots WHERE organization_id=$1",
+      [organization],
+    ),
+  ).toHaveLength(2);
 });

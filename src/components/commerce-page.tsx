@@ -98,10 +98,14 @@ export function CommercePage({
   workspace,
   locale,
   mode,
+  initialOrderId,
+  initialBranchId,
 }: {
   workspace: Workspace;
   locale: Locale;
   mode: "orders" | "finance";
+  initialOrderId?: string;
+  initialBranchId?: string;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk),
     word = (key: string) => labels[key]?.[locale === "ru" ? 0 : 1] || key;
@@ -109,12 +113,14 @@ export function CommercePage({
     base = `organizations/${org.id}`,
     write = can(org.role, mode === "orders" ? "orders:write" : "finance:write"),
     cost = can(org.role, "inventory:cost");
-  const [branch, setBranch] = useState(workspace.branches[0]?.id || ""),
+  const [branch, setBranch] = useState(
+      initialBranchId || workspace.branches[0]?.id || "",
+    ),
     [revision, setRevision] = useState(0),
     [page, setPage] = useState(1),
     [query, setQuery] = useState("");
   const [orders, setOrders] = useState<OrdersView | null>(null),
-    [selected, setSelected] = useState(""),
+    [selected, setSelected] = useState(initialOrderId || ""),
     [detail, setDetail] = useState<OrderView | null>(null),
     [historyPage, setHistoryPage] = useState(1);
   const [accounts, setAccounts] = useState<Account[]>([]),

@@ -41,7 +41,9 @@ export type Permission =
   | "video:manage"
   | "marketing:read"
   | "marketing:write"
-  | "marketing:approve";
+  | "marketing:approve"
+  | "industry:read"
+  | "industry:write";
 const grants: Record<Role, readonly Permission[]> = {
   owner: [
     "organization:read",
@@ -84,6 +86,8 @@ const all: Role[] = [
 // T021–T030: execution, knowledge, automation, assistant and integration rights.
 // Situations and tools additionally require the permission of the underlying data.
 const execution: Partial<Record<Permission, readonly Role[]>> = {
+  "industry:read": ["owner", "manager"],
+  "industry:write": ["owner", "manager"],
   "tasks:read": all,
   "tasks:write": ["owner", "manager", "sales", "purchasing", "finance"],
   "tasks:manage": ["owner", "manager"],

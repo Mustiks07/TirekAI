@@ -197,3 +197,25 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Публичные маршруты: `POST /api/integrations/bitrix24/:connection/:token`, `POST /api/integrations/telegram/:connection/:token` (заголовок `X-Telegram-Bot-Api-Secret-Token`), API устройства видео `/api/video/{config,runs,heartbeat,events,end}` (`Authorization: Device <token>`, `X-Source-Id`).
 
 Новые ошибки (тексты RU/KK — `src/lib/execution-i18n.ts`): 409 MARGIN_BELOW_THRESHOLD, MARGIN_UNKNOWN, CAMPAIGN_NOT_APPROVED, OFFER_CHANGED, CAMPAIGN_INVALID, PRODUCT_NOT_LINKED, TOTAL_MISMATCH, LINE_TOTAL_MISMATCH, CHANNEL_WRITES_OFF, ACCEPT_ALREADY_SENT, SETTLEMENT_DUPLICATE, RETURN_GOODS_FIRST, MESSAGING_DISABLED, NO_CONSENT; 403 OVERRIDE_FORBIDDEN, SELF_APPROVAL; 422 SETTLEMENT_ARITHMETIC, OVERRIDE_REASON, IMAGE_TYPE.
+
+## T041–T045: отраслевые операции (миграция 21)
+
+Все пути ниже относительно `/api/v1/organizations/:id`; owner/manager, область организации и филиала проверяется сервером. GET требует industry:read, POST industry:write. Вход — строгий discriminated union `src/domain/industry.ts`, выход проверяется Zod в execution routes.
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| GET | industry?branchId&kind | Последние 200 документов и партий доступного филиала, профиль/timezone |
+| GET | industry/:id | Документ, последние 100 версий истории и до 200 партий филиала |
+| POST | industry/commands | Одна транзакционная бизнес-операция; ответ {id,reused} |
+
+Создание: `key` UUID + `branchId`. Изменение: `key` + `id` + `version` + основание `note`. Рецептура при редактировании содержит оба набора. Повтор ключа проверяет актуальные права; изменение тела с тем же ключом отклоняется. lot_receipt возвращает ID складского движения, прочие команды — ID документа.
+
+- Рецептуры/производство: recipe (mode, outputItemId, outputQuantity, ingredients с lossPercent, stages); lot_receipt (warehouseId,itemId,quantity,unit,unitCost,lotCode,expiresOn); production_plan (recipeId,warehouseId,quantity,salesOrderId?,equipmentId?,startsAt?,endsAt?); production_issue (materials); production_stage (stage,defects,reworked); production_finish (goodQuantity,scrapQuantity,lotCode,expiresOn); waste (warehouseId,itemId,lotId,quantity).
+- Ресурс: resource (resourceKind,capacity,bufferMinutes,days 1–7,opens,closes). capacity — число параллельных бронирований; specialist/teacher/workplace = 1. Слот содержит startsAt/endsAt ISO с offset и массив resources. UI переводит местное время timezone организации в UTC и отклоняет неоднозначность/пропуск DST.
+- Услуги: appointment (slot,customerId,inquiryId?,serviceItemId,price,warehouseId,materials); reschedule (slot); appointment_end (completed/cancelled/no_show); reminder (connectionId,text). Последнее создаёт очередь, не подтверждает доставку.
+- Обучение: course (serviceItemId,warehouseId,lessonPrice,lessons); group (courseId,capacity); enroll (groupId,customerId,guardianId,inquiryId?,endsOn); enrollment_change (action freeze/resume/extend/withdraw,until,additionalLessons); lesson (groupId,slot); lesson_complete (attendance[{enrollmentId,present}]). Дополнительные занятия допустимы только при продлении.
+- Проекты: project (quoteId,warehouseId,budget,estimatedHours?,team,stages); project_task (title,memberId,stage); time (memberId,stage,hours,hourlyRate,workedOn); scope_change (budget,extraPrice,description); scope_approve; project_stage (stage); project_deliver. Согласование изменения другим owner/manager, привязано к версии.
+
+Складские receipt/count и строки фактической приёмки закупки дополнены необязательным `lot:{code,expiresOn}`. Для товара с партиями новая положительная операция требует партии. issue дополнен lotId (для явного выбора). Стоимость по-прежнему средневзвешенная SKU/склад; FEFO используется только для физического выбора партий. Возврат восстанавливает исходное распределение, перемещение сохраняет родительскую партию/срок. Обычная выдача просроченного товара запрещена. Списание просрочки — только industry waste с основанием. Независимый складской возврат связанного производственного расхода запрещён.
+
+Ключевые ошибки: VERSION_CONFLICT, RESOURCE_CONFLICT, OUTSIDE_WORKING_HOURS, GROUP_FULL, ATTENDANCE_INCOMPLETE, COURSE_LIMIT, BUDGET_EXCEEDED, SECOND_PERSON_REQUIRED, PROJECT_TASKS_OPEN, STAGES_REQUIRED, OUTPUT_MISMATCH, LOT_AVAILABLE_EXCEEDED, LOT_REQUIRED, LOT_OPENING_REQUIRED, PROFILE_NOT_SUPPORTED. Тексты отраслевой формы RU/KK — industry-i18n.ts.

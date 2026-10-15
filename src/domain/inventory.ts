@@ -67,13 +67,25 @@ const commandBase = {
 const withQty = { ...commandBase, quantity: positive, unit };
 export const stockCommand = z.discriminatedUnion("kind", [
   z
-    .object({ ...withQty, kind: z.literal("receipt"), unitCost: decimalInput })
+    .object({
+      ...withQty,
+      kind: z.literal("receipt"),
+      unitCost: decimalInput,
+      lot: z
+        .object({
+          code: z.string().trim().min(2).max(120),
+          expiresOn: z.iso.date().nullable(),
+        })
+        .strict()
+        .optional(),
+    })
     .strict(),
   z
     .object({
       ...withQty,
       kind: z.literal("issue"),
       reservationId: z.uuid().optional(),
+      lotId: z.uuid().optional(),
     })
     .strict(),
   z.object({ ...withQty, kind: z.literal("reserve") }).strict(),
@@ -106,6 +118,13 @@ export const stockCommand = z.discriminatedUnion("kind", [
       unit,
       version: z.number().int().nonnegative(),
       unitCost: decimalInput.optional(),
+      lot: z
+        .object({
+          code: z.string().trim().min(2).max(120),
+          expiresOn: z.iso.date().nullable(),
+        })
+        .strict()
+        .optional(),
     })
     .strict(),
   z

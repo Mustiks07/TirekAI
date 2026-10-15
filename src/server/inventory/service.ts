@@ -20,6 +20,7 @@ import {
 } from "../../domain/inventory";
 import { pagination, pageQuery } from "../../domain/import-contracts";
 import { lineAmount } from "../../domain/decimal";
+import { applyLots, type LotContext } from "./lots";
 const D = Decimal.clone({ precision: 80, rounding: Decimal.ROUND_HALF_UP });
 type Scope = Awaited<ReturnType<typeof sessionAccess>>;
 type Balance = {
@@ -123,7 +124,7 @@ export class InventoryService {
         unitsChanged &&
         (
           await tx.query(
-            "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM supplier_offers WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT quote_id id FROM quote_items WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
+            "SELECT id FROM stock_commands WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM sales_order_lines WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT id FROM supplier_offers WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT quote_id id FROM quote_items WHERE organization_id=$1 AND item_id=$2 UNION ALL SELECT document_id id FROM industry_item_links WHERE organization_id=$1 AND item_id=$2 LIMIT 1",
             [org, id],
           )
         ).length
@@ -322,6 +323,7 @@ export class InventoryService {
     input: unknown,
     linkedOrderId?: string,
     receiptValueMinor?: bigint,
+    lotContext?: LotContext,
   ) {
     const c = stockCommand.parse(input);
     const permission: Permission = [
@@ -341,11 +343,13 @@ export class InventoryService {
       throw new AppError("INVALID_INPUT", 422);
     const hash = createHash("sha256")
       .update(
-        JSON.stringify(
-          receiptValueMinor === undefined
-            ? c
-            : { ...c, receiptValueMinor: receiptValueMinor.toString() },
-        ),
+        JSON.stringify({
+          ...c,
+          ...(receiptValueMinor === undefined
+            ? {}
+            : { receiptValueMinor: receiptValueMinor.toString() }),
+          ...(lotContext ? { industry: lotContext } : {}),
+        }),
       )
       .digest("hex");
     {
@@ -358,6 +362,12 @@ export class InventoryService {
             ? c.movementId
             : undefined;
       if (source) {
+        const [operation] = await tx.query<{ document_id: string }>(
+          "SELECT document_id FROM industry_stock_links WHERE organization_id=$1 AND movement_id=$2",
+          [org, source],
+        );
+        if (operation && operation.document_id !== lotContext?.documentId)
+          throw new AppError("INDUSTRY_OPERATION_REQUIRED", 409);
         const [link] = await tx.query<{ order_id: string }>(
           "SELECT order_id FROM order_stock_links WHERE organization_id=$1 AND object_id=$2",
           [org, source],
@@ -599,6 +609,12 @@ export class InventoryService {
             ["dispatch", "receive"].includes(c.kind) ? resultId : null,
           ],
         );
+        await applyLots(tx, org, movementId, c, qty, b.quantity, lotContext);
+        if (lotContext)
+          await tx.query(
+            "INSERT INTO industry_stock_links(organization_id,movement_id,document_id) VALUES($1,$2,$3)",
+            [org, movementId, lotContext.documentId],
+          );
       }
       const result = { id: resultId, kind: c.kind };
       await tx.query(

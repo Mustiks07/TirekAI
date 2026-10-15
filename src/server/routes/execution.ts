@@ -53,6 +53,8 @@ import {
   workloadView,
 } from "../../domain/tasks";
 import { z } from "zod";
+import { IndustryService } from "../industry/service";
+import { industryView, industryDetail } from "../../domain/industry";
 
 export type RouteContext = {
   db: Database;
@@ -85,6 +87,24 @@ const marketing = (c: RouteContext) => new MarketingService(c.db);
 const trade = (c: RouteContext) => new KaspiTradeService(c.db);
 // Organization-scoped routes for T021–T030. Paths are relative to organizations/:id.
 export const executionRoutes: Route[] = [
+  {
+    method: "GET",
+    path: "industry",
+    schema: industryView,
+    run: (c) => new IndustryService(c.db).list(c.secret, c.org, c.query),
+  },
+  {
+    method: "GET",
+    path: "industry/:id",
+    schema: industryDetail,
+    run: (c) => new IndustryService(c.db).detail(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "industry/commands",
+    schema: commerceResult,
+    run: (c) => new IndustryService(c.db).command(c.secret, c.org, c.body),
+  },
   {
     method: "GET",
     path: "tasks",

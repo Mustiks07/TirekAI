@@ -1376,6 +1376,7 @@ export class PurchasingService {
               quantity: l.quantity,
               unit: p.base_unit,
               unitCost: "0",
+              lot: l.lot,
               note: c.note,
             },
             undefined,

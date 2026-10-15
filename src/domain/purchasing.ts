@@ -201,7 +201,21 @@ export const receiptInput = z
     version: z.number().int().positive(),
     note,
     lines: z
-      .array(z.object({ lineId: z.uuid(), quantity: positive }).strict())
+      .array(
+        z
+          .object({
+            lineId: z.uuid(),
+            quantity: positive,
+            lot: z
+              .object({
+                code: z.string().trim().min(2).max(120),
+                expiresOn: z.iso.date().nullable(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict(),
+      )
       .min(1)
       .max(100),
   })
