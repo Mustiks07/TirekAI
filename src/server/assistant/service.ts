@@ -34,7 +34,7 @@ import {
 } from "./tools";
 import { speechStatus, configuredSpeech, type SpeechProvider } from "./speech";
 
-const MAX_ITERATIONS = 6;
+export const MAX_ITERATIONS = 6;
 const DEFAULT_SETTINGS = {
   version: 0,
   enabled: true,

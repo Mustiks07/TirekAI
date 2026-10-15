@@ -9,6 +9,7 @@ import {
 import { Platform } from "../src/server/platform";
 import { InventoryService } from "../src/server/inventory/service";
 import { KaspiService } from "../src/server/integrations/kaspi-service";
+import { liveIntegrationReport } from "../src/server/ops/live-report";
 import { KASPI_TOKEN, kaspiServer, type KOrder } from "./helpers/kaspi-server";
 
 // Local server with the shapes from the Kaspi partner guide (JSON:API, X-Auth-Token, page[number]
@@ -197,4 +198,50 @@ it("T034: a revoked token degrades the connection with a visible error", async (
     [connection],
   );
   expect(c.status).toBe("degraded");
+});
+it("T055: the live acceptance report never counts a contract stand-in as live and carries no credentials", async () => {
+  // Replacing credentials resets the verification: re-check against the stand-in first.
+  let report = await db.transaction((tx) => liveIntegrationReport(tx, org));
+  expect(
+    report.connections.find((c) => c.id === connection)?.checkedAgainst,
+  ).toBe("not_checked");
+  state.failOnce.rate = false;
+  await svc.configure(owner, org, {
+    key: key(),
+    token: KASPI_TOKEN,
+    branchId: branch,
+    warehouseId: warehouse,
+  });
+  await svc.check(owner, org, connection);
+  await svc.syncNow(owner, org, connection);
+  report = await db.transaction((tx) => liveIntegrationReport(tx, org));
+  const kaspi = report.connections.find((c) => c.id === connection)!;
+  expect(kaspi.checkedAgainst).toBe("contract_server");
+  expect(kaspi.protocol).toEqual({
+    connectionCheck: false,
+    read: false,
+    mapping: false,
+    controlledWrite: false,
+    resync: false,
+    disconnect: false,
+  });
+  expect(Object.keys(kaspi.runs).some((k) => k.startsWith("initial:"))).toBe(
+    true,
+  );
+  expect(JSON.stringify(report)).not.toContain(KASPI_TOKEN);
+  // Protocol logic for an official-host check (fixture flag only; no live call is made here).
+  await db.query(
+    "UPDATE integration_connections SET verification=jsonb_set(verification,'{scope}','\"connection_only\"') WHERE id=$1",
+    [connection],
+  );
+  const flagged = (
+    await db.transaction((tx) => liveIntegrationReport(tx, org))
+  ).connections.find((c) => c.id === connection)!;
+  expect(flagged.checkedAgainst).toBe("official_host");
+  expect(flagged.protocol).toMatchObject({
+    connectionCheck: true,
+    read: true,
+    resync: true,
+    disconnect: false,
+  });
 });

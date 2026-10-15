@@ -87,6 +87,7 @@ export async function processVideo(o: {
   aggregateSeconds?: number;
   onEvents: (events: VideoEvent[]) => Promise<void>;
   onHeartbeat?: (h: Heartbeat) => Promise<void>;
+  onFirstFrame?: () => void;
   signal?: AbortSignal;
   ffmpeg?: string;
 }): Promise<RunSummary> {
@@ -152,6 +153,7 @@ export async function processVideo(o: {
   const step = (frame: Uint8Array) => {
     const started = performance.now(),
       i = frames++;
+    if (i === 0) o.onFirstFrame?.();
     const q = frameQuality(frame, prev);
     prev = frame;
     if (q.unusable || (q.frozen && o.live)) {

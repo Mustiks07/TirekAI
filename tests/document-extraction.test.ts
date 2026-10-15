@@ -49,3 +49,34 @@ it("rejects executables, malformed PDF, huge image dimensions and invalid UTF-8"
     extractDocument("file.csv", Buffer.from([0xff, 0xfe])),
   ).rejects.toMatchObject({ code: "INVALID_ENCODING" });
 }, 30000);
+it("T056: the OCR acceptance score finds fields and line triplets in a real recognition", async () => {
+  const { scoreExtraction } = await import("../src/server/ops/ocr-check");
+  const canvas = createCanvas(1200, 360),
+    ctx = canvas.getContext("2d");
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, 1200, 360);
+  ctx.fillStyle = "black";
+  ctx.font = "44px FixtureNoto";
+  ctx.fillText("INVOICE 456", 40, 80);
+  ctx.fillText("PRODUCT   QTY   PRICE   TOTAL", 40, 160);
+  ctx.fillText("APPLE        12       10        120", 40, 240);
+  const e = await extractDocument("invoice.png", canvas.toBuffer("image/png"));
+  const score = scoreExtraction(e, {
+    documentNumber: "456",
+    total: "120",
+    lines: [{ quantity: "12", unitPrice: "10", total: "120" }],
+  });
+  expect(score).toMatchObject({
+    fieldsFound: 2,
+    fieldsTotal: 2,
+    linesMatched: 1,
+    lineRecall: 1,
+  });
+  // A wrong truth value is not "found".
+  expect(
+    scoreExtraction(e, {
+      total: "121",
+      lines: [{ quantity: "13", unitPrice: "10", total: "130" }],
+    }),
+  ).toMatchObject({ fieldsFound: 0, linesMatched: 0 });
+}, 90000);
