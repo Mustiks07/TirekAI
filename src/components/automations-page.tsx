@@ -55,6 +55,7 @@ const topics: Record<string, [string, string]> = {
   "proposal.execute": ["Предложение выполнено", "Ұсыныс орындалды"],
   "knowledge.published": ["Опубликована инструкция", "Нұсқаулық жарияланды"],
   "schedule.tick": ["По расписанию", "Кесте бойынша"],
+  "video.signal": ["Сигнал камеры", "Камера сигналы"],
 };
 export function AutomationsPage({
   workspace,

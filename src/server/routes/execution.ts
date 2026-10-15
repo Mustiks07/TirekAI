@@ -12,6 +12,7 @@ import { IntegrationService } from "../integrations/service";
 import { Bitrix24Service } from "../integrations/bitrix24-service";
 import { OneCService } from "../integrations/onec-service";
 import { BankService } from "../bank/service";
+import { VideoService } from "../video/service";
 import { TelegramService } from "../integrations/telegram-service";
 import { KaspiService } from "../integrations/kaspi-service";
 import {
@@ -582,6 +583,82 @@ export const executionRoutes: Route[] = [
     schema: commerceResult,
     run: (c) =>
       new IntegrationService(c.db).retryExport(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "GET",
+    path: "video/sources",
+    run: (c) => new VideoService(c.db).sources(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "video/sources",
+    schema: commerceResult,
+    run: (c) => new VideoService(c.db).createSource(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "video/sources/:id/token",
+    schema: z.object({ token: z.string() }),
+    run: (c) =>
+      new VideoService(c.db).issueDeviceToken(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "video/sources/:id/configs",
+    run: (c) => new VideoService(c.db).configs(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "video/sources/:id/configs",
+    schema: commerceResult,
+    run: (c) =>
+      new VideoService(c.db).saveConfig(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "video/sources/:id/stats",
+    run: (c) =>
+      new VideoService(c.db).stats(c.secret, c.org, c.params[0], c.query),
+  },
+  {
+    method: "GET",
+    path: "video/sources/:id/signals",
+    run: (c) => new VideoService(c.db).signals(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "video/sources/:id/runs",
+    run: (c) => new VideoService(c.db).runs(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "video/runs/:id/annotations",
+    schema: z.object({ id: z.uuid() }),
+    run: (c) =>
+      new VideoService(c.db).annotate(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "video/evaluations",
+    schema: commerceResult,
+    run: (c) => new VideoService(c.db).evaluate(c.secret, c.org, c.body),
+  },
+  {
+    method: "GET",
+    path: "video/detectors",
+    run: (c) => new VideoService(c.db).detectors(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "video/signals/:id/task",
+    schema: commerceResult,
+    run: (c) =>
+      new VideoService(c.db).taskFromSignal(
         c.secret,
         c.org,
         c.params[0],

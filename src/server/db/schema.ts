@@ -14,6 +14,7 @@ import { writebackMigration } from "./writeback-migration";
 import { connectorsMigration } from "./connectors-migration";
 import { bankMigration } from "./bank-migration";
 import { channelsMigration } from "./channels-migration";
+import { videoMigration } from "./video-migration";
 export const migrations = [
   {
     version: 1,
@@ -79,4 +80,5 @@ CREATE TABLE auth_limits (
   connectorsMigration,
   bankMigration,
   channelsMigration,
+  videoMigration,
 ];

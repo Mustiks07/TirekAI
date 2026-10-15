@@ -35,7 +35,13 @@ export type Permission =
   | "assistant:use"
   | "assistant:configure"
   | "integrations:read"
-  | "integrations:write";
+  | "integrations:write"
+  | "video:read"
+  | "video:write"
+  | "video:manage"
+  | "marketing:read"
+  | "marketing:write"
+  | "marketing:approve";
 const grants: Record<Role, readonly Permission[]> = {
   owner: [
     "organization:read",
@@ -92,6 +98,15 @@ const execution: Partial<Record<Permission, readonly Role[]>> = {
   "assistant:configure": ["owner"],
   "integrations:read": ["owner", "manager"],
   "integrations:write": ["owner"],
+  // T035–T038: camera signals are operational data; device tokens and raw-storage settings
+  // belong to the owner.
+  "video:read": ["owner", "manager"],
+  "video:write": ["owner", "manager"],
+  "video:manage": ["owner"],
+  // T039: materials are prepared by sales/managers; a campaign is approved by owner/manager.
+  "marketing:read": ["owner", "manager", "sales", "finance"],
+  "marketing:write": ["owner", "manager", "sales"],
+  "marketing:approve": ["owner", "manager"],
 };
 export function can(role: Role, permission: Permission) {
   const scoped = execution[permission];

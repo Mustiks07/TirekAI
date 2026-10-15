@@ -16,6 +16,8 @@ import {
   ListChecks,
   Plug,
   Workflow,
+  Camera,
+  Megaphone,
   ArrowRight,
   ArrowUpRight,
   Building2,
@@ -68,6 +70,7 @@ import { AutomationsPage } from "./automations-page";
 import { AssistantPage } from "./assistant-page";
 import { IntegrationsPage } from "./integrations-page";
 import { BankStatements } from "./bank-statements";
+import { VideoPage } from "./video-page";
 import { can } from "@/domain/permissions";
 
 type Page =
@@ -85,7 +88,9 @@ type Page =
   | "knowledge"
   | "automations"
   | "assistant"
-  | "integrations";
+  | "integrations"
+  | "video"
+  | "marketing";
 type Modal = "invite" | "newOrg" | "branch" | null;
 const field = (form: FormData, name: string) => String(form.get(name) || "");
 const branchName = (name: string, locale: Locale) =>
@@ -1115,6 +1120,8 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               { id: "automations", Icon: Workflow },
               { id: "assistant", Icon: Bot },
               { id: "integrations", Icon: Plug },
+              { id: "video", Icon: Camera },
+              { id: "marketing", Icon: Megaphone },
               { id: "team", Icon: Users },
               { id: "organization", Icon: Building2 },
               { id: "activity", Icon: History },
@@ -1124,9 +1131,13 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             .filter((item) => {
               const r = workspace?.organization.role;
               if (!r)
-                return !["approvals", "automations", "integrations"].includes(
-                  item.id,
-                );
+                return ![
+                  "approvals",
+                  "automations",
+                  "integrations",
+                  "video",
+                  "marketing",
+                ].includes(item.id);
               if (item.id === "approvals")
                 return (
                   can(r, "proposals:write") || can(r, "purchasing:approve")
@@ -1134,6 +1145,8 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               if (item.id === "automations") return can(r, "automations:read");
               if (item.id === "integrations")
                 return can(r, "integrations:read");
+              if (item.id === "video") return can(r, "video:read");
+              if (item.id === "marketing") return can(r, "marketing:read");
               return true;
             })
             .filter(
@@ -1259,21 +1272,25 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                             ? t.assistantNote
                             : page === "integrations"
                               ? t.integrationsNote
-                              : page === "team"
-                                ? t.teamNote
-                                : page === "customers"
-                                  ? t.customersNote
-                                  : page === "orders"
-                                    ? t.ordersNote
-                                    : page === "purchasing"
-                                      ? t.purchasingNote
-                                      : page === "finance"
-                                        ? t.financeNote
-                                        : page === "inventory"
-                                          ? t.inventoryNote
-                                          : page === "organization"
-                                            ? t.orgNote
-                                            : t.activityNote}
+                              : page === "video"
+                                ? t.videoNote
+                                : page === "marketing"
+                                  ? t.marketingNote
+                                  : page === "team"
+                                    ? t.teamNote
+                                    : page === "customers"
+                                      ? t.customersNote
+                                      : page === "orders"
+                                        ? t.ordersNote
+                                        : page === "purchasing"
+                                          ? t.purchasingNote
+                                          : page === "finance"
+                                            ? t.financeNote
+                                            : page === "inventory"
+                                              ? t.inventoryNote
+                                              : page === "organization"
+                                                ? t.orgNote
+                                                : t.activityNote}
               </p>
             </div>
             {page === "today" ? (
@@ -1406,6 +1423,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                   locale={locale}
                 />
               )}
+              {page === "video" &&
+                can(workspace.organization.role, "video:read") && (
+                  <VideoPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                  />
+                )}
               {page === "integrations" &&
                 can(workspace.organization.role, "integrations:read") && (
                   <IntegrationsPage

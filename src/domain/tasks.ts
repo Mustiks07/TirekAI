@@ -30,6 +30,7 @@ export const linkTypes = [
   "insight",
   "proposal",
   "knowledge",
+  "video_event",
 ] as const;
 export const entityLink = z
   .object({ type: z.enum(linkTypes), id: z.uuid() })

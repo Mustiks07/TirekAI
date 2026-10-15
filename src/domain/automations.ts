@@ -18,6 +18,7 @@ export const automationTopics = [
   "proposal.execute",
   "knowledge.published",
   "schedule.tick",
+  "video.signal",
 ] as const;
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const condition = z

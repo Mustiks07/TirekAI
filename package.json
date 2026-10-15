@@ -16,7 +16,9 @@
     "db:seed": "tsx scripts/seed.ts",
     "worker": "tsx --env-file-if-exists=.env.local scripts/worker.ts",
     "format": "prettier --write src tests scripts *.ts *.mjs",
-    "eval:assistant": "tsx --env-file-if-exists=.env.local scripts/assistant-eval.ts"
+    "eval:assistant": "tsx --env-file-if-exists=.env.local scripts/assistant-eval.ts",
+    "eval:video": "tsx scripts/video-eval.ts",
+    "video:processor": "tsx scripts/video-processor.ts"
   },
   "engines": {
     "node": ">=22.20.0"

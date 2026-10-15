@@ -1,0 +1,142 @@
+{
+  "checked": "2026-10-15",
+  "processor": "taraz-cv@1.0.0",
+  "hardware": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "cores": 4,
+    "platform": "linux x64"
+  },
+  "note": "Rendered synthetic clips with renderer ground truth; not a substitute for permitted real recordings.",
+  "clips": [
+    {
+      "clip": "lab-single",
+      "scenario": "single",
+      "truthCrossings": 40,
+      "detectedCrossings": 39,
+      "matched": 39,
+      "countError": 0.025,
+      "precision": 1,
+      "recall": 0.975,
+      "truthQueues": 0,
+      "detectedQueues": 0,
+      "queueMatched": 0,
+      "run": {
+        "frames": 2600,
+        "unusable": 0,
+        "fps": 268.5712253527312,
+        "latencyMs": 3.7234070726923116,
+        "ended": "end_of_stream"
+      }
+    },
+    {
+      "clip": "lab-opposing",
+      "scenario": "opposing",
+      "truthCrossings": 40,
+      "detectedCrossings": 40,
+      "matched": 40,
+      "countError": 0,
+      "precision": 1,
+      "recall": 1,
+      "truthQueues": 0,
+      "detectedQueues": 0,
+      "queueMatched": 0,
+      "run": {
+        "frames": 2000,
+        "unusable": 0,
+        "fps": 261.956012837753,
+        "latencyMs": 3.817434802000011,
+        "ended": "end_of_stream"
+      }
+    },
+    {
+      "clip": "lab-overlap",
+      "scenario": "overlap",
+      "truthCrossings": 32,
+      "detectedCrossings": 30,
+      "matched": 30,
+      "countError": 0.0625,
+      "precision": 1,
+      "recall": 0.9375,
+      "truthQueues": 0,
+      "detectedQueues": 0,
+      "queueMatched": 0,
+      "run": {
+        "frames": 2200,
+        "unusable": 0,
+        "fps": 282.2551638580265,
+        "latencyMs": 3.54289355181823,
+        "ended": "end_of_stream"
+      }
+    },
+    {
+      "clip": "lab-queue",
+      "scenario": "queue",
+      "truthCrossings": 0,
+      "detectedCrossings": 0,
+      "matched": 0,
+      "countError": 0,
+      "precision": 1,
+      "recall": 1,
+      "truthQueues": 2,
+      "detectedQueues": 2,
+      "queueMatched": 2,
+      "run": {
+        "frames": 1800,
+        "unusable": 0,
+        "fps": 281.97091203485695,
+        "latencyMs": 3.546465104444465,
+        "ended": "end_of_stream"
+      }
+    }
+  ],
+  "evaluations": [
+    {
+      "detector": "line_crossing",
+      "dataset": {
+        "name": "taraz-lab-synthetic-v1",
+        "kind": "synthetic_lab",
+        "clips": 4,
+        "crossings": 112
+      },
+      "thresholds": {
+        "maxCountError": 0.1,
+        "minClips": 3,
+        "minCrossings": 100,
+        "minQueueF1": 0.85
+      },
+      "metrics": {
+        "maxCountError": 0.0625,
+        "queueF1": null,
+        "meanFps": 273.6883285208419,
+        "meanLatencyMs": 3.6575501327387543
+      },
+      "passed": true,
+      "status": "experimental",
+      "reason": "thresholds_met_on_synthetic_only"
+    },
+    {
+      "detector": "queue",
+      "dataset": {
+        "name": "taraz-lab-synthetic-v1",
+        "kind": "synthetic_lab",
+        "clips": 4,
+        "crossings": 112
+      },
+      "thresholds": {
+        "maxCountError": 0.1,
+        "minClips": 3,
+        "minCrossings": 100,
+        "minQueueF1": 0.85
+      },
+      "metrics": {
+        "maxCountError": null,
+        "queueF1": 1,
+        "meanFps": 273.6883285208419,
+        "meanLatencyMs": 3.6575501327387543
+      },
+      "passed": true,
+      "status": "experimental",
+      "reason": "thresholds_met_on_synthetic_only"
+    }
+  ]
+}

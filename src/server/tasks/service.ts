@@ -72,6 +72,8 @@ export async function linkState(
       "SELECT state FROM action_proposals WHERE organization_id=$1 AND id=$2 AND (branch_id IS NULL OR branch_id=$3)",
     knowledge:
       "SELECT state FROM knowledge_documents WHERE organization_id=$1 AND id=$2 AND (branch_id IS NULL OR branch_id=$3)",
+    video_event:
+      "SELECT e.kind state FROM video_events e JOIN video_sources s ON s.organization_id=e.organization_id AND s.id=e.source_id WHERE e.organization_id=$1 AND e.id=$2 AND s.branch_id=$3",
   };
   const [row] = await tx.query<{ state: string }>(sql[link.type], [
     org,
