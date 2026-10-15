@@ -1001,6 +1001,20 @@ export class IntegrationService {
       try {
         if (!supplySettings(conn.settings).enabled)
           throw new AppError("WRITEBACK_DISABLED", 409);
+        await this.db.transaction(async (tx) => {
+          const [scope] = await tx.query<{ branch_id: string }>(
+            "SELECT w.branch_id FROM integration_exports e JOIN warehouses w ON w.organization_id=e.organization_id AND w.id=e.warehouse_id WHERE e.id=$1",
+            [x.id],
+          );
+          if (!scope) throw new AppError("NOT_FOUND", 404);
+          await actorAccess(
+            tx,
+            x.created_by,
+            x.organization_id,
+            "purchasing:write",
+            scope.branch_id,
+          );
+        });
         const r = await this.run(conn, "export", async (client, stats) => {
           const code = externalCode(x.id);
           let supply = await client.supplyByExternalCode(code);
@@ -1062,6 +1076,7 @@ export class IntegrationService {
           error instanceof AppError ? error.code : "INTEGRATION_FAILED";
         // Request/config errors will not fix themselves; transient ones back off up to 8 tries.
         const permanent = [
+          "FORBIDDEN",
           "MOYSKLAD_REQUEST_REJECTED",
           "MOYSKLAD_REQUEST_INVALID",
           "MOYSKLAD_NOT_FOUND",

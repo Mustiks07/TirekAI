@@ -21,11 +21,8 @@ import {
   sourceInput,
 } from "../../domain/video";
 import { judge, scoreClip, type ClipResult } from "./evaluate";
-import {
-  DETECTOR_VERSIONS,
-  type RunSummary,
-  type VideoEvent,
-} from "./processor";
+import { DETECTOR_VERSIONS } from "./versions";
+import type { RunSummary, VideoEvent } from "./processor";
 import lab from "./lab-evaluation.json";
 
 const sha = (v: string) => createHash("sha256").update(v).digest("hex");

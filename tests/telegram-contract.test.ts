@@ -1,4 +1,5 @@
-import { beforeAll, afterAll, it, expect } from "vitest";
+import { beforeAll, afterAll, it, expect, vi } from "vitest";
+import { actorFromSession } from "../src/server/access";
 import { randomUUID, randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import {
@@ -363,6 +364,66 @@ it("T034: nothing is sent until the owner enables outbound and the customer cons
     { text: "Третье", state: "failed", error_code: "TELEGRAM_BLOCKED_BY_USER" },
   ]);
 });
+it("T034 review: revoked sender rights block queued delivery and a lost local confirmation never resends", async () => {
+  const actor = await actorFromSession(db, seller);
+  const denied = await svc.send(seller, org, connection, {
+    key: key(),
+    customerId: customer,
+    text: "Revoked sender",
+  });
+  await db.query(
+    "UPDATE memberships SET role='observer' WHERE organization_id=$1 AND user_id=$2",
+    [org, actor],
+  );
+  const before = state.calls.filter((x) => x.method === "sendMessage").length;
+  await svc.processOutbox();
+  expect(state.calls.filter((x) => x.method === "sendMessage")).toHaveLength(
+    before,
+  );
+  expect(
+    (
+      await db.query(
+        "SELECT state,error_code FROM messaging_messages WHERE id=$1",
+        [denied.id],
+      )
+    )[0],
+  ).toMatchObject({ state: "blocked", error_code: "AUTHOR_ACCESS_REVOKED" });
+  await db.query(
+    "UPDATE memberships SET role='sales' WHERE organization_id=$1 AND user_id=$2",
+    [org, actor],
+  );
+  const uncertain = await svc.send(seller, org, connection, {
+    key: key(),
+    customerId: customer,
+    text: "Lost confirmation",
+  });
+  const original = db.query.bind(db);
+  const spy = vi.spyOn(db, "query").mockImplementation(async (sql, params) => {
+    if (sql.includes("SET state='sent'"))
+      throw new Error("synthetic local commit failure");
+    return original(sql, params);
+  });
+  try {
+    await svc.processOutbox();
+  } finally {
+    spy.mockRestore();
+  }
+  expect(
+    (
+      await db.query("SELECT state FROM messaging_messages WHERE id=$1", [
+        uncertain.id,
+      ])
+    )[0],
+  ).toMatchObject({ state: "unknown" });
+  await db.query(
+    "UPDATE messaging_messages SET next_attempt_at=now() WHERE id=$1",
+    [uncertain.id],
+  );
+  expect(await svc.processOutbox()).toBe(0);
+  expect(state.calls.filter((x) => x.method === "sendMessage")).toHaveLength(
+    before + 1,
+  );
+});
 it("T034: /stop withdraws consent; queued messages are blocked at send time and new ones are refused", async () => {
   await svc.send(seller, org, connection, {
     key: key(),
@@ -389,5 +450,13 @@ it("T034: /stop withdraws consent; queued messages are blocked at send time and 
     }),
   ).rejects.toMatchObject({
     code: "MESSENGER_NOT_LINKED",
+  });
+});
+it("T029 review: reconfiguration replay returns the existing connection ID", async () => {
+  const input = { key: key(), botToken: TOKEN, branchId: branch };
+  expect((await svc.configure(owner, org, input)).id).toBe(connection);
+  expect(await svc.configure(owner, org, input)).toMatchObject({
+    id: connection,
+    reused: true,
   });
 });

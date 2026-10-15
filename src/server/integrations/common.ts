@@ -62,6 +62,7 @@ export async function saveConnection(
     key: string;
     provider: Provider;
     credentials: Record<string, unknown>;
+    requestCredentials?: Record<string, unknown>;
     hint: string;
     settings: Record<string, unknown>;
     ownership: Record<string, string>;
@@ -72,12 +73,18 @@ export async function saveConnection(
   const r = await idempotent(tx, input.org, input.key, {
     operation: "integration.configure",
     provider: input.provider,
-    credentials: sha(JSON.stringify(input.credentials)),
+    credentials: sha(
+      JSON.stringify(input.requestCredentials ?? input.credentials),
+    ),
     settings: input.settings,
   });
   if (r.reused) return { id: r.id, reused: true, webhookToken: null };
   const sealed = seal(JSON.stringify(input.credentials)),
     webhookToken = input.inbound ? randomBytes(32).toString("hex") : null;
+  // Serialize first configuration too: no connection row exists to lock yet.
+  await tx.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE", [
+    input.org,
+  ]);
   const [existing] = await tx.query<{ id: string }>(
     "SELECT id FROM integration_connections WHERE organization_id=$1 AND provider=$2 AND disconnected_at IS NULL FOR UPDATE",
     [input.org, input.provider],
@@ -111,6 +118,10 @@ export async function saveConnection(
         JSON.stringify(input.settings),
       ],
     );
+  await tx.query(
+    "UPDATE execution_commands SET result_id=$3 WHERE organization_id=$1 AND request_key=$2",
+    [input.org, input.key, id],
+  );
   await audit(tx, input.org, input.actorId, "integration.configured", null, {
     connectionId: id,
     provider: input.provider,

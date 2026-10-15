@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { AppError } from "../../domain/errors";
 import type { Fetch } from "./moysklad";
+import { publicAddress, publicHttps } from "./public-https";
 
 // 1C:Enterprise standard OData interface (T032). Contract checked 2026-10-15 against the official
 // 1C:Enterprise 8.3.27 Developer Guide, §17.4 (kb.1ci.com): <infobase>/odata/standard.odata/,
@@ -42,14 +43,7 @@ export function validSettings(s: OneCSettings) {
   );
 }
 function privateAddress(ip: string) {
-  return (
-    /^(10\.|127\.|0\.|169\.254\.|192\.168\.)/.test(ip) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
-    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip) ||
-    ip === "::1" ||
-    /^(fc|fd|fe80)/i.test(ip) ||
-    /^::ffff:(10\.|127\.|192\.168\.)/i.test(ip)
-  );
+  return !publicAddress(ip);
 }
 // HTTPS publication on a public host only: the server must not be turned into a proxy into
 // the owner's or our private network.
@@ -63,7 +57,9 @@ export function validInfobaseUrl(url: string) {
       !u.search &&
       !u.hash &&
       u.hostname !== "localhost" &&
-      !(isIP(u.hostname) && privateAddress(u.hostname)) &&
+      !(
+        isIP(u.hostname.replace(/^\[|\]$/g, "")) && privateAddress(u.hostname)
+      ) &&
       /^[\w./%-]*$/.test(u.pathname)
     );
   } catch {
@@ -80,7 +76,7 @@ export class OneCClient {
     infobase: string,
     private user: string,
     private password: string,
-    private fetcher: Fetch = fetch,
+    private fetcher: Fetch = publicHttps,
     private sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)),
     private resolveCheck: (host: string) => Promise<boolean> = publicHost,
   ) {

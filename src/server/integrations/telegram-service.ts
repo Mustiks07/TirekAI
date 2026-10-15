@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Database, Sql } from "../db/database";
 import {
   sessionAccess,
+  actorAccess,
   audit,
   InternalActor,
   type Credential,
@@ -102,6 +103,7 @@ export class TelegramService {
         actorId: s.actorId,
         key: c.key,
         provider: "telegram",
+        requestCredentials: { botToken: c.botToken },
         credentials: {
           botToken: c.botToken,
           headerSecret: randomBytes(32).toString("base64url"),
@@ -452,14 +454,16 @@ export class TelegramService {
       customer_id: string;
       text: string;
       attempts: number;
+      created_by: string | null;
+      publication_id: string | null;
     }>(
-      "SELECT id,organization_id,connection_id,chat_id,customer_id,text,attempts FROM messaging_messages WHERE direction='out' AND state='queued' AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT $1",
+      "SELECT id,organization_id,connection_id,chat_id,customer_id,text,attempts,created_by,publication_id FROM messaging_messages WHERE direction='out' AND state='queued' AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT $1",
       [limit],
     );
     let sent = 0;
     for (const m of due) {
       const claimed = await this.db.query(
-        "UPDATE messaging_messages SET attempts=attempts+1,next_attempt_at=now()+interval '5 minutes' WHERE id=$1 AND state='queued' AND attempts=$2 RETURNING id",
+        "UPDATE messaging_messages SET state='unknown',error_code='DELIVERY_UNCONFIRMED',attempts=attempts+1,next_attempt_at=now()+interval '5 minutes' WHERE id=$1 AND state='queued' AND attempts=$2 RETURNING id",
         [m.id, m.attempts],
       );
       if (!claimed.length) continue;
@@ -467,14 +471,33 @@ export class TelegramService {
         "SELECT * FROM integration_connections WHERE id=$1",
         [m.connection_id],
       );
-      const [ok] = await this.db.query<{ ok: boolean }>(
-        "SELECT ((c.consents->>'messenger')::boolean AND EXISTS(SELECT 1 FROM integration_mappings x WHERE x.connection_id=$2 AND x.entity_type='chat' AND x.external_id=$3 AND x.internal_id=c.id AND x.state='active')) ok FROM customers c WHERE c.organization_id=$1 AND c.id=$4",
+      const [ok] = await this.db.query<{ ok: boolean; branch_id: string }>(
+        "SELECT c.branch_id,((c.consents->>'messenger')::boolean AND EXISTS(SELECT 1 FROM integration_mappings x WHERE x.connection_id=$2 AND x.entity_type='chat' AND x.external_id=$3 AND x.internal_id=c.id AND x.state='active')) ok FROM customers c WHERE c.organization_id=$1 AND c.id=$4",
         [m.organization_id, m.connection_id, m.chat_id, m.customer_id],
       );
       if (!conn.settings.outbound || conn.disconnected_at || !ok?.ok) {
         await this.db.query(
           "UPDATE messaging_messages SET state='blocked',error_code=$2 WHERE id=$1",
           [m.id, !ok?.ok ? "NO_CONSENT" : "MESSAGING_DISABLED"],
+        );
+        continue;
+      }
+      try {
+        if (!m.created_by) throw new AppError("FORBIDDEN", 403);
+        await this.db.transaction((tx) =>
+          actorAccess(
+            tx,
+            m.created_by!,
+            m.organization_id,
+            m.publication_id ? "marketing:approve" : "customers:write",
+            ok.branch_id,
+          ),
+        );
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        await this.db.query(
+          "UPDATE messaging_messages SET state='blocked',error_code='AUTHOR_ACCESS_REVOKED' WHERE id=$1",
+          [m.id],
         );
         continue;
       }
@@ -495,7 +518,9 @@ export class TelegramService {
           error instanceof AppError ? error.code : "TELEGRAM_UNAVAILABLE";
         // A timeout may have delivered the message: it is not resent automatically.
         const state =
-          code === "TELEGRAM_TIMEOUT"
+          code === "TELEGRAM_TIMEOUT" ||
+          code === "TELEGRAM_UNAVAILABLE" ||
+          code === "INTEGRATION_FAILED"
             ? "unknown"
             : code === "TELEGRAM_RATE_LIMITED"
               ? "queued"

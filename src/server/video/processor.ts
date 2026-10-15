@@ -16,15 +16,8 @@ import {
 // T035–T038 processor. Runs as its own process (scripts/video-processor.ts), never inside a
 // browser tab or the web request path. ffmpeg decodes the source to small grayscale frames in
 // memory; no frame is written to disk and only aggregated events leave the process.
-export const PROCESSOR_VERSION = "taraz-cv@1.0.0";
-export const DETECTOR_VERSIONS = {
-  line_crossing: "line@1.0",
-  zone_occupancy: "zone@1.0",
-  dwell: "dwell@1.0",
-  queue: "queue@1.0",
-  shelf_change: "shelf@0.1",
-  workstation_state: "workstation@0.1",
-} as const;
+import { PROCESSOR_VERSION, DETECTOR_VERSIONS } from "./versions";
+export { PROCESSOR_VERSION, DETECTOR_VERSIONS } from "./versions";
 export type VideoLine = {
   id: string;
   name: string;
@@ -330,9 +323,10 @@ export async function processVideo(o: {
   ];
   const child = spawn(o.ffmpeg ?? process.env.FFMPEG_PATH ?? "ffmpeg", args, {
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
-  let stderr = "";
-  child.stderr.on("data", (d) => (stderr = (stderr + d).slice(-2000)));
+  // ffmpeg errors may contain a credential-bearing RTSP URL. Drain but never persist them.
+  child.stderr.resume();
   const abort = () => child.kill("SIGTERM");
   o.signal?.addEventListener("abort", abort);
   const heartbeat = setInterval(() => {
@@ -394,10 +388,7 @@ export async function processVideo(o: {
     emit({
       kind: "signal_lost",
       at: at(frames),
-      reason:
-        ended === "decoder_error"
-          ? stderr.split("\n")[0].slice(0, 200) || ended
-          : ended,
+      reason: ended,
     });
   flush();
   await pending;
