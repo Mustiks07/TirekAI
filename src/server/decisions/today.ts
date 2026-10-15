@@ -58,7 +58,7 @@ export class TodayService {
         },
       ];
       for (const c of await tx.query<SourceStatus>(
-        "SELECT 'moysklad' name,CASE WHEN status IN ('configured','live_verified','sandbox_verified') AND last_success_at<now()-interval '60 minutes' THEN 'degraded' ELSE status END status,last_success_at checked_at FROM integration_connections WHERE organization_id=$1 AND disconnected_at IS NULL",
+        "SELECT provider name,CASE WHEN status IN ('configured','live_verified','sandbox_verified') AND last_success_at<now()-interval '60 minutes' THEN 'degraded' ELSE status END status,last_success_at checked_at FROM integration_connections WHERE organization_id=$1 AND disconnected_at IS NULL",
         [org],
       ))
         sources.push(c);

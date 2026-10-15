@@ -11,6 +11,7 @@ import { automationMigration } from "./automation-migration";
 import { assistantMigration } from "./assistant-migration";
 import { integrationsMigration } from "./integrations-migration";
 import { writebackMigration } from "./writeback-migration";
+import { connectorsMigration } from "./connectors-migration";
 export const migrations = [
   {
     version: 1,
@@ -73,4 +74,5 @@ CREATE TABLE auth_limits (
   assistantMigration,
   integrationsMigration,
   writebackMigration,
+  connectorsMigration,
 ];

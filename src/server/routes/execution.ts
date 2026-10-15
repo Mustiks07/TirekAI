@@ -9,6 +9,7 @@ import { TodayService } from "../decisions/today";
 import { AutomationService } from "../automations/service";
 import { AssistantService } from "../assistant/service";
 import { IntegrationService } from "../integrations/service";
+import { Bitrix24Service } from "../integrations/bitrix24-service";
 import {
   askResult,
   assistantStatus,
@@ -582,6 +583,41 @@ export const executionRoutes: Route[] = [
         c.params[0],
         c.body,
       ),
+  },
+  {
+    method: "POST",
+    path: "integrations/bitrix24",
+    schema: z.object({
+      id: z.uuid(),
+      reused: z.boolean(),
+      webhookToken: z.string().nullable(),
+    }),
+    run: (c) => new Bitrix24Service(c.db).configure(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/bitrix24/:id/check",
+    schema: ok,
+    run: (c) => new Bitrix24Service(c.db).check(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/bitrix24/:id/sync",
+    run: (c) => new Bitrix24Service(c.db).syncNow(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/bitrix24/:id/disconnect",
+    schema: ok,
+    run: (c) =>
+      new Bitrix24Service(c.db).disconnect(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/bitrix24/conflicts/:id",
+    schema: ok,
+    run: (c) =>
+      new Bitrix24Service(c.db).resolve(c.secret, c.org, c.params[0], c.body),
   },
   {
     method: "POST",

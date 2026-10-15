@@ -160,7 +160,7 @@ export class IntegrationService {
   private async connection(tx: Sql, org: string, id: string, lock = false) {
     idSchema.parse(id);
     const [c] = await tx.query<Connection>(
-      `SELECT * FROM integration_connections WHERE organization_id=$1 AND id=$2 ${lock ? "FOR UPDATE" : ""}`,
+      `SELECT * FROM integration_connections WHERE organization_id=$1 AND id=$2 AND provider='moysklad' ${lock ? "FOR UPDATE" : ""}`,
       [org, id],
     );
     if (!c) throw new AppError("NOT_FOUND", 404);
@@ -668,7 +668,7 @@ export class IntegrationService {
     )
       throw new AppError("NOT_FOUND", 404);
     const [conn] = await this.db.query<Connection>(
-      "SELECT * FROM integration_connections WHERE id=$1 AND disconnected_at IS NULL",
+      "SELECT * FROM integration_connections WHERE id=$1 AND provider='moysklad' AND disconnected_at IS NULL",
       [connectionId],
     );
     const expected = Buffer.from(
@@ -702,7 +702,7 @@ export class IntegrationService {
       payload: { events: MsWebhookEvent[] };
       attempts: number;
     }>(
-      "SELECT id,connection_id,payload,attempts FROM integration_inbox WHERE state IN ('received','failed') AND attempts<5 ORDER BY received_at LIMIT 20",
+      "SELECT i.id,i.connection_id,i.payload,i.attempts FROM integration_inbox i JOIN integration_connections c ON c.id=i.connection_id AND c.provider='moysklad' WHERE i.state IN ('received','failed') AND i.attempts<5 ORDER BY i.received_at LIMIT 20",
     );
     let processed = 0;
     for (const item of items) {
@@ -791,7 +791,7 @@ export class IntegrationService {
         reason: string;
         remote: { name: string; updated: string; archived: boolean };
       }>(
-        "SELECT connection_id,external_id,internal_id,reason,remote FROM sync_conflicts WHERE organization_id=$1 AND id=$2 AND state='open' FOR UPDATE",
+        "SELECT x.connection_id,x.external_id,x.internal_id,x.reason,x.remote FROM sync_conflicts x JOIN integration_connections c ON c.id=x.connection_id AND c.provider='moysklad' WHERE x.organization_id=$1 AND x.id=$2 AND x.state='open' FOR UPDATE OF x",
         [org, conflictId],
       );
       if (!x) throw new AppError("NOT_FOUND", 404);
@@ -1122,7 +1122,7 @@ export class IntegrationService {
   // Worker: periodic sync of configured connections (stock every 15 min), and the inbox.
   async runOnce() {
     const due = await this.db.query<Connection>(
-      "SELECT c.* FROM integration_connections c WHERE c.disconnected_at IS NULL AND c.credentials IS NOT NULL AND c.status<>'not_configured' AND NOT EXISTS(SELECT 1 FROM sync_runs r WHERE r.connection_id=c.id AND r.kind IN ('stock','incremental','initial') AND r.started_at>now()-interval '15 minutes') LIMIT 5",
+      "SELECT c.* FROM integration_connections c WHERE c.provider='moysklad' AND c.disconnected_at IS NULL AND c.credentials IS NOT NULL AND c.status<>'not_configured' AND NOT EXISTS(SELECT 1 FROM sync_runs r WHERE r.connection_id=c.id AND r.kind IN ('stock','incremental','initial') AND r.started_at>now()-interval '15 minutes') LIMIT 5",
     );
     for (const conn of due) {
       try {

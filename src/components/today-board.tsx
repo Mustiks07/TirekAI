@@ -27,6 +27,13 @@ export type Destination =
   | "integrations"
   | "assistant";
 const f = (d: FormData, n: string) => String(d.get(n) || "").trim();
+// Provider names are proper names and are the same in RU and KK.
+const sourceNames: Record<string, string> = {
+  bitrix24: "Битрикс24",
+  onec: "1С",
+  telegram: "Telegram",
+  kaspi: "Kaspi",
+};
 // Situation drill-down goes to the section that holds the source operation.
 const sourceTarget: Record<string, Destination> = {
   purchase_order: "purchasing",
@@ -450,7 +457,9 @@ export function TodayBoard({
                       ? t("Собственный учёт", "Өз есебі")
                       : s.name === "moysklad"
                         ? "МойСклад"
-                        : s.name === "moysklad_writeback"
+                        : sourceNames[s.name]
+                          ? sourceNames[s.name]
+                          : s.name === "moysklad_writeback"
                           ? t("Приёмки в МойСклад", "МойСкладқа қабылдаулар")
                           : t("AI-помощник", "AI көмекші")}
                   </strong>{" "}

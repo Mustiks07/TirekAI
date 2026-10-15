@@ -1,4 +1,5 @@
 import { MOYSKLAD_BASE_URL, MOYSKLAD_CONTRACT } from "./moysklad";
+import { BITRIX24_CONTRACT } from "./bitrix24";
 
 // T029 registry: each adapter declares concrete operations, direction, source of truth,
 // required rights, how it is verified, and what is not verified live. Planned adapters are
@@ -162,8 +163,87 @@ export const passports: Passport[] = [
     disconnect:
       "Owner disconnects: credentials are erased, links and the stock mirror stop updating and are marked stale; local warehouses become writable again only by an explicit unlink.",
   },
+  {
+    provider: "bitrix24",
+    name: "Битрикс24",
+    contract: {
+      source: "https://apidocs.bitrix24.ru/api-reference/",
+      checked: "2026-10-15",
+      version: BITRIX24_CONTRACT,
+    },
+    auth: "Inbound webhook URL https://<portal>.bitrix24.<zone>/rest/<user>/<code>/ (scope crm + basic); outbound webhook verified by auth[application_token]",
+    limits: [
+      "leaky bucket: 2 requests/s with a burst of 50 (Enterprise 5/s, 250); 503 QUERY_LIMIT_EXCEEDED",
+      "429 OPERATION_TIME_LIMIT when the accumulated method time is exceeded (not retried in a loop)",
+      "one request ≤ 60 s; list pages of 50 via start/next",
+    ],
+    ownership: { customers_imported: "external", deals: "internal" },
+    operations: [
+      {
+        id: "check",
+        direction: "read",
+        entity: "profile",
+        endpoint: "POST <webhook>/profile.json",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes: "connection check (scope basic)",
+      },
+      {
+        id: "contacts",
+        direction: "read",
+        entity: "contact",
+        endpoint:
+          "POST <webhook>/crm.item.list.json {entityTypeId:3, select:['*'], filter:{'>=updatedTime':…}, order:{updatedTime,id}, start}",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "cursor on updatedTime with a 5-minute overlap; e-mail/phone from fm; imported customers get no marketing consent; same e-mail/phone or a local edit → conflict",
+      },
+      {
+        id: "contact_get",
+        direction: "read",
+        entity: "contact",
+        endpoint: "POST <webhook>/crm.item.get.json {entityTypeId:3, id}",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes: "events carry only an id; the contact is re-read",
+      },
+      {
+        id: "events",
+        direction: "inbound",
+        entity: "contact",
+        endpoint:
+          "POST /api/integrations/bitrix24/{connection}/{token} (ONCRMCONTACTADD/UPDATE/DELETE)",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "secret path token + auth[application_token]; dedupe by event/id/ts; deletion is recorded, the local customer stays",
+      },
+      {
+        id: "deal_write",
+        direction: "write",
+        entity: "deal",
+        endpoint: "crm.item.add / crm.item.update",
+        implementation: "planned",
+        verification: "none",
+        live: "not_verified",
+        notes:
+          "not enabled: deals and orders stay in this application; no write to the portal",
+      },
+    ],
+    unverified: [
+      "live portal, plan with REST access and webhook rights",
+      "outbound webhook delivery to a public HTTPS address",
+      "self-hosted portals (refused: private-network risk)",
+    ],
+    disconnect:
+      "Owner disconnects: the webhook URL and tokens are erased; imported customers and their history stay.",
+  },
   ...[
-    ["bitrix24", "Битрикс24", "T031"],
     ["1c", "1С", "T032"],
     ["cash_bank", "Кассы и банки", "T033"],
     ["messaging_kaspi", "Каналы и Kaspi", "T034"],

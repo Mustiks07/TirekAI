@@ -8,6 +8,7 @@ import { businessDate } from "@/lib/dates";
 import { executionError, stateText } from "@/lib/execution-i18n";
 import { moneyText } from "@/lib/inventory-i18n";
 import { ActionForm, Field } from "./purchasing-page";
+import { ConnectorsPanel } from "./connectors-panel";
 
 const f = (d: FormData, n: string) => String(d.get(n) || "").trim();
 type Overview = {
@@ -80,6 +81,7 @@ type Overview = {
   }[];
   conflicts: {
     id: string;
+    connection_id: string;
     entity_type: string;
     external_id: string;
     reason: string;
@@ -121,6 +123,10 @@ const opNames: Record<string, [string, string]> = {
   supply_create: ["Создание приёмки в МойСклад", "МойСкладта қабылдау құру"],
   currencies: ["Валюты", "Валюталар"],
   parties: ["Юрлица и контрагенты", "Заңды тұлғалар мен контрагенттер"],
+  contacts: ["Контакты CRM", "CRM контактілері"],
+  contact_get: ["Чтение контакта по событию", "Оқиға бойынша контактіні оқу"],
+  events: ["Входящие события", "Кіріс оқиғалар"],
+  deal_write: ["Запись сделок", "Мәмілелерді жазу"],
 };
 const exportStates: Record<string, [string, string]> = {
   pending: ["ждёт отправки", "жіберуді күтеді"],
@@ -225,7 +231,12 @@ export function IntegrationsPage({
       refresh();
     }
   }
-  const conn = o?.connections.find((c) => !c.disconnected_at);
+  const conn = o?.connections.find(
+    (c) => c.provider === "moysklad" && !c.disconnected_at,
+  );
+  const conflicts = (o?.conflicts || []).filter(
+    (c) => c.connection_id === conn?.id,
+  );
   return (
     <div className="commerce-page integrations-page">
       {error && (
@@ -716,7 +727,7 @@ export function IntegrationsPage({
               )}
             </section>
           )}
-          {o.conflicts.length > 0 && (
+          {conflicts.length > 0 && (
             <section className="panel">
               <h2>
                 {t(
@@ -725,7 +736,7 @@ export function IntegrationsPage({
                 )}
               </h2>
               <ul className="today-list">
-                {o.conflicts.map((c) => (
+                {conflicts.map((c) => (
                   <li key={c.id}>
                     {c.remote.name || c.external_id.slice(0, 8)} ·{" "}
                     {reasons[c.reason]?.[locale === "ru" ? 0 : 1] || c.reason}
@@ -788,6 +799,17 @@ export function IntegrationsPage({
               </ul>
             </section>
           )}
+          <ConnectorsPanel
+            workspace={workspace}
+            locale={locale}
+            canWrite={o.canWrite}
+            connections={o.connections}
+            conflicts={o.conflicts}
+            msg={msg}
+            run={run}
+            refresh={refresh}
+            busy={busy}
+          />
           <section className="panel">
             <h2>{t("Журнал обмена", "Алмасу журналы")}</h2>
             {o.runs.length === 0 ? (

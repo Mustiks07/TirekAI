@@ -229,6 +229,105 @@ export class CrmService {
       return r;
     });
   }
+  // Composition for integrations (T031): same validation, scope and audit as the forms, inside the
+  // caller's transaction. Imported contacts carry no marketing consent.
+  async importCustomerInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    input: {
+      branchId: string;
+      externalId: string;
+      name: string;
+      email: string;
+      phone: string;
+      note: string;
+    },
+  ) {
+    const c = customerInput.parse({
+      key: randomUUID(),
+      branchId: input.branchId,
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      kind: "person",
+      responsibleId: null,
+      consents: { email: false, sms: false, messenger: false },
+      consentNote: input.note,
+    });
+    const s = await sessionAccess(
+      tx,
+      secret,
+      org,
+      "customers:write",
+      c.branchId,
+    );
+    const id = randomUUID();
+    await tx.query(
+      "INSERT INTO customers(id,organization_id,branch_id,external_id,name,email,phone,kind,responsible_id,consents) VALUES($1,$2,$3,$4,$5,$6,$7,'person',NULL,$8)",
+      [
+        id,
+        org,
+        c.branchId,
+        input.externalId,
+        c.name,
+        c.email.toLowerCase(),
+        c.phone,
+        JSON.stringify(c.consents),
+      ],
+    );
+    await event(tx, org, id, s.actorId, "customer.imported", c.consentNote, {
+      externalId: input.externalId,
+    });
+    await audit(tx, org, s.actorId, "customer.created", c.branchId, {
+      customerId: id,
+    });
+    return { id, version: 1 };
+  }
+  async updateImportedInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    version: number,
+    patch: { name: string; email: string; phone: string; note: string },
+  ) {
+    const c = customerInput
+      .pick({ name: true, email: true, phone: true, consentNote: true })
+      .parse({
+        name: patch.name,
+        email: patch.email,
+        phone: patch.phone,
+        consentNote: patch.note,
+      });
+    const s = await sessionAccess(tx, secret, org, "customers:write"),
+      customer = await this.customer(tx, org, id, s.branchId);
+    if (customer.version !== version)
+      throw new AppError("VERSION_CONFLICT", 409);
+    await tx.query(
+      "UPDATE customers SET name=$3,email=$4,phone=$5,version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2",
+      [org, id, c.name, c.email.toLowerCase(), c.phone],
+    );
+    await event(tx, org, id, s.actorId, "customer.updated", c.consentNote, {
+      source: "integration",
+    });
+    await audit(tx, org, s.actorId, "customer.updated", customer.branch_id, {
+      customerId: id,
+    });
+    return { version: version + 1 };
+  }
+  async noteExternalInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    kind: "customer.external_deleted",
+    note: string,
+  ) {
+    const s = await sessionAccess(tx, secret, org, "customers:write");
+    await this.customer(tx, org, id, s.branchId);
+    await event(tx, org, id, s.actorId, kind, note);
+  }
   async profile(secret: Credential, org: string, id: string, input: unknown) {
     const c = customerProfile.extend({ key: z.uuid() }).parse(input);
     return this.db.transaction(async (tx) => {

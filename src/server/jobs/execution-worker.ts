@@ -4,6 +4,7 @@ import { InsightService } from "../decisions/insights";
 import { ProposalService } from "../decisions/proposals";
 import { AutomationService } from "../automations/service";
 import { IntegrationService } from "../integrations/service";
+import { runConnectors } from "../integrations/connectors";
 
 // Background work for T021–T025. Each step is idempotent: repeated ticks, overlapping
 // workers and restarts cannot duplicate tasks, situations, proposals or actions.
@@ -22,6 +23,7 @@ export class ExecutionWorker {
     for (const o of stale) await insights.detect(o.id);
     const automations = await new AutomationService(this.db).runOnce();
     const integrations = await new IntegrationService(this.db).runOnce();
+    const connectors = await runConnectors(this.db);
     return {
       periodic,
       escalated,
@@ -29,6 +31,7 @@ export class ExecutionWorker {
       detected: stale.length,
       automations,
       integrations,
+      connectors,
     };
   }
 }
