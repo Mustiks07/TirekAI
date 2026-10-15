@@ -96,8 +96,8 @@ const states: Record<string, [string, string]> = {
   exported: ["Выгружено (не опубликовано)", "Жүктелді (жарияланбаған)"],
   queued: ["В очереди канала", "Арна кезегінде"],
   not_configured: [
-    "Канал не подключён — не отправлено",
-    "Арна қосылмаған — жіберілмеді",
+    "Канал не подключён: не отправлено",
+    "Арна қосылмаған: жіберілмеді",
   ],
   blocked: ["Некому отправить", "Жіберетін ешкім жоқ"],
   submitted: ["Отправлена на согласование", "Келісуге жіберілді"],
@@ -133,8 +133,8 @@ const issueText: Record<string, [string, string]> = {
 };
 const caveatText: Record<string, [string, string]> = {
   seasonality_not_adjusted: [
-    "Сезонность не учтена: контрольный период — равный отрезок прямо перед акцией.",
-    "Маусымдық ескерілмеген: бақылау кезеңі — акция алдындағы тең кезең.",
+    "Сезонность не учтена: контрольный период: равный отрезок прямо перед акцией.",
+    "Маусымдық ескерілмеген: бақылау кезеңі: акция алдындағы тең кезең.",
   ],
   not_causal: [
     "Разница с контрольным периодом не равна эффекту акции.",
@@ -146,16 +146,16 @@ const caveatText: Record<string, [string, string]> = {
     "Акция жүріп жатыр, деректер толық емес.",
   ],
   unknown_costs: [
-    "Есть продажи без себестоимости — прибыль не показана.",
-    "Өзіндік құнсыз сатулар бар — пайда көрсетілмейді.",
+    "Есть продажи без себестоимости: прибыль не показана.",
+    "Өзіндік құнсыз сатулар бар: пайда көрсетілмейді.",
   ],
   no_control_sales: [
     "В контрольном периоде не было продаж этих товаров.",
     "Бақылау кезеңінде бұл тауарлар сатылмаған.",
   ],
   spend_unknown: [
-    "Расходы на акцию не внесены — это неизвестно, а не ноль.",
-    "Акция шығындары енгізілмеген — бұл нөл емес, белгісіз.",
+    "Расходы на акцию не внесены: это неизвестно, а не ноль.",
+    "Акция шығындары енгізілмеген: бұл нөл емес, белгісіз.",
   ],
   overlapping_campaigns: [
     "В тот же период действуют другие акции на эти товары.",
@@ -241,7 +241,7 @@ function EvaluationTable({ e, locale }: { e: Evaluation; locale: Locale }) {
                     : l.quantity}
                 </td>
                 <td>
-                  {e.costVisible ? money(l.costMinor, locale) : "—"}
+                  {e.costVisible ? money(l.costMinor, locale) : "–"}
                   <br />
                   <small>
                     {l.costSource === "stock_average"
@@ -256,9 +256,9 @@ function EvaluationTable({ e, locale }: { e: Evaluation; locale: Locale }) {
                     ? l.margin !== null
                       ? `${l.margin}% (${t("было", "бұрын")} ${l.regularMargin}%)`
                       : l.regularMargin
-                        ? "—"
+                        ? "–"
                         : t("неизвестно", "белгісіз")
-                    : "—"}
+                    : "–"}
                 </td>
                 <td>{l.available ?? t("услуга", "қызмет")}</td>
               </tr>
@@ -432,8 +432,8 @@ function CampaignEditor({
         </Field>
         <Field
           label={t(
-            "Бюджет (план), ₸ — пусто, если не задан",
-            "Бюджет (жоспар), ₸ — берілмесе бос",
+            "Бюджет (план), ₸: пусто, если не задан",
+            "Бюджет (жоспар), ₸: берілмесе бос",
           )}
         >
           <input
@@ -927,7 +927,7 @@ export function MarketingPage({
                         : ""}
                     </td>
                     <td>
-                      {r.starts_on} — {r.ends_on}
+                      {r.starts_on} – {r.ends_on}
                     </td>
                   </tr>
                 ))}
@@ -979,7 +979,7 @@ export function MarketingPage({
             {states[c.state]?.[locale === "ru" ? 0 : 1]}
           </h3>
           <p>
-            {c.data.startsOn} — {c.data.endsOn} ·{" "}
+            {c.data.startsOn} – {c.data.endsOn} ·{" "}
             {t("бюджет (план)", "бюджет (жоспар)")}:{" "}
             {c.data.budget ? `${c.data.budget} ₸` : t("не задан", "берілмеген")}
           </p>
@@ -1308,7 +1308,7 @@ export function MarketingPage({
                     <td>
                       {p.channel === "telegram"
                         ? `${t("в очереди", "кезекте")} ${p.recipients} · ${t("доставлено", "жеткізілді")} ${p.sent} · ${t("не доставлено", "жеткізілмеді")} ${p.undelivered}`
-                        : "—"}
+                        : "–"}
                     </td>
                   </tr>
                 ))}
@@ -1365,7 +1365,7 @@ export function MarketingPage({
                         [
                           [
                             t("Даты", "Күндер"),
-                            (p: Period) => `${p.from} — ${p.to}`,
+                            (p: Period) => `${p.from} – ${p.to}`,
                           ],
                           [
                             t("Продано (нетто)", "Сатылды (нетто)"),
@@ -1384,14 +1384,14 @@ export function MarketingPage({
                             (p: Period) =>
                               detail.can.cost
                                 ? money(p.costMinor, locale)
-                                : "—",
+                                : "–",
                           ],
                           [
                             t("Валовая прибыль", "Жалпы пайда"),
                             (p: Period) =>
                               detail.can.cost
                                 ? money(p.grossProfitMinor, locale)
-                                : "—",
+                                : "–",
                           ],
                           [
                             t("Заказов", "Тапсырыстар"),
@@ -1403,7 +1403,7 @@ export function MarketingPage({
                           <th scope="row">{label}</th>
                           <td>{value(analysis.campaign!)}</td>
                           <td>
-                            {analysis.control ? value(analysis.control) : "—"}
+                            {analysis.control ? value(analysis.control) : "–"}
                           </td>
                         </tr>
                       ))
@@ -1461,8 +1461,8 @@ export function MarketingPage({
                 >
                   <Field
                     label={t(
-                      "Сумма, ₸ (пусто — неизвестно)",
-                      "Сома, ₸ (бос — белгісіз)",
+                      "Сумма, ₸ (пусто: неизвестно)",
+                      "Сома, ₸ (бос: белгісіз)",
                     )}
                   >
                     <input

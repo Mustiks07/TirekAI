@@ -79,8 +79,8 @@ export function KnowledgePage({
       <fieldset>
         <legend>
           {t(
-            "Кому доступно (пусто — всем ролям)",
-            "Кімге қолжетімді (бос — барлық рөлге)",
+            "Кому доступно (пусто: всем ролям)",
+            "Кімге қолжетімді (бос: барлық рөлге)",
           )}
         </legend>
         {roles.map((r) => (
@@ -192,7 +192,7 @@ export function KnowledgePage({
                 <span>
                   {r.category} · {stateText(r.state, locale)} ·{" "}
                   {t("опубликована версия", "жарияланған нұсқа")}{" "}
-                  {r.published_version ?? "—"} / {r.latest_version}
+                  {r.published_version ?? "–"} / {r.latest_version}
                   {r.stale &&
                     ` · ${t("нужна проверка актуальности", "өзектілігін тексеру қажет")}`}
                 </span>

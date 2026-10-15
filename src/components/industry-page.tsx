@@ -1065,7 +1065,7 @@ export function IndustryPage({
                   <>
                     <p>
                       {t("План / годный выпуск", "Жоспар / жарамды өнім")}:{" "}
-                      {production.quantity} / {production.goodQuantity ?? "—"}
+                      {production.quantity} / {production.goodQuantity ?? "–"}
                     </p>
                     <p>
                       {t(
@@ -1075,11 +1075,11 @@ export function IndustryPage({
                       :{" "}
                       {production.issued.length
                         ? money(production.costMinor)
-                        : "—"}
+                        : "–"}
                       ; {t("потери от брака", "ақау шығыны")}:{" "}
                       {production.scrapCostMinor
                         ? money(production.scrapCostMinor)
-                        : "—"}
+                        : "–"}
                     </p>
                     <p>
                       {t(
@@ -1088,7 +1088,7 @@ export function IndustryPage({
                       )}
                       :{" "}
                       {production.plannedMaterialCostMinor === null
-                        ? "—"
+                        ? "–"
                         : money(production.plannedMaterialCostMinor)}
                     </p>
                     <p>
@@ -1146,7 +1146,7 @@ export function IndustryPage({
                     <p>
                       {t("Клиент", "Клиент")}:{" "}
                       {customers.find((x) => x.id === selected.data.customerId)
-                        ?.name ?? "—"}
+                        ?.name ?? "–"}
                     </p>
                   </>
                 )}
@@ -1268,8 +1268,8 @@ export function IndustryPage({
                     ))}
                     <p>
                       {t(
-                        "Приёмка объекта — управленческое подтверждение, без юридической электронной подписи.",
-                        "Нысанды қабылдау — заңды электрондық қолтаңбасыз басқарушылық растау.",
+                        "Приёмка объекта: управленческое подтверждение, без юридической электронной подписи.",
+                        "Нысанды қабылдау: заңды электрондық қолтаңбасыз басқарушылық растау.",
                       )}
                     </p>
                   </>
@@ -1301,7 +1301,7 @@ export function IndustryPage({
                     </ol>
                     <p>
                       {t("Оценка / учтено часов", "Бағалау / есептелген сағат")}
-                      : {project.estimatedHours ?? "—"} /{" "}
+                      : {project.estimatedHours ?? "–"} /{" "}
                       {project.time
                         .reduce((a, x) => a.plus(x.hours), new Decimal(0))
                         .toFixed()}
@@ -1349,7 +1349,7 @@ export function IndustryPage({
                       <p key={l.id}>
                         {l.code} ·{" "}
                         {items.find((x) => x.id === l.item_id)?.name_ru} ·{" "}
-                        {l.quantity} · {l.expires_on ?? "—"}
+                        {l.quantity} · {l.expires_on ?? "–"}
                       </p>
                     ))}
                   </details>

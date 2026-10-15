@@ -527,7 +527,7 @@ export function InventoryPage({
                     name="destinationId"
                     required
                   >
-                    <option value="">—</option>
+                    <option value="">–</option>
                     {warehouses
                       .filter((w) => w.id !== warehouse)
                       .map((w) => (
@@ -928,7 +928,7 @@ export function InventoryPage({
             <PackagePlus size={20} />
             {t.title}
             <span className="inline-count">
-              {catalog?.pagination.total ?? "—"}
+              {catalog?.pagination.total ?? "–"}
             </span>
           </h2>
           {catalog?.canWrite && (
@@ -996,7 +996,7 @@ export function InventoryPage({
                 </small>
                 <h3>{name(i)}</h3>
                 <p>
-                  {i.category || "—"} · {unitName(i.base_unit)}
+                  {i.category || "–"} · {unitName(i.base_unit)}
                   {i.barcode ? ` · ${i.barcode}` : ""}
                 </p>
                 <div className="catalog-prices">

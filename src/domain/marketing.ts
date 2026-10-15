@@ -227,7 +227,7 @@ export function templateText(
         body: lines
           .map(
             (l) =>
-              `${l.nameRu}: скидка ${l.discount}% — ${kzt(l.promoMinor!)} вместо ${kzt(l.priceMinor!)}.`,
+              `${l.nameRu}: скидка ${l.discount}%, ${kzt(l.promoMinor!)} вместо ${kzt(l.priceMinor!)}.`,
           )
           .join("\n"),
         terms: `${period.ru} Пока товар есть в наличии.`,
@@ -237,7 +237,7 @@ export function templateText(
         body: lines
           .map(
             (l) =>
-              `${l.nameKk || l.nameRu}: ${l.discount}% жеңілдік — ${kzt(l.priceMinor!)} орнына ${kzt(l.promoMinor!)}.`,
+              `${l.nameKk || l.nameRu}: ${l.discount}% жеңілдік, ${kzt(l.priceMinor!)} орнына ${kzt(l.promoMinor!)}.`,
           )
           .join("\n"),
         terms: `${period.kk} Тауар қоймада бар кезде.`,
@@ -252,12 +252,12 @@ export function templateText(
   return {
     ru: {
       title: data.name,
-      body: `Комплект: ${list("nameRu")} — ${kzt(e.bundle!.priceMinor)}${regular ? ` вместо ${kzt(regular)}` : ""}.`,
+      body: `Комплект: ${list("nameRu")} за ${kzt(e.bundle!.priceMinor)}${regular ? ` вместо ${kzt(regular)}` : ""}.`,
       terms: `${period.ru} Пока товар есть в наличии.`,
     },
     kk: {
       title: data.name,
-      body: `Жиынтық: ${list("nameKk")} — ${regular ? `${kzt(regular)} орнына ` : ""}${kzt(e.bundle!.priceMinor)}.`,
+      body: `Жиынтық: ${list("nameKk")}, ${regular ? `${kzt(regular)} орнына ` : ""}${kzt(e.bundle!.priceMinor)}.`,
       terms: `${period.kk} Тауар қоймада бар кезде.`,
     },
   };
