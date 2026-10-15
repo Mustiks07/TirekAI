@@ -127,6 +127,7 @@ const opNames: Record<string, [string, string]> = {
   contact_get: ["Чтение контакта по событию", "Оқиға бойынша контактіні оқу"],
   events: ["Входящие события", "Кіріс оқиғалар"],
   deal_write: ["Запись сделок", "Мәмілелерді жазу"],
+  write: ["Запись", "Жазу"],
 };
 const exportStates: Record<string, [string, string]> = {
   pending: ["ждёт отправки", "жіберуді күтеді"],

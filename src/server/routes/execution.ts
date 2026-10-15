@@ -10,6 +10,7 @@ import { AutomationService } from "../automations/service";
 import { AssistantService } from "../assistant/service";
 import { IntegrationService } from "../integrations/service";
 import { Bitrix24Service } from "../integrations/bitrix24-service";
+import { OneCService } from "../integrations/onec-service";
 import {
   askResult,
   assistantStatus,
@@ -583,6 +584,40 @@ export const executionRoutes: Route[] = [
         c.params[0],
         c.body,
       ),
+  },
+  {
+    method: "POST",
+    path: "integrations/onec",
+    schema: z.object({
+      id: z.uuid(),
+      reused: z.boolean(),
+      webhookToken: z.string().nullable(),
+    }),
+    run: (c) => new OneCService(c.db).configure(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/onec/:id/check",
+    schema: ok,
+    run: (c) => new OneCService(c.db).check(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/onec/:id/sync",
+    run: (c) => new OneCService(c.db).syncNow(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/onec/:id/disconnect",
+    schema: ok,
+    run: (c) => new OneCService(c.db).disconnect(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/onec/conflicts/:id",
+    schema: ok,
+    run: (c) =>
+      new OneCService(c.db).resolve(c.secret, c.org, c.params[0], c.body),
   },
   {
     method: "POST",

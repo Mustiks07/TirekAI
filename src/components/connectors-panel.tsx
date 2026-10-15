@@ -42,6 +42,15 @@ const reasons: Record<string, [string, string]> = {
     "Похоже на существующего клиента (та же почта или телефон): не объединено автоматически",
     "Бар клиентке ұқсайды (сол пошта не телефон): автоматты түрде біріктірілмеді",
   ],
+  sku_exists: [
+    "Такой SKU уже есть: товары не объединяются автоматически",
+    "Мұндай SKU бар: тауарлар автоматты түрде біріктірілмейді",
+  ],
+  unit_unmapped: [
+    "Единица измерения не сопоставлена",
+    "Өлшем бірлігі сәйкестендірілмеген",
+  ],
+  unit_changed: ["Изменилась единица измерения", "Өлшем бірлігі өзгерді"],
   local_modified: [
     "Изменено у нас после последней синхронизации",
     "Соңғы синхрондаудан кейін бізде өзгертілді",
@@ -293,6 +302,104 @@ export function ConnectorsPanel(
             </ActionForm>
             {shown("bitrix24")}
           </>
+        }
+      />
+      <Connector
+        ctx={ctx}
+        provider="onec"
+        title="1С"
+        note={t(
+          "Стандартный интерфейс OData опубликованной базы 1С (только HTTPS на публичном адресе). Читается номенклатура и классификатор единиц; цены не читаются и остаются «не указана». Изменения определяются по DataVersion при полном просмотре не чаще раза в час. Запись в 1С не выполняется.",
+          "Жарияланған 1С базасының стандартты OData интерфейсі (тек жария мекенжайдағы HTTPS). Номенклатура мен өлшем бірліктері жіктеуіші оқылады; бағалар оқылмайды және «көрсетілмеген» болып қалады. Өзгерістер DataVersion бойынша сағатына бір реттен жиі емес толық қарауда анықталады. 1С-ке жазу орындалмайды.",
+        )}
+        setup={
+          <ActionForm
+            locale={locale}
+            label={t("Сохранить 1С", "1С сақтау")}
+            submit={async (d, key) => {
+              await api(`${base}/integrations/onec`, "POST", {
+                key,
+                infobaseUrl: f(d, "infobaseUrl"),
+                user: f(d, "user"),
+                password: String(d.get("password") || ""),
+                products: f(d, "products"),
+                units: f(d, "units"),
+                unitField: f(d, "unitField"),
+                skuField: f(d, "skuField"),
+              });
+              ctx.refresh();
+            }}
+          >
+            <Field
+              label={t(
+                "Адрес публикации базы (https://…/база)",
+                "База жариялау мекенжайы (https://…/база)",
+              )}
+            >
+              <input
+                name="infobaseUrl"
+                required
+                maxLength={300}
+                inputMode="url"
+              />
+            </Field>
+            <Field
+              label={t(
+                "Пользователь 1С (только чтение)",
+                "1С пайдаланушысы (тек оқу)",
+              )}
+            >
+              <input name="user" required maxLength={100} autoComplete="off" />
+            </Field>
+            <Field
+              label={t(
+                "Пароль (хранится зашифрованным)",
+                "Құпиясөз (шифрланып сақталады)",
+              )}
+            >
+              <input
+                name="password"
+                type="password"
+                required
+                maxLength={200}
+                autoComplete="off"
+              />
+            </Field>
+            <Field
+              label={t("Справочник номенклатуры", "Номенклатура анықтамалығы")}
+            >
+              <input
+                name="products"
+                defaultValue="Catalog_Номенклатура"
+                required
+                maxLength={90}
+              />
+            </Field>
+            <Field label={t("Классификатор единиц", "Бірліктер жіктеуіші")}>
+              <input
+                name="units"
+                defaultValue="Catalog_КлассификаторЕдиницИзмерения"
+                required
+                maxLength={90}
+              />
+            </Field>
+            <Field label={t("Поле единицы", "Бірлік өрісі")}>
+              <input
+                name="unitField"
+                defaultValue="ЕдиницаИзмерения_Key"
+                required
+                maxLength={90}
+              />
+            </Field>
+            <Field label={t("Поле артикула", "Артикул өрісі")}>
+              <input
+                name="skuField"
+                defaultValue="Артикул"
+                required
+                maxLength={90}
+              />
+            </Field>
+          </ActionForm>
         }
       />
     </>

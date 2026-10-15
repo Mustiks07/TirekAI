@@ -1,5 +1,6 @@
 import { MOYSKLAD_BASE_URL, MOYSKLAD_CONTRACT } from "./moysklad";
 import { BITRIX24_CONTRACT } from "./bitrix24";
+import { ONEC_CONTRACT } from "./onec";
 
 // T029 registry: each adapter declares concrete operations, direction, source of truth,
 // required rights, how it is verified, and what is not verified live. Planned adapters are
@@ -243,8 +244,69 @@ export const passports: Passport[] = [
     disconnect:
       "Owner disconnects: the webhook URL and tokens are erased; imported customers and their history stay.",
   },
+  {
+    provider: "onec",
+    name: "1С",
+    contract: {
+      source:
+        "https://kb.1ci.com/1C_Enterprise_Platform/Guides/Developer_Guides/1C_Enterprise_Developer_Guide/8.3.27/Chapter_17._Integration_with_external_systems/17.4._Standard_OData_interface/",
+      checked: "2026-10-15",
+      version: ONEC_CONTRACT,
+    },
+    auth: "HTTP Basic (1C user with read rights); the infobase must publish the standard OData interface over HTTPS",
+    limits: [
+      "no change timestamp in the standard interface: full ordered scan ($orderby=Ref_Key, $top/$skip) at most hourly; unchanged DataVersion is skipped",
+      "object names depend on the configuration (default Catalog_Номенклатура, Catalog_КлассификаторЕдиницИзмерения) and are checked against the infobase",
+    ],
+    ownership: {
+      catalog_imported: "external",
+      stock: "internal",
+      purchases: "internal",
+    },
+    operations: [
+      {
+        id: "check",
+        direction: "read",
+        entity: "configuration objects",
+        endpoint:
+          "GET <infobase>/odata/standard.odata/<Catalog_…>?$select=Ref_Key&$top=1&$format=json",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes: "both configured objects must exist and be readable",
+      },
+      {
+        id: "products",
+        direction: "read",
+        entity: "Catalog_Номенклатура",
+        endpoint:
+          "GET <infobase>/odata/standard.odata/Catalog_Номенклатура?$select=Ref_Key,DataVersion,DeletionMark,IsFolder,Code,Description,Артикул,ЕдиницаИзмерения_Key&$orderby=Ref_Key asc&$top=200&$skip=N&$format=json",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "folders skipped; unit via the OKEI code of the unit classifier; DeletionMark archives; products missing from a complete scan are archived; prices are not read (unknown, not 0)",
+      },
+      {
+        id: "write",
+        direction: "write",
+        entity: "documents",
+        endpoint: "POST/PATCH …/standard.odata/Document_…",
+        implementation: "planned",
+        verification: "none",
+        live: "not_verified",
+        notes: "no writes into the accounting infobase",
+      },
+    ],
+    unverified: [
+      "a live infobase, its configuration and object names",
+      "publication over HTTPS and the 1C user's rights",
+      "counterparties, prices and stock registers (not read)",
+    ],
+    disconnect:
+      "Owner disconnects: the login and password are erased; imported catalogue items stay.",
+  },
   ...[
-    ["1c", "1С", "T032"],
     ["cash_bank", "Кассы и банки", "T033"],
     ["messaging_kaspi", "Каналы и Kaspi", "T034"],
   ].map(([provider, name, task]) => ({
