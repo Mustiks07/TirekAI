@@ -1,6 +1,6 @@
 # Передача проекта следующему агенту
 
-Дата: 14 октября 2026. Обновлено после выполнения T020–T030 (см. раздел «Состояние T020–T030»). Исходное указание пользователя: передать **T020–T030** другому агенту, сохранить контекст для возвращения в исходный чат и создать/запушить репозиторий GitHub. Разработка новых функций в этом handoff остановлена; начатый код доведён до проверяемого состояния. Это не заявление, что все задачи T001–T020 полностью приняты.
+Дата: 15 октября 2026. Обновлено после выполнения T031–T040 (см. раздел «Состояние T031–T040» в конце) и T020–T030 (раздел «Состояние T020–T030»). Исходное указание пользователя: передать **T020–T030** другому агенту, сохранить контекст для возвращения в исходный чат и создать/запушить репозиторий GitHub. Разработка новых функций в этом handoff остановлена; начатый код доведён до проверяемого состояния. Это не заявление, что все задачи T001–T020 полностью приняты.
 
 ## Начать здесь
 
@@ -37,7 +37,12 @@ GitHub-аккаунт пользователя: `Mustiks07`; создан при
 | Автоматизации / worker | `src/server/automations/`, `src/server/jobs/execution-worker.ts`, `src/server/execution/core.ts` |
 | AI / голос | `src/server/assistant/`, `src/components/assistant-page.tsx`, `tests/fixtures/assistant-eval.json` |
 | Интеграции | `src/server/integrations/`, `src/app/api/integrations/moysklad/`, `src/components/integrations-page.tsx` |
-| Маршруты T021–T030 | `src/server/routes/execution.ts` (таблица маршрутов) |
+| Маршруты T021–T040 | `src/server/routes/execution.ts` (таблица маршрутов) |
+| Адаптеры T031–T034 | `src/server/integrations/{bitrix24,onec,telegram,kaspi}*.ts`, `common.ts`, `connectors.ts`, `src/components/connectors-panel.tsx` |
+| Банк T033 | `src/domain/bank.ts`, `src/server/bank/service.ts`, `src/components/bank-statements.tsx` |
+| Видео T035–T038 | `src/server/video/`, `scripts/video-processor.ts`, `scripts/video-eval.ts`, `src/app/api/video/`, `src/components/video-page.tsx` |
+| Продвижение T039 | `src/domain/marketing.ts`, `src/server/marketing/`, `src/components/marketing-page.tsx` |
+| Каналы T040 | `src/domain/channel-trade.ts`, `src/server/integrations/kaspi-trade.ts`, `src/components/channel-orders.tsx` |
 | Проверки | `tests/*.test.ts`, `tests/postgres.integration.ts`, `tests/e2e/*.spec.ts` |
 
 Стек: Next/React/TypeScript, Zod, pg/PGlite, decimal.js, csv-parse, PDF.js, Tesseract.js, PDFKit, Noto Sans. Версии фиксированы в package-lock. Tesseract language data rus/kaz/eng устанавливаются npm; OCR не скачивает модели или документы в облако при обработке. `assets/fonts/NotoSans.ttf` используется PDFKit; лицензия рядом в `OFL.txt`.
@@ -160,3 +165,21 @@ PGlite `.data/local` открывает один web-процесс; worker хо
 ## Как передавать следующий результат
 
 Обновить фактические статусы TASKS/PROGRESS, записать оставшиеся ограничения и новые миграции, приложить результаты проверок. Коммит должен собираться после чистого `npm ci`. Для совместной работы прислать ветвь/PR и commit, а не только скриншот. Пользователь собирается вернуться к исходному агенту — сохранять короткую, точную историю решений в `docs/DECISIONS.md`.
+
+## Состояние T031–T040 (15.10.2026)
+
+Ветка `claude/cool-carson-3eg7n6`, PR не создавался. Миграции 15–20 добавлены — после слияния не редактировать; следующая — 21. T041+ не начинались (нужно новое указание пользователя).
+
+| Задача | Состояние |
+| --- | --- |
+| T031 Битрикс24 | implemented, contract_test: чтение контактов, события, конфликты; запись и живой портал — нет |
+| T032 1С | implemented, contract_test: OData номенклатура/контрагенты; конкретная конфигурация и живая база — нет |
+| T033 Касса и банк | implemented, verified_test: выписка 1CClientBankExchange и сверка; ОФД/касса и банковские API — not_configured |
+| T034 Сообщения и Kaspi | implemented, contract_test: Telegram с согласиями, чтение заказов Kaspi; живой бот/кабинет — нет; WhatsApp — нет |
+| T035–T038 Видео | implemented (experimental): обработчик ffmpeg, версии линий/зон, детекторы, протокол оценки; реальные камеры и валидация на разрешённых записях — нет |
+| T039 Продвижение | implemented, verified_test: см. docs/TASKS.md; генератор изображений, e-mail/SMS, рекламные кабинеты — not_configured |
+| T040 Торговля и каналы | implemented, verified_test на стенде Kaspi: заказ → резерв → подтверждение → выдача → выплата/комиссия → возврат; живой кабинет, импорт файла отчёта, частичный возврат — нет |
+
+Общая приёмка ни одной из задач не заявлена: нужны живые проверки и ручная приёмка UI. GitHub Actions в репозитории не запускается (0 запусков) — проверить настройки Actions/биллинга.
+
+Что нужно от заказчика: тестовые аккаунты и токены (Битрикс24 портал с вебхуком, база 1С с OData, бот Telegram, кабинет Kaspi), публичный HTTPS-адрес для вебхуков, пример выписки банка и отчёта Kaspi о выплатах, выбор ОФД, модели камер и разрешённые записи для оценки, проверка KK-текстов носителем языка.

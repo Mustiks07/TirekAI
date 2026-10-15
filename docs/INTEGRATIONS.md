@@ -1,6 +1,6 @@
 # Интеграции
 
-Актуально на 14.10.2026. Реестр в коде: `src/server/integrations/registry.ts`, адаптер МойСклад: `src/server/integrations/moysklad.ts`, сервис: `src/server/integrations/service.ts`. Живые подключения в этой среде отсутствуют: статус `not_configured`; контрактные тесты не являются sandbox_verified или live_verified.
+Актуально на 15.10.2026. Реестр в коде: `src/server/integrations/registry.ts`, адаптер МойСклад: `src/server/integrations/moysklad.ts`, сервис: `src/server/integrations/service.ts`. Живые подключения в этой среде отсутствуют: статус `not_configured`; контрактные тесты не являются sandbox_verified или live_verified.
 
 ## МойСклад (T030)
 
@@ -23,16 +23,24 @@
 
 Доказательство: `tests/moysklad-contract.test.ts` — локальный сервер повторяет документированные формы (Bearer, gzip, meta.size/limit/offset, errors[], 429, 503, отчёт остатков, вебхук, валюты, юрлица, контрагенты, приёмка с externalCode и потерянным ответом на POST).
 
-## Остальные (T031–T034)
+## T031–T040 (15.10.2026)
 
-Битрикс24, выбранная конфигурация 1С, кассы/банки, каналы сообщений и Kaspi: адаптеры не реализованы, в реестре отмечены как planned без операций. Не выдумывать endpoint; перед реализацией проверить официальный контракт конкретных операций и тариф.
+Все адаптеры используют общий реестр (`integration_connections`, `integration_mappings`, `sync_runs`, `integration_inbox`, `sync_conflicts`), шифрование реквизитов и `trackRun`/`markChecked` из `src/server/integrations/common.ts`. Состояние каждой операции — в паспорте `registry.ts`. Проверки — **contract_test** на локальных серверах, повторяющих официальные формы; живые аккаунты не подключались (`live: not_verified`).
+
+| Адаптер | Контракт (проверено 15.10.2026) | Что реализовано | Не подключено / не проверено |
+| --- | --- | --- | --- |
+| Битрикс24 (T031) | b24restdocs: `crm.item.list/get` с entityTypeId=3 — контакты (start/next, 50 на страницу), ошибки 401/`QUERY_LIMIT_EXCEEDED` 503/`OPERATION_TIME_LIMIT` 429; исходящий вебхук с `auth[application_token]` | чтение контактов через входящий вебхук облачного портала (`*.bitrix24.<зона>`, только HTTPS), курсор `updatedTime` с перекрытием 5 мин, события `ONCRMCONTACT*` на `/api/integrations/bitrix24/:connection/:token` (токен приложения проверяется до сохранения), конфликты по почте/телефону и локальной правке; клиенты приходят без согласий | запись в Битрикс24, коробочный портал, OAuth-приложение, живой портал |
+| 1С (T032) | стандартный интерфейс OData 8.3.27 §17.4 (kb.1ci.com) | номенклатура и контрагенты: полное упорядоченное чтение `$top/$skip/$orderby Ref_Key`, `DataVersion`, единицы ОКЕИ, `DeletionMark` → архив, исчезнувшие → архив; цены не берутся (NULL); только HTTPS к публичному хосту | конкретная конфигурация (имена объектов настраиваются), запись в 1С, живая база |
+| Банк (T033) | 1CClientBankExchange 1.03 (v8.1c.ru/edi/edi_stnd/100/101.htm) | загрузка выписки (cp1251/UTF-8, ≤ 2 МБ), проверка счёта и арифметики остатков, дедупликация строк между выписками, решения по строке: провести / сопоставить / пропустить; проводка через `moneyInTransaction` | банковские API, онлайн-касса и ОФД — `not_configured` (официальный контракт не выбран) |
+| Telegram (T034) | Bot API (core.telegram.org): `getMe`, `setWebhook` с `secret_token`, `sendMessage`, 429 `retry_after`, 403 | вебхук только на публичный HTTPS, путь-токен + заголовок; привязка чата по одноразовому коду `/start` (7 дней) = согласие клиента, `/stop` = отзыв; исходящие выключены до разрешения владельца, согласие проверяется при постановке и при отправке; таймаут → `unknown`, без повтора | живой бот, WhatsApp и SMS/e-mail |
+| Kaspi (T034, T040) | Kaspi Shop API v2 (guide.kaspi.kz): `X-Auth-Token`, JSON:API, `page[size] ≤ 100`, фильтры state/creationDate, entries, product, `POST /v2/orders` (status) | чтение заказов окнами ≤ 14 дней с историей статусов; T040: связь кодов товаров с каталогом, перенос в продажи с резервом, подтверждение `ACCEPTED_BY_MERCHANT` (выключено до разрешения владельца, один раз), выдача, строка отчёта о выплате (сумма/комиссия/к выплате), возврат товара и денег с корректировкой комиссии | живой кабинет и токен, файловый импорт отчёта о выплатах, завершение заказа кодом покупателя, частичный возврат по строкам |
+| Камеры (T035–T038) | ffmpeg (файл, RTSP, веб-камера) на устройстве обработки; API устройства `/api/video/{config,runs,heartbeat,events,end}` с заголовками `Authorization: Device <token>` и `X-Source-Id` | обработка вне приложения, кадры не передаются и не хранятся, только агрегированные события | реальные камеры/RTSP конкретных моделей, ONVIF, разрешённые записи для валидации |
+| Продвижение (T039) | — | PDF-материалы, очередь Telegram по согласиям | генератор изображений, e-mail/SMS, рекламные кабинеты, автопубликация — `not_configured` по ТЗ |
+
+Доказательства: `tests/bitrix24-contract.test.ts`, `tests/onec-contract.test.ts`, `tests/bank.test.ts`, `tests/telegram-contract.test.ts`, `tests/kaspi-contract.test.ts`, `tests/kaspi-trade.test.ts` (стенд `tests/helpers/kaspi-server.ts`), `tests/video.test.ts`, `tests/marketing.test.ts`.
 
 | Направление | Источник | Неопределённость |
 | --- | --- | --- |
-| Битрикс24 | [REST reference](https://apidocs.bitrix24.ru/api-reference/) | версии REST по операциям, scopes, 401/403/429/5xx, дубли |
-| 1С | конфигурация не выбрана | обмен и версия |
-| Касса / банк | поставщики не выбраны | формат, права, тариф |
-| Kaspi / сообщения | контракты не проверены | доступность официального API |
-| Камера | [ONVIF Profile T](https://www.onvif.org/profiles/profile-t/) | T035–T038 |
 | AI | Anthropic Messages API через официальный SDK (T026) | ключ не задан: not_configured |
 | Речь | не выбрана | T028: интерфейс есть, провайдер не подключён |
+| ОФД / онлайн-касса | не выбран | формат, права, тариф |

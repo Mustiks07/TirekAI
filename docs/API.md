@@ -169,3 +169,31 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Публичный входящий маршрут: `POST /api/integrations/moysklad/:connectionId/:token?requestId=…` — без сессии и Origin, тело ≤ 64 КБ, токен сравнивается по хешу, повтор requestId возвращает `{accepted:true, duplicate:true}`. Обработка выполняется worker.
 
 Основные новые ошибки: 409 TASK_STATE, PROPOSAL_STATE, PARAMS_CHANGED, APPROVAL_REQUIRED, APPROVAL_REVOKED, RULE_NOT_TESTED, EXTERNAL_SOURCE_OF_TRUTH, WAREHOUSE_HAS_LEDGER; 403 SELF_APPROVAL, APPROVAL_LIMIT; 422 LINE_DECISION_REQUIRED, UNIT_MISMATCH, CHECKLIST_INCOMPLETE, EVIDENCE_REQUIRED, EVIDENCE_NOT_MET, NO_COMPARABLE_OFFER, QUANTITY_BELOW_RECEIVED, VALUE_BELOW_RECEIVED, OBLIGATION_PAID_EXCEEDS; 503 CREDENTIAL_STORAGE_NOT_CONFIGURED, VOICE_NOT_CONFIGURED. Тексты RU/KK — `src/lib/execution-i18n.ts`.
+
+## T031–T040 (организация: `organizations/:id/…`)
+
+| Метод | Путь | Назначение |
+| --- | --- | --- |
+| POST | integrations/bitrix24, …/:id/check, sync, disconnect; integrations/bitrix24/conflicts/:id | вебхук портала (owner), проверка, синхронизация контактов, конфликты |
+| POST | integrations/onec, …/:id/check, sync, disconnect; integrations/onec/conflicts/:id | OData-база 1С (owner) |
+| GET/POST | bank/statements, bank/statements/:id | выписки и строки; загрузка `{key, accountId, filename, content(base64)}` (finance:write) |
+| POST | bank/accounts, bank/lines/:id | IBAN счёта; решение по строке `{key, version, kind: post/match/ignore, …}` |
+| POST | integrations/telegram, …/:id/check, webhook, outbound, links, messages, disconnect; GET …/:id/messages | бот, вебхук (origin HTTPS), исходящие (owner), код привязки, отправка (customers:write) |
+| POST/GET | integrations/kaspi, …/:id/check, sync, orders, disconnect | токен и склад (owner), чтение заказов |
+| GET/POST | integrations/kaspi/:id/trade, products, writes | T040: обзор, связь кода товара `{key, productCode, itemId}`, разрешение смены статусов (owner) |
+| GET | channel-orders | заказы Kaspi активного подключения для страницы продаж (orders:read) |
+| POST | channel-orders/:id/import, accept | `{key, version}` — в продажи с резервом; подтверждение в Kaspi → `{state: sent/unknown/failed}` |
+| POST | channel-orders/:id/issue, return | `{key, note}` — выдать остаток; вернуть выданное на склад |
+| POST | channel-orders/:id/settlements | `{key, kind: payout/return, accountId, document, reportDate, gross, commission, net}` (finance:write) |
+| GET/POST | video/sources, video/sources/:id/token, configs, stats, signals, runs | источники и паспорт, токен устройства (owner, один раз), версии линий/зон, почасовая статистика с покрытием |
+| POST | video/runs/:id/annotations, video/evaluations, video/signals/:id/task; GET video/detectors | разметка, оценка, задача из сигнала, статусы детекторов |
+| GET/POST/PATCH | marketing/campaigns, marketing/campaigns/:id | список, создание `{key, data}`, карточка с оценкой/версиями/журналом, новая версия `{key, version, data, note}` |
+| POST | marketing/evaluate | оценка маржи/наличия без сохранения |
+| POST | marketing/campaigns/:id/decisions | `{key, version, kind: submit/approve/reject/archive, note, override?}` |
+| GET/POST | marketing/campaigns/:id/template, images, images/generate, images/:imageId | шаблон RU/KK, загрузка PNG/JPEG, генератор → 409 IMAGE_GENERATOR_NOT_CONFIGURED |
+| POST | marketing/campaigns/:id/exports, publications, spend | PDF `{material: poster/price_tag/card, locale}` (base64), очередь Telegram (marketing:approve), фактические расходы |
+| GET/POST | marketing/campaigns/:id/analysis, marketing/segments/preview, marketing/recommendations?itemId&days | анализ с контрольным периодом, подсчёт сегмента, совместные покупки |
+
+Публичные маршруты: `POST /api/integrations/bitrix24/:connection/:token`, `POST /api/integrations/telegram/:connection/:token` (заголовок `X-Telegram-Bot-Api-Secret-Token`), API устройства видео `/api/video/{config,runs,heartbeat,events,end}` (`Authorization: Device <token>`, `X-Source-Id`).
+
+Новые ошибки (тексты RU/KK — `src/lib/execution-i18n.ts`): 409 MARGIN_BELOW_THRESHOLD, MARGIN_UNKNOWN, CAMPAIGN_NOT_APPROVED, OFFER_CHANGED, CAMPAIGN_INVALID, PRODUCT_NOT_LINKED, TOTAL_MISMATCH, LINE_TOTAL_MISMATCH, CHANNEL_WRITES_OFF, ACCEPT_ALREADY_SENT, SETTLEMENT_DUPLICATE, RETURN_GOODS_FIRST, MESSAGING_DISABLED, NO_CONSENT; 403 OVERRIDE_FORBIDDEN, SELF_APPROVAL; 422 SETTLEMENT_ARITHMETIC, OVERRIDE_REASON, IMAGE_TYPE.

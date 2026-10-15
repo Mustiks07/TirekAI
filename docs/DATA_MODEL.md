@@ -85,4 +85,20 @@
 
 Миграция 14 (`writeback-migration.ts`): `catalog_items.purchase_price/sale_price` допускают NULL (цена неизвестна); `purchase_receipts.movement_id` допускает NULL (приёмка на склад-зеркало без локального движения); `integration_connections.settings` (jsonb, раздел supply: enabled, organization_id, кто и когда); `integration_mappings.entity_type` += counterparty; `sync_runs.kind` += export; `integration_exports` (kind supply, источник purchase_receive = ключ команды приёмки, UNIQUE(organization, source_type, source_id), payload снимка позиций, expected_minor, state pending/sent/failed/dead, attempts, next_attempt_at, external_id, external_sum_minor, warning, error_code).
 
-Источник истины: для связанного склада остаток — МойСклад (`external_stock`), складские команды по нему запрещены; для остальных — собственный журнал. Каталог импортированных товаров обновляется из МойСклад, но локальная правка после синхронизации создаёт конфликт. Задачи, согласования, закупки и знания ведутся у нас. Следующая миграция — 15; миграции 1–14 после публикации не менять.
+Источник истины: для связанного склада остаток — МойСклад (`external_stock`), складские команды по нему запрещены; для остальных — собственный журнал. Каталог импортированных товаров обновляется из МойСклад, но локальная правка после синхронизации создаёт конфликт. Задачи, согласования, закупки и знания ведутся у нас. Миграции 1–14 после публикации не менять.
+
+## Миграции 15–20 (T031–T040)
+
+Миграция 15 (`connectors-migration.ts`): провайдеры `bitrix24`, `onec`, `telegram`, `kaspi`; типы связей `contact`, `partner`, `order`, `chat`.
+
+Миграция 16 (`bank-migration.ts`): `money_accounts.bank_account` (IBAN, уникален в организации); `bank_statements` (sha256 уникален по счёту, период, остатки и обороты, consistent/issues, число строк и дублей); `bank_statement_lines` (dedupe_key уникален по счёту, state new/matched/posted/ignored, `money_entry_id` уникален, подсказки, решение, версия).
+
+Миграция 17 (`channels-migration.ts`): `messaging_links` (хеш одноразового кода, срок, использование), `messaging_messages` (in/out, состояния received/queued/sent/failed/unknown/blocked, входящие уникальны по (connection, external_id)), `channel_orders` (заказ Kaspi: сумма в тиынах, строки jsonb, история статусов, `sales_order_id` уникален, версия).
+
+Миграция 18 (`video-migration.ts`): `video_sources` (паспорт, хеш токена устройства, `raw_storage` всегда false), `video_configs` (версии линий/зон), `video_runs`, `video_events` (UNIQUE(run, seq) — повтор пакета не дублирует), `video_annotations`, `video_evaluations`. Кадры не хранятся.
+
+Миграция 19 (`marketing-migration.ts`): `marketing_campaigns` (state draft/pending/approved/rejected/archived, version, approved_version = version при approved, data jsonb, фактические расходы NULL = неизвестно, spend_version), `marketing_campaign_versions` (снимок данных и оценки маржи на версию), `marketing_decisions` (submitted/approved/rejected/archived, override, оценка на момент решения), `marketing_images` (PNG/JPEG ≤ 2 МБ, BYTEA, sha256, подписи RU/KK), `marketing_publications` (export/telegram; exported/queued/not_configured/blocked — состояния «опубликовано» нет), `messaging_messages.publication_id`.
+
+Миграция 20 (`channel-trade-migration.ts`): `channel_orders.accept_state` (sent/unknown/failed), `accept_error`, `accepted_at`, `imported_by`; `channel_settlements` (payout/return, документ и дата отчёта, gross/commission/net в тиынах с CHECK net = gross − commission, ссылки на записи денег; UNIQUE(connection, kind, document, channel_order)).
+
+Деньги по каналу: выплата = оплата заказа (gross) + операционный расход «Комиссия Kaspi»; возврат = операционный доход (возврат комиссии) + возврат денег покупателю. `money_entries.operating` для дохода отражает корректировку операционных расходов. Следующая миграция — 21; миграции 1–20 после публикации не менять.
