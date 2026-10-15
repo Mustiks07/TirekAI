@@ -1,9 +1,10 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { api } from "@/lib/client";
 import { businessDate } from "@/lib/dates";
 import { stateText } from "@/lib/execution-i18n";
+import { moneyText } from "@/lib/inventory-i18n";
 import { ActionForm, Field } from "./purchasing-page";
 
 const f = (d: FormData, n: string) => String(d.get(n) || "").trim();
@@ -216,7 +217,64 @@ export function ConnectorsPanel(
   const { locale, workspace } = ctx;
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk);
   const base = `organizations/${workspace.organization.id}`;
-  const [inbound, setInbound] = useState<Record<string, string>>({});
+  const [inbound, setInbound] = useState<Record<string, string>>({}),
+    [customers, setCustomers] = useState<{ id: string; name: string }[]>([]),
+    [link, setLink] = useState(""),
+    [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]),
+    [messages, setMessages] = useState<
+      {
+        id: string;
+        direction: string;
+        customer_name: string | null;
+        text: string;
+        state: string;
+      }[]
+    >([]),
+    [kaspi, setKaspi] = useState<
+      {
+        id: string;
+        code: string;
+        status: string;
+        state: string;
+        total_minor: string;
+        customer_name: string;
+        created_external: string;
+        sales_order_id: string | null;
+      }[]
+    >([]);
+  const tg = ctx.connections.find(
+      (c) => c.provider === "telegram" && !c.disconnected_at,
+    ),
+    kc = ctx.connections.find(
+      (c) => c.provider === "kaspi" && !c.disconnected_at,
+    );
+  useEffect(() => {
+    let live = true;
+    const branch = workspace.branches[0]?.id;
+    if (tg) {
+      api<{ items: typeof messages }>(
+        `${base}/integrations/telegram/${tg.id}/messages`,
+      )
+        .then((v) => live && setMessages(v.items))
+        .catch(() => undefined);
+      if (branch)
+        api<{ items: { id: string; name: string }[] }>(
+          `${base}/customers?branchId=${branch}&page=1`,
+        )
+          .then((v) => live && setCustomers(v.items))
+          .catch(() => undefined);
+    }
+    api<{ items: { id: string; name: string }[] }>(`${base}/warehouses`)
+      .then((v) => live && setWarehouses(v.items))
+      .catch(() => undefined);
+    if (kc)
+      api<{ items: typeof kaspi }>(`${base}/integrations/kaspi/${kc.id}/orders`)
+        .then((v) => live && setKaspi(v.items))
+        .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [base, tg, kc, workspace.branches]);
   const shown = (provider: string) =>
     inbound[provider] && (
       <p className="commerce-success">
@@ -400,6 +458,243 @@ export function ConnectorsPanel(
               />
             </Field>
           </ActionForm>
+        }
+      />
+      <Connector
+        ctx={ctx}
+        provider="telegram"
+        title="Telegram"
+        actions={["check"]}
+        note={t(
+          "Бот принимает сообщения клиентов. Чат связывается с клиентом только когда клиент сам отправит боту код (/start): это и есть его согласие на сообщения; /stop отзывает согласие. Отправка выключена, пока собственник её не включит, и невозможна без согласия клиента.",
+          "Бот клиенттердің хабарламаларын қабылдайды. Чат клиентпен тек клиент ботқа кодты өзі жібергенде (/start) байланысады: бұл оның хабарламаларға келісімі; /stop келісімді қайтарады. Жіберу иесі қоспайынша өшірулі және клиенттің келісімінсіз мүмкін емес.",
+        )}
+        setup={
+          <ActionForm
+            locale={locale}
+            label={t("Сохранить Telegram", "Telegram сақтау")}
+            submit={async (d, key) => {
+              await api(`${base}/integrations/telegram`, "POST", {
+                key,
+                botToken: f(d, "botToken"),
+                branchId: f(d, "branchId"),
+              });
+              ctx.refresh();
+            }}
+          >
+            <Field
+              label={t(
+                "Токен бота (хранится зашифрованным)",
+                "Бот токені (шифрланып сақталады)",
+              )}
+            >
+              <input
+                name="botToken"
+                type="password"
+                autoComplete="off"
+                required
+                maxLength={100}
+              />
+            </Field>
+            <Field label={t("Филиал", "Филиал")}>
+              <select name="branchId">
+                {workspace.branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </ActionForm>
+        }
+        extra={(conn) => (
+          <>
+            {ctx.canWrite && (
+              <div className="commerce-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    ctx.run(
+                      "tg-webhook",
+                      () =>
+                        api(
+                          `${base}/integrations/telegram/${conn.id}/webhook`,
+                          "POST",
+                          {},
+                        ),
+                      t(
+                        "Адрес для сообщений зарегистрирован.",
+                        "Хабарламалар мекенжайы тіркелді.",
+                      ),
+                    )
+                  }
+                >
+                  {t(
+                    "Зарегистрировать адрес (нужен публичный HTTPS)",
+                    "Мекенжайды тіркеу (жария HTTPS қажет)",
+                  )}
+                </button>
+                {(["on", "off"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      ctx.run(
+                        `tg-${v}`,
+                        () =>
+                          api(
+                            `${base}/integrations/telegram/${conn.id}/outbound`,
+                            "POST",
+                            {
+                              key: crypto.randomUUID(),
+                              version: conn.version,
+                              enabled: v === "on",
+                            },
+                          ),
+                        v === "on"
+                          ? t("Отправка включена.", "Жіберу қосылды.")
+                          : t("Отправка выключена.", "Жіберу өшірілді."),
+                      )
+                    }
+                  >
+                    {v === "on"
+                      ? t("Включить отправку", "Жіберуді қосу")
+                      : t("Выключить отправку", "Жіберуді өшіру")}
+                  </button>
+                ))}
+              </div>
+            )}
+            {customers.length > 0 && (
+              <ActionForm
+                locale={locale}
+                label={t(
+                  "Получить код подключения для клиента",
+                  "Клиентке қосылу кодын алу",
+                )}
+                submit={async (d) => {
+                  const r = await api<{ code: string; link: string | null }>(
+                    `${base}/integrations/telegram/${conn.id}/links`,
+                    "POST",
+                    { customerId: f(d, "customerId") },
+                  );
+                  setLink(r.link || `/start ${r.code}`);
+                }}
+              >
+                <Field label={t("Клиент", "Клиент")}>
+                  <select name="customerId">
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </ActionForm>
+            )}
+            {link && (
+              <p className="commerce-success">
+                {t(
+                  "Передайте клиенту (действует 7 дней, один раз):",
+                  "Клиентке беріңіз (7 күн, бір рет жарамды):",
+                )}{" "}
+                <code>{link}</code>
+              </p>
+            )}
+            <h3>{t("Сообщения", "Хабарламалар")}</h3>
+            {messages.length === 0 ? (
+              <p>{t("Сообщений нет.", "Хабарламалар жоқ.")}</p>
+            ) : (
+              <ul className="today-list">
+                {messages.map((m) => (
+                  <li key={m.id}>
+                    {m.direction === "in" ? "←" : "→"}{" "}
+                    {m.customer_name || t("неизвестный чат", "белгісіз чат")} ·{" "}
+                    {m.text} · {stateText(m.state, locale)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      />
+      <Connector
+        ctx={ctx}
+        provider="kaspi"
+        title="Kaspi"
+        note={t(
+          "Заказы Магазина на Kaspi.kz читаются по API (токен из кабинета продавца). Чтение не меняет склад и деньги: заказ становится продажей, резервом и выдачей только действиями сотрудников. Смена статуса в Kaspi выключена, пока собственник её не разрешит.",
+          "Kaspi.kz Дүкенінің тапсырыстары API арқылы оқылады (сатушы кабинетіндегі токен). Оқу қойма мен ақшаны өзгертпейді: тапсырыс қызметкерлердің әрекеттерімен ғана сатуға, резервке және беруге айналады. Kaspi-де мәртебені өзгерту иесі рұқсат бергенше өшірулі.",
+        )}
+        setup={
+          <ActionForm
+            locale={locale}
+            label={t("Сохранить Kaspi", "Kaspi сақтау")}
+            submit={async (d, key) => {
+              await api(`${base}/integrations/kaspi`, "POST", {
+                key,
+                token: f(d, "token"),
+                branchId: f(d, "branchId"),
+                warehouseId: f(d, "warehouseId"),
+              });
+              ctx.refresh();
+            }}
+          >
+            <Field
+              label={t(
+                "Токен API (хранится зашифрованным)",
+                "API токені (шифрланып сақталады)",
+              )}
+            >
+              <input
+                name="token"
+                type="password"
+                autoComplete="off"
+                required
+                maxLength={200}
+              />
+            </Field>
+            <Field label={t("Филиал", "Филиал")}>
+              <select name="branchId">
+                {workspace.branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label={t(
+                "Склад для заказов Kaspi",
+                "Kaspi тапсырыстарына арналған қойма",
+              )}
+            >
+              <select name="warehouseId">
+                {warehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </ActionForm>
+        }
+        extra={() =>
+          kaspi.length === 0 ? (
+            <p>{t("Заказов нет.", "Тапсырыстар жоқ.")}</p>
+          ) : (
+            <ul className="today-list">
+              {kaspi.map((o) => (
+                <li key={o.id}>
+                  №{o.code} · {o.customer_name} · {o.status} / {o.state} ·{" "}
+                  {moneyText(o.total_minor)} ₸
+                  {o.sales_order_id &&
+                    ` · ${t("связан с заказом", "тапсырыспен байланысқан")}`}
+                </li>
+              ))}
+            </ul>
+          )
         }
       />
     </>

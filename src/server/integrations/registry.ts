@@ -1,6 +1,8 @@
 import { MOYSKLAD_BASE_URL, MOYSKLAD_CONTRACT } from "./moysklad";
 import { BITRIX24_CONTRACT } from "./bitrix24";
 import { ONEC_CONTRACT } from "./onec";
+import { TELEGRAM_CONTRACT } from "./telegram";
+import { KASPI_CONTRACT } from "./kaspi";
 
 // T029 registry: each adapter declares concrete operations, direction, source of truth,
 // required rights, how it is verified, and what is not verified live. Planned adapters are
@@ -360,19 +362,147 @@ export const passports: Passport[] = [
     disconnect:
       "Nothing is stored except uploaded statements and decisions; no credentials are kept.",
   },
-  ...[["messaging_kaspi", "Каналы и Kaspi", "T034"]].map(
-    ([provider, name, task]) => ({
-      provider,
-      name,
-      contract: null,
-      auth: "not defined",
-      limits: [],
-      ownership: {},
-      operations: [],
-      unverified: [
-        `${task}: adapter not implemented; official contract to be checked`,
-      ],
-      disconnect: "n/a",
-    }),
-  ),
+  {
+    provider: "telegram",
+    name: "Telegram",
+    contract: {
+      source: "https://core.telegram.org/bots/api",
+      checked: "2026-10-15",
+      version: TELEGRAM_CONTRACT,
+    },
+    auth: "bot token from @BotFather (sealed); webhook verified by a secret path and the X-Telegram-Bot-Api-Secret-Token header",
+    limits: [
+      "429 with parameters.retry_after: waited for, the message stays queued",
+      "sendMessage is attempted once per worker step: a timeout leaves the message 'unknown', it is not resent automatically",
+    ],
+    ownership: {
+      messages: "external",
+      customers: "internal",
+      consents: "internal",
+    },
+    operations: [
+      {
+        id: "check",
+        direction: "read",
+        entity: "bot",
+        endpoint: "POST https://api.telegram.org/bot<token>/getMe",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes: "token check, bot username for the /start link",
+      },
+      {
+        id: "webhook_register",
+        direction: "write",
+        entity: "webhook",
+        endpoint: "setWebhook {url, secret_token, allowed_updates:['message']}",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes: "explicit owner action; needs a public HTTPS APP_ORIGIN",
+      },
+      {
+        id: "updates",
+        direction: "inbound",
+        entity: "message",
+        endpoint: "POST /api/integrations/telegram/{connection}/{token}",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "private chats only; /start <code> links a customer and records the customer's own consent, /stop withdraws it; dedupe by update_id",
+      },
+      {
+        id: "send",
+        direction: "write",
+        entity: "message",
+        endpoint: "sendMessage {chat_id, text}",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "off by default; needs owner enablement, a linked chat and the customer's messenger consent, re-checked at send time",
+      },
+    ],
+    unverified: [
+      "a live bot and real delivery",
+      "WhatsApp and other messengers (no adapter: official business contracts not selected)",
+    ],
+    disconnect:
+      "Owner disconnects: the bot token is erased; chats, messages and consent history stay.",
+  },
+  {
+    provider: "kaspi",
+    name: "Kaspi",
+    contract: {
+      source: "https://guide.kaspi.kz/partner/ru/shop/api/orders",
+      checked: "2026-10-15",
+      version: KASPI_CONTRACT,
+    },
+    auth: "X-Auth-Token from the merchant cabinet (sealed); Content-Type application/vnd.api+json",
+    limits: [
+      "page[size] ≤ 100, page[number] from 0; creationDate filter in milliseconds, scanned in windows of ≤ 14 days",
+      "429 and 5xx are retried with backoff; status changes are attempted once",
+    ],
+    ownership: {
+      channel_orders: "external",
+      fulfilment: "internal",
+      money: "internal",
+    },
+    operations: [
+      {
+        id: "orders",
+        direction: "read",
+        entity: "orders",
+        endpoint:
+          "GET /shop/api/v2/orders?page[number]&page[size]&filter[orders][state]&filter[orders][creationDate][$ge|$le]",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes:
+          "states NEW, SIGN_REQUIRED, PICKUP, DELIVERY, KASPI_DELIVERY, ARCHIVE; tenge to exact tiyn (fractions refused); status history kept; no stock or money change",
+      },
+      {
+        id: "entries",
+        direction: "read",
+        entity: "order entries",
+        endpoint:
+          "GET /v2/orders/{id}/entries; GET /v2/orderentries/{id}/product",
+        implementation: "implemented",
+        verification: "contract_test",
+        live: "not_verified",
+        notes: "quantity, base price and the Kaspi product code of each line",
+      },
+      {
+        id: "accept",
+        direction: "write",
+        entity: "order status",
+        endpoint:
+          "POST /v2/orders {data:{type:'orders',id,attributes:{code,status:'ACCEPTED_BY_MERCHANT'}}}",
+        implementation: "planned",
+        verification: "none",
+        live: "not_verified",
+        notes:
+          "T040: off until the owner allows status changes; an explicit staff action per order",
+      },
+      {
+        id: "settlements",
+        direction: "inbound",
+        entity: "commission and payout",
+        endpoint: "settlement report (manual entry), not in the orders API",
+        implementation: "planned",
+        verification: "none",
+        live: "not_verified",
+        notes:
+          "T040: commission and payout are recorded from the Kaspi settlement report, never estimated",
+      },
+    ],
+    unverified: [
+      "a live merchant cabinet and token rights",
+      "real window and rate limits of the API",
+      "completion with the buyer's security code (COMPLETED) is not implemented",
+    ],
+    disconnect:
+      "Owner disconnects: the token is erased; channel orders and their links stay.",
+  },
 ];

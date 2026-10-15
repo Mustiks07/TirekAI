@@ -316,6 +316,56 @@ export class CrmService {
     });
     return { version: version + 1 };
   }
+  // A customer's own action in a messenger (/start with a staff-issued code, /stop) sets or
+  // withdraws the messenger consent; the change is a CRM event with its source.
+  async setMessengerConsentInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    value: boolean,
+    note: string,
+  ) {
+    const s = await sessionAccess(tx, secret, org, "customers:write");
+    const c = await this.customer(tx, org, id, s.branchId);
+    await tx.query(
+      "UPDATE customers SET consents=jsonb_set(consents,'{messenger}',to_jsonb($3::boolean)),version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2",
+      [org, id, value],
+    );
+    await event(
+      tx,
+      org,
+      id,
+      s.actorId,
+      value ? "consent.granted" : "consent.withdrawn",
+      note,
+      {
+        channel: "messenger",
+      },
+    );
+    await audit(tx, org, s.actorId, "customer.consent", c.branch_id, {
+      customerId: id,
+      messenger: String(value),
+    });
+  }
+  async noteMessageInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    note: string,
+  ) {
+    const s = await sessionAccess(tx, secret, org, "customers:write");
+    await this.customer(tx, org, id, s.branchId);
+    await event(
+      tx,
+      org,
+      id,
+      s.actorId,
+      "message.received",
+      note.slice(0, 250).padEnd(3, "."),
+    );
+  }
   async noteExternalInTransaction(
     tx: Sql,
     secret: Credential,

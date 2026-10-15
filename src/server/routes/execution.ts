@@ -12,6 +12,8 @@ import { IntegrationService } from "../integrations/service";
 import { Bitrix24Service } from "../integrations/bitrix24-service";
 import { OneCService } from "../integrations/onec-service";
 import { BankService } from "../bank/service";
+import { TelegramService } from "../integrations/telegram-service";
+import { KaspiService } from "../integrations/kaspi-service";
 import {
   askResult,
   assistantStatus,
@@ -614,6 +616,102 @@ export const executionRoutes: Route[] = [
     schema: commerceResult,
     run: (c) =>
       new BankService(c.db).decide(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram",
+    schema: commerceResult,
+    run: (c) => new TelegramService(c.db).configure(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram/:id/check",
+    schema: ok,
+    run: (c) => new TelegramService(c.db).check(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram/:id/webhook",
+    schema: ok,
+    run: (c) =>
+      new TelegramService(c.db).registerWebhook(
+        c.secret,
+        c.org,
+        c.params[0],
+        process.env.APP_ORIGIN || "",
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram/:id/outbound",
+    schema: commerceResult,
+    run: (c) =>
+      new TelegramService(c.db).setOutbound(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram/:id/links",
+    schema: z.object({ code: z.string(), link: z.string().nullable() }),
+    run: (c) =>
+      new TelegramService(c.db).createLink(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram/:id/messages",
+    schema: commerceResult,
+    run: (c) =>
+      new TelegramService(c.db).send(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "integrations/telegram/:id/messages",
+    run: (c) =>
+      new TelegramService(c.db).conversations(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/telegram/:id/disconnect",
+    schema: ok,
+    run: (c) =>
+      new TelegramService(c.db).disconnect(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/kaspi",
+    schema: commerceResult,
+    run: (c) => new KaspiService(c.db).configure(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/kaspi/:id/check",
+    schema: ok,
+    run: (c) => new KaspiService(c.db).check(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/kaspi/:id/sync",
+    run: (c) => new KaspiService(c.db).syncNow(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "integrations/kaspi/:id/orders",
+    run: (c) => new KaspiService(c.db).orders(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/kaspi/:id/disconnect",
+    schema: ok,
+    run: (c) => new KaspiService(c.db).disconnect(c.secret, c.org, c.params[0]),
   },
   {
     method: "POST",
