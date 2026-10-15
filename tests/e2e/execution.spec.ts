@@ -130,7 +130,9 @@ test("situation → draft purchase → second-person approval → execution; tas
   await page.getByRole("button", { name: "РУС", exact: true }).click();
   // T023: reorder point through the form, then explicit detection.
   let f = form(page, "Сохранить порог");
-  await f.getByRole("combobox", { name: "Товар", exact: true }).selectOption(item);
+  await f
+    .getByRole("combobox", { name: "Товар", exact: true })
+    .selectOption(item);
   await f.getByLabel("Минимум, базовые единицы", { exact: true }).fill("10");
   await f.getByLabel("Страховой запас", { exact: true }).fill("2");
   await f.getByRole("button", { name: "Сохранить порог", exact: true }).click();
@@ -144,7 +146,9 @@ test("situation → draft purchase → second-person approval → execution; tas
     .click();
   await expect(page.getByText(/Черновик закупки создан/)).toBeVisible();
   await nav(page, "Согласования");
-  await page.getByRole("combobox", { name: "Показать", exact: true }).selectOption("draft");
+  await page
+    .getByRole("combobox", { name: "Показать", exact: true })
+    .selectOption("draft");
   await page.getByRole("button", { name: /Закупка · 132,00 KZT/ }).click();
   await page
     .getByRole("button", { name: "Отправить на согласование", exact: true })
@@ -181,7 +185,9 @@ test("situation → draft purchase → second-person approval → execution; tas
   await page.reload();
   await page.getByRole("button", { name: "РУС", exact: true }).click();
   await nav(page, "Согласования");
-  await page.getByRole("combobox", { name: "Показать", exact: true }).selectOption("approved");
+  await page
+    .getByRole("combobox", { name: "Показать", exact: true })
+    .selectOption("approved");
   await page.getByRole("button", { name: /Закупка · 132,00 KZT/ }).click();
   await page
     .getByRole("button", { name: "Выполнить согласованное", exact: true })
@@ -226,7 +232,9 @@ test("situation → draft purchase → second-person approval → execution; tas
     page.getByText("Отчёт об исполнении", { exact: true }),
   ).toBeVisible();
   await nav(manager, "Задачи");
-  await manager.getByRole("combobox", { name: "Показать", exact: true }).selectOption("done");
+  await manager
+    .getByRole("combobox", { name: "Показать", exact: true })
+    .selectOption("done");
   await manager.getByRole("button", { name: /Проверить витрину чая/ }).click();
   f = form(manager, "Записать результат проверки");
   await f
@@ -390,7 +398,9 @@ test("situation → draft purchase → second-person approval → execution; tas
   await extra
     .getByLabel("Наименование по документу", { exact: true })
     .fill("Неизвестная позиция");
-  await extra.getByRole("combobox", { name: "Товар каталога", exact: true }).selectOption(other);
+  await extra
+    .getByRole("combobox", { name: "Товар каталога", exact: true })
+    .selectOption(other);
   await extra.getByLabel("Количество", { exact: true }).fill("1");
   await extra
     .getByLabel("Цена за единицу, включая налоги, KZT", { exact: true })
@@ -407,7 +417,9 @@ test("situation → draft purchase → second-person approval → execution; tas
   await expect(
     page.getByRole("alert").filter({ hasText: "Есть строки вне заказа" }),
   ).toBeVisible();
-  await extra.getByRole("combobox", { name: "Решение", exact: true }).selectOption("reject");
+  await extra
+    .getByRole("combobox", { name: "Решение", exact: true })
+    .selectOption("reject");
   await f
     .getByRole("button", { name: "Сохранить проверку документа", exact: true })
     .click();

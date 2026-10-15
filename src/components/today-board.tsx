@@ -460,8 +460,8 @@ export function TodayBoard({
                         : sourceNames[s.name]
                           ? sourceNames[s.name]
                           : s.name === "moysklad_writeback"
-                          ? t("Приёмки в МойСклад", "МойСкладқа қабылдаулар")
-                          : t("AI-помощник", "AI көмекші")}
+                            ? t("Приёмки в МойСклад", "МойСкладқа қабылдаулар")
+                            : t("AI-помощник", "AI көмекші")}
                   </strong>{" "}
                   · {stateText(s.status, locale)}
                   {s.checked_at &&

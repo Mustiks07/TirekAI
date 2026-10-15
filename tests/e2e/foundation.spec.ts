@@ -75,7 +75,9 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
     .click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "Пригласить сотрудника", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Пригласить сотрудника", exact: true })
+    .click();
   const dialog = page.getByRole("dialog");
   await dialog
     .getByLabel("Электронная почта", { exact: true })
@@ -92,7 +94,9 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
     dialog.getByText("Письмо не отправлялось.", { exact: false }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Закрыть", exact: true }).click();
-  const employeeContext = await browser.newContext({ baseURL: "http://127.0.0.1:3100" });
+  const employeeContext = await browser.newContext({
+    baseURL: "http://127.0.0.1:3100",
+  });
   const employee = await employeeContext.newPage();
   await register(employee, employeeEmail, "Айдана");
   // An account without organizations can accept a link without creating its own business.

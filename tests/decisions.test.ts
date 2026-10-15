@@ -338,7 +338,11 @@ it("T024: changing the amount after approval requires a new approval; revoked au
   const id = (await prop.fromInsight(buyer, org, insight.id, { key: key() }))
     .id;
   await cmd(buyer, id, { kind: "submit" });
-  await cmd(manager, id, { kind: "approve", paramVersion: 1, note: "Согласовано" });
+  await cmd(manager, id, {
+    kind: "approve",
+    paramVersion: 1,
+    note: "Согласовано",
+  });
   let d = await detail(buyer, id);
   const params = d.proposal.params as {
     lines: { offerId: string; quantity: string }[];

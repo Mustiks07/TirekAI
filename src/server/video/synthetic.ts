@@ -34,7 +34,14 @@ export type Clip = {
   // Unusable stretches (camera covered / no light): rendered black.
   dark?: { from: number; to: number }[];
   // A lasting visual change of a shelf area from `at` on (goods taken away), for T038.
-  shelfChange?: { at: number; x0: number; y0: number; x1: number; y1: number; shade: number };
+  shelfChange?: {
+    at: number;
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    shade: number;
+  };
 };
 const W = 320,
   H = 180,
@@ -211,7 +218,8 @@ function render(clip: Clip, f: number, base: Uint8Array, noise: () => number) {
   const sc = clip.shelfChange;
   if (sc && t >= sc.at)
     for (let y = Math.floor(sc.y0 * H); y < Math.ceil(sc.y1 * H); y++)
-      for (let x = Math.floor(sc.x0 * W); x < Math.ceil(sc.x1 * W); x++) out[y * W + x] = sc.shade;
+      for (let x = Math.floor(sc.x0 * W); x < Math.ceil(sc.x1 * W); x++)
+        out[y * W + x] = sc.shade;
   for (const wk of clip.walkers) {
     const x = xAt(wk, t);
     if (t >= wk.start && x > -0.1 && x < 1.1)

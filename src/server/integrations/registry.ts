@@ -479,28 +479,29 @@ export const passports: Passport[] = [
         entity: "order status",
         endpoint:
           "POST /v2/orders {data:{type:'orders',id,attributes:{code,status:'ACCEPTED_BY_MERCHANT'}}}",
-        implementation: "planned",
-        verification: "none",
+        implementation: "implemented",
+        verification: "contract_test",
         live: "not_verified",
         notes:
-          "T040: off until the owner allows status changes; an explicit staff action per order",
+          "T040: off until the owner allows status changes; an explicit staff action per order after the stock is reserved; sent once, a timeout is recorded as unknown and not resent",
       },
       {
         id: "settlements",
         direction: "inbound",
         entity: "commission and payout",
         endpoint: "settlement report (manual entry), not in the orders API",
-        implementation: "planned",
-        verification: "none",
+        implementation: "implemented",
+        verification: "contract_test",
         live: "not_verified",
         notes:
-          "T040: commission and payout are recorded from the Kaspi settlement report, never estimated",
+          "T040: gross, commission and net copied from the Kaspi settlement report (gross − commission = net checked); payout = order payment + operating commission expense, return = refund + commission correction; one report line is posted once. File import of the report is not implemented",
       },
     ],
     unverified: [
       "a live merchant cabinet and token rights",
       "real window and rate limits of the API",
       "completion with the buyer's security code (COMPLETED) is not implemented",
+      "the settlement report is entered manually; its file format was not verified",
     ],
     disconnect:
       "Owner disconnects: the token is erased; channel orders and their links stay.",

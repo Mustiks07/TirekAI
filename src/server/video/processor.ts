@@ -264,7 +264,8 @@ export async function processVideo(o: {
           if (i < 3 * fps) shelfRef[z.id] = share;
           // People in front move; a changed shelf is a static blob that does not.
           const movers = tracker.tracks.filter(
-            (tr) => tr.travel > 0.05 && inside({ x: tr.cx, y: tr.cy }, z.polygon),
+            (tr) =>
+              tr.travel > 0.05 && inside({ x: tr.cx, y: tr.cy }, z.polygon),
           ).length;
           const lasting = share > 0.35 && movers === 0;
           shelfRun[z.id] = lasting ? (shelfRun[z.id] || 0) + 1 : 0;

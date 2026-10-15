@@ -3167,54 +3167,249 @@ fieldset {
   font-weight: 600;
 }
 /* Procurement uses the shared commerce forms and responsive panels. */
-.procurement-offer,.procurement-review-line { border: 1px solid var(--border, #dfe5e1); border-radius: 12px; padding: 16px; margin-block: 12px; min-width: 0; }
-.procurement-offer h3 { margin-top: 0; }
-.procurement-offer button { margin-top: 12px; }
-.procurement-page details { margin-block: 16px; }
-.procurement-page summary { cursor: pointer; font-weight: 600; padding-block: 10px; }
-.procurement-page .procurement-extraction { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; background: #f5f7f5; padding: 16px; border-radius: 8px; }
-.procurement-page .commerce-row { flex-wrap: wrap; overflow-wrap: anywhere; }
-.procurement-submit { align-self: end; }
-.procurement-review-line .commerce-field { margin-block: 12px; }
+.procurement-offer,
+.procurement-review-line {
+  border: 1px solid var(--border, #dfe5e1);
+  border-radius: 12px;
+  padding: 16px;
+  margin-block: 12px;
+  min-width: 0;
+}
+.procurement-offer h3 {
+  margin-top: 0;
+}
+.procurement-offer button {
+  margin-top: 12px;
+}
+.procurement-page details {
+  margin-block: 16px;
+}
+.procurement-page summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding-block: 10px;
+}
+.procurement-page .procurement-extraction {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  background: #f5f7f5;
+  padding: 16px;
+  border-radius: 8px;
+}
+.procurement-page .commerce-row {
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.procurement-submit {
+  align-self: end;
+}
+.procurement-review-line .commerce-field {
+  margin-block: 12px;
+}
 /* T020–T030 execution, knowledge, automation, assistant and integration screens */
-.today-board, .tasks-page, .knowledge-page, .approvals-page, .automations-page, .assistant-page, .integrations-page { min-width: 0; }
-.today-situation { border: 1px solid #dfe5e1; border-radius: 12px; padding: 16px; margin-block: 12px; display: grid; gap: 10px; min-width: 0; }
-.today-situation-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
-.today-situation-head strong { overflow-wrap: anywhere; }
-.severity { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
-.severity-4 { color: #842f20; background: #fff1ed; }
-.severity-3 { color: #7a4a00; background: #fff6e5; }
-.severity-2 { color: #244936; background: #edf4e9; }
-.severity-1 { color: #435047; background: #f3f5f3; }
-.today-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 8px 16px; margin: 0; }
-.today-facts div { min-width: 0; }
-.today-facts dt { font-size: 12px; color: #526354; }
-.today-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-.today-list { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
-.today-list li { overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
-.today-list button { margin-inline-start: 8px; }
-.task-list { display: grid; }
-.task-list .commerce-order { flex-wrap: wrap; }
-.task-list .commerce-order > span:last-child { text-align: left; }
-.table-scroll { overflow-x: auto; max-width: 100%; }
-.table-scroll table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.table-scroll th, .table-scroll td { border-bottom: 1px solid #e1e7dd; padding: 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-.today-board details, .tasks-page details, .knowledge-page details, .approvals-page details, .automations-page details, .assistant-page details, .integrations-page details { margin-block: 12px; }
-.today-board summary, .tasks-page summary, .knowledge-page summary, .approvals-page summary, .automations-page summary, .assistant-page summary, .integrations-page summary { cursor: pointer; font-weight: 600; padding-block: 8px; }
-.knowledge-page .procurement-extraction, .automations-page .procurement-extraction { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; background: #f5f7f5; padding: 16px; border-radius: 8px; }
-.assistant-log { display: grid; gap: 12px; margin-block: 16px; }
-.assistant-message { border: 1px solid #dfe5e1; border-radius: 12px; padding: 12px 16px; min-width: 0; }
-.assistant-message.user { background: #f5f7f5; }
-.assistant-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.voice-panel { border: 1px solid #dfe5e1 !important; border-radius: 12px; padding: 12px 16px !important; margin-top: 16px; }
-.recording-indicator { color: #842f20; font-weight: 700; }
-.integrations-page code, .today-board code { overflow-wrap: anywhere; font-size: 12px; }
-.tasks-page textarea, .knowledge-page textarea, .automations-page textarea, .assistant-page textarea, .approvals-page textarea { width: 100%; font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #b9cabb; }
+.today-board,
+.tasks-page,
+.knowledge-page,
+.approvals-page,
+.automations-page,
+.assistant-page,
+.integrations-page {
+  min-width: 0;
+}
+.today-situation {
+  border: 1px solid #dfe5e1;
+  border-radius: 12px;
+  padding: 16px;
+  margin-block: 12px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.today-situation-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+.today-situation-head strong {
+  overflow-wrap: anywhere;
+}
+.severity {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+.severity-4 {
+  color: #842f20;
+  background: #fff1ed;
+}
+.severity-3 {
+  color: #7a4a00;
+  background: #fff6e5;
+}
+.severity-2 {
+  color: #244936;
+  background: #edf4e9;
+}
+.severity-1 {
+  color: #435047;
+  background: #f3f5f3;
+}
+.today-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+.today-facts div {
+  min-width: 0;
+}
+.today-facts dt {
+  font-size: 12px;
+  color: #526354;
+}
+.today-facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.today-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  gap: 8px;
+}
+.today-list li {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.today-list button {
+  margin-inline-start: 8px;
+}
+.task-list {
+  display: grid;
+}
+.task-list .commerce-order {
+  flex-wrap: wrap;
+}
+.task-list .commerce-order > span:last-child {
+  text-align: left;
+}
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.table-scroll table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+.table-scroll th,
+.table-scroll td {
+  border-bottom: 1px solid #e1e7dd;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.today-board details,
+.tasks-page details,
+.knowledge-page details,
+.approvals-page details,
+.automations-page details,
+.assistant-page details,
+.integrations-page details {
+  margin-block: 12px;
+}
+.today-board summary,
+.tasks-page summary,
+.knowledge-page summary,
+.approvals-page summary,
+.automations-page summary,
+.assistant-page summary,
+.integrations-page summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding-block: 8px;
+}
+.knowledge-page .procurement-extraction,
+.automations-page .procurement-extraction {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  background: #f5f7f5;
+  padding: 16px;
+  border-radius: 8px;
+}
+.assistant-log {
+  display: grid;
+  gap: 12px;
+  margin-block: 16px;
+}
+.assistant-message {
+  border: 1px solid #dfe5e1;
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+.assistant-message.user {
+  background: #f5f7f5;
+}
+.assistant-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.voice-panel {
+  border: 1px solid #dfe5e1 !important;
+  border-radius: 12px;
+  padding: 12px 16px !important;
+  margin-top: 16px;
+}
+.recording-indicator {
+  color: #842f20;
+  font-weight: 700;
+}
+.integrations-page code,
+.today-board code {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.tasks-page textarea,
+.knowledge-page textarea,
+.automations-page textarea,
+.assistant-page textarea,
+.approvals-page textarea {
+  width: 100%;
+  font: inherit;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #b9cabb;
+}
 @media (max-width: 720px) {
-  .today-facts { grid-template-columns: 1fr 1fr; }
+  .today-facts {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .recording-indicator { animation: none; }
+  .recording-indicator {
+    animation: none;
+  }
 }
-.passport-ops li { display: grid; gap: 6px; }
-.passport-ops code { font-size: 12px; overflow-wrap: anywhere; }
+.passport-ops li {
+  display: grid;
+  gap: 6px;
+}
+.passport-ops code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

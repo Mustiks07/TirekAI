@@ -16,6 +16,7 @@ import { VideoService } from "../video/service";
 import { MarketingService } from "../marketing/service";
 import { TelegramService } from "../integrations/telegram-service";
 import { KaspiService } from "../integrations/kaspi-service";
+import { KaspiTradeService } from "../integrations/kaspi-trade";
 import {
   askResult,
   assistantStatus,
@@ -81,6 +82,7 @@ const insights = (c: RouteContext) => new InsightService(c.db);
 const proposals = (c: RouteContext) => new ProposalService(c.db);
 const automations = (c: RouteContext) => new AutomationService(c.db);
 const marketing = (c: RouteContext) => new MarketingService(c.db);
+const trade = (c: RouteContext) => new KaspiTradeService(c.db);
 // Organization-scoped routes for T021–T030. Paths are relative to organizations/:id.
 export const executionRoutes: Route[] = [
   {
@@ -767,6 +769,66 @@ export const executionRoutes: Route[] = [
     method: "GET",
     path: "marketing/recommendations",
     run: (c) => marketing(c).recommendations(c.secret, c.org, c.query),
+  },
+  {
+    method: "GET",
+    path: "integrations/kaspi/:id/trade",
+    run: (c) => trade(c).trade(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "GET",
+    path: "integrations/kaspi/:id/products",
+    run: (c) => trade(c).products(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "integrations/kaspi/:id/products",
+    schema: ok,
+    run: (c) => trade(c).linkProduct(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "integrations/kaspi/:id/writes",
+    schema: ok,
+    run: (c) => trade(c).setWrites(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "GET",
+    path: "channel-orders",
+    run: (c) => trade(c).overview(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "channel-orders/:id/import",
+    schema: commerceResult,
+    run: (c) => trade(c).importOrder(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "channel-orders/:id/accept",
+    schema: z.object({
+      state: z.enum(["sent", "unknown", "failed"]).nullable(),
+      error: z.string().nullable().optional(),
+    }),
+    run: (c) => trade(c).accept(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "channel-orders/:id/issue",
+    schema: commerceResult,
+    run: (c) => trade(c).issue(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "channel-orders/:id/return",
+    schema: commerceResult,
+    run: (c) => trade(c).returnGoods(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "channel-orders/:id/settlements",
+    schema: commerceResult,
+    run: (c) => trade(c).settle(c.secret, c.org, c.params[0], c.body),
   },
   {
     method: "GET",

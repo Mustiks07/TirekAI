@@ -36,13 +36,11 @@ test("customer CSV preview, durable import, replay, editing and mobile KK", asyn
   ).toBeVisible();
   const content =
     "external_id,name,email,phone\nC1,Айдана Тест,aidana@example.test,+77010000001\nC2,Данияр Тест,daniyar@example.test,\nC2,Данияр Тест,daniyar@example.test,\nC3,Ошибка,invalid,123\n";
-  await page
-    .getByLabel("Файл CSV / TSV")
-    .setInputFiles({
-      name: "clients.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(content),
-    });
+  await page.getByLabel("Файл CSV / TSV").setInputFiles({
+    name: "clients.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(content),
+  });
   await page
     .getByRole("button", { name: "Проверить файл", exact: true })
     .click();

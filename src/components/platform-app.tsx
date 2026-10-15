@@ -70,6 +70,7 @@ import { AutomationsPage } from "./automations-page";
 import { AssistantPage } from "./assistant-page";
 import { IntegrationsPage } from "./integrations-page";
 import { BankStatements } from "./bank-statements";
+import { ChannelOrders } from "./channel-orders";
 import { VideoPage } from "./video-page";
 import { MarketingPage } from "./marketing-page";
 import { can } from "@/domain/permissions";
@@ -1362,6 +1363,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     workspace={workspace}
                     locale={locale}
                     mode={page}
+                  />
+                )}
+              {page === "orders" &&
+                can(workspace.organization.role, "orders:read") && (
+                  <ChannelOrders
+                    key={`${workspace.organization.id}-kaspi`}
+                    workspace={workspace}
+                    locale={locale}
                   />
                 )}
               {page === "finance" &&

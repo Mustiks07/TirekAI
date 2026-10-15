@@ -274,8 +274,20 @@ export class CommerceService {
     id: string,
     input: unknown,
   ) {
+    return this.db.transaction((tx) =>
+      this.transitionInTransaction(tx, secret, org, id, input),
+    );
+  }
+  // Composition for channel orders (T040): the same checks, stock links and audit as the form.
+  async transitionInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown,
+  ) {
     const c = orderCommand.parse(input);
-    return this.db.transaction(async (tx) => {
+    {
       const s = await sessionAccess(tx, secret, org, "orders:write"),
         o = await this.order(tx, org, id, s, true),
         r = await command(tx, org, c.key, {
@@ -484,7 +496,7 @@ export class CommerceService {
         eventId: r.id,
       });
       return r;
-    });
+    }
   }
   async accounts(secret: Credential, org: string, input: unknown) {
     const q = commerceQuery.parse(input);
@@ -726,7 +738,7 @@ export class CommerceService {
         o?.customer_name ||
         ob?.supplier ||
         ("counterparty" in c ? c.counterparty : undefined),
-      operating: c.kind === "expense" && c.operating,
+      operating: (c.kind === "expense" || c.kind === "income") && c.operating,
     });
     if (c.kind === "transfer") {
       const dest = accounts.find((a) => a.id === c.destinationId)!;

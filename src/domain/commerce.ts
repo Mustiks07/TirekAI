@@ -99,6 +99,8 @@ export const moneyCommand = z.discriminatedUnion("kind", [
       kind: z.literal("income"),
       category: z.string().trim().min(2).max(80),
       counterparty: z.string().trim().min(2).max(120),
+      // Operating income corrects operating expenses (e.g. a channel commission returned, T040).
+      operating: z.boolean().default(false),
     })
     .strict(),
   z
