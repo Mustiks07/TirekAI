@@ -293,6 +293,43 @@ it("T027: the eval set has 32 balanced RU/KK cases and the grader detects violat
   expect(report.critical_violations).toBe(1);
   await evalDb.close();
 });
+it("T056: a paid eval has an upper-bound preflight and the confirmed budget is a hard cap", async () => {
+  const { runAssistantEval, evalBudget } =
+    await import("../src/server/assistant/eval");
+  // 32 cases × 6 iterations × (4000 output + 12000 input) — the number the operator confirms.
+  expect(evalBudget(32)).toMatchObject({
+    maxCalls: 192,
+    upperBoundTokens: 3_072_000,
+  });
+  const { readFile } = await import("node:fs/promises");
+  const { cases } = JSON.parse(
+    await readFile("tests/fixtures/assistant-eval.json", "utf8"),
+  );
+  const evalDb = await createMemoryDatabase();
+  await migrate(evalDb);
+  const provider = new ScriptedProvider([
+    [toolUse("list_situations", {})],
+    [text("не должен быть вызван")],
+  ]);
+  // The first call uses 120 tokens against a cap of 100: nothing more is sent to the provider.
+  const report = await runAssistantEval(
+    evalDb,
+    provider,
+    [cases[0], cases[1]],
+    { tokenBudget: 100 },
+  );
+  expect(provider.calls).toHaveLength(1);
+  expect(report.results.map((r) => r.status)).toEqual([
+    "budget_exceeded",
+    "budget_exceeded",
+  ]);
+  expect(report).toMatchObject({
+    tokens_used: "120",
+    budget_stopped: 2,
+    passed: 0,
+  });
+  await evalDb.close();
+});
 it("T025: a rule described in words becomes a validated, unsaved draft; unknown people are dropped and nothing is activated", async () => {
   const text =
     "Когда появляется риск нехватки товара, поставь задачу Ивану проверить остаток";

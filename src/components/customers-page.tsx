@@ -11,6 +11,7 @@ import type {
 } from "@/domain/import-contracts";
 import { MAX_IMPORT_BYTES } from "@/domain/import-contracts";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText, dictionary } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 
@@ -46,7 +47,7 @@ const words = {
     worker:
       "Обработчик недоступен. Импорт сохранён и продолжится после запуска worker.",
     reused:
-      "Этот файл уже загружен. Открыт прежний результат — записи не дублируются.",
+      "Этот файл уже загружен. Открыт прежний результат: записи не дублируются.",
     partial:
       "Ошибочные и конфликтующие строки не записаны. Исправьте их в файле и загрузите снова.",
     close: "Закрыть результат",
@@ -107,7 +108,7 @@ const words = {
     worker:
       "Өңдеуші қолжетімсіз. Импорт сақталды, worker іске қосылғанда жалғасады.",
     reused:
-      "Бұл файл бұрын жүктелген. Алдыңғы нәтиже ашылды — жазбалар қайталанбайды.",
+      "Бұл файл бұрын жүктелген. Алдыңғы нәтиже ашылды: жазбалар қайталанбайды.",
     partial:
       "Қате және қайшы жолдар жазылмады. Оларды файлда түзетіп, қайта жүктеңіз.",
     close: "Нәтижені жабу",
@@ -171,7 +172,7 @@ export function CustomersPage({
   );
   const [page, setPage] = useState(1),
     [historyPage, setHistoryPage] = useState(1),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const [customers, setCustomers] = useState<CustomersView | null>(null),
     [history, setHistory] = useState<BatchesView | null>(null);
   const [result, setResult] = useState<BatchView | null>(null),
@@ -224,7 +225,7 @@ export function CustomersPage({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [base, result, revision]);
+  }, [base, result, revision, setRevision]);
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     setError(null);
@@ -480,10 +481,10 @@ export function CustomersPage({
                 {result.rows.map((r: ImportRow) => (
                   <tr key={r.row_number}>
                     <td>{r.row_number}</td>
-                    <td>{r.values.external_id || "—"}</td>
-                    <td>{r.values.name || "—"}</td>
+                    <td>{r.values.external_id || "–"}</td>
+                    <td>{r.values.name || "–"}</td>
                     <td>
-                      <div>{r.values.email || "—"}</div>
+                      <div>{r.values.email || "–"}</div>
                       <small>{r.values.phone}</small>
                     </td>
                     <td>
@@ -636,7 +637,7 @@ export function CustomersPage({
             <Users size={20} />
             {t.title}
             <span className="inline-count">
-              {customers?.pagination.total ?? "—"}
+              {customers?.pagination.total ?? "–"}
             </span>
           </h2>
         </div>

@@ -4,6 +4,7 @@ import type { Locale, Workspace } from "@/domain/contracts";
 import { roles } from "@/domain/contracts";
 import type { KnowledgeDetail, KnowledgeHit } from "@/domain/knowledge";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText, roleNames } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import { can } from "@/domain/permissions";
@@ -29,7 +30,7 @@ export function KnowledgePage({
     [selected, setSelected] = useState(""),
     [number, setNumber] = useState<number | null>(null),
     [doc, setDoc] = useState<KnowledgeDetail | null>(null),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [error, setError] = useState("");
   const refresh = () => setRevision((v) => v + 1);
   useEffect(() => {
@@ -78,8 +79,8 @@ export function KnowledgePage({
       <fieldset>
         <legend>
           {t(
-            "Кому доступно (пусто — всем ролям)",
-            "Кімге қолжетімді (бос — барлық рөлге)",
+            "Кому доступно (пусто: всем ролям)",
+            "Кімге қолжетімді (бос: барлық рөлге)",
           )}
         </legend>
         {roles.map((r) => (
@@ -191,7 +192,7 @@ export function KnowledgePage({
                 <span>
                   {r.category} · {stateText(r.state, locale)} ·{" "}
                   {t("опубликована версия", "жарияланған нұсқа")}{" "}
-                  {r.published_version ?? "—"} / {r.latest_version}
+                  {r.published_version ?? "–"} / {r.latest_version}
                   {r.stale &&
                     ` · ${t("нужна проверка актуальности", "өзектілігін тексеру қажет")}`}
                 </span>

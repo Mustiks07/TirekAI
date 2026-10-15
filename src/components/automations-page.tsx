@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { automationTopics } from "@/domain/automations";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import { can } from "@/domain/permissions";
@@ -73,7 +74,7 @@ export function AutomationsPage({
     [assignees, setAssignees] = useState<{ id: string; name: string }[]>([]),
     [selected, setSelected] = useState(""),
     [test, setTest] = useState<Test | null>(null),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [aiDraft, setAiDraft] = useState<{
       status: string;
       draft: {
@@ -511,8 +512,8 @@ export function AutomationsPage({
                   {aiDraft.warnings.includes("unknown_user_removed") && (
                     <p>
                       {t(
-                        "Неизвестный сотрудник убран из черновика — выберите исполнителя сами.",
-                        "Белгісіз қызметкер жобадан алынды — орындаушыны өзіңіз таңдаңыз.",
+                        "Неизвестный сотрудник убран из черновика: выберите исполнителя сами.",
+                        "Белгісіз қызметкер жобадан алынды: орындаушыны өзіңіз таңдаңыз.",
                       )}
                     </p>
                   )}

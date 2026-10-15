@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { businessDate } from "@/lib/dates";
 import { executionError } from "@/lib/execution-i18n";
@@ -48,8 +49,8 @@ type Hour = {
 const kinds: Record<string, [string, string]> = {
   queue_start: ["Очередь", "Кезек"],
   shelf_change_suspected: [
-    "Изменение полки — проверить",
-    "Сөре өзгерді — тексеру",
+    "Изменение полки: проверить",
+    "Сөре өзгерді: тексеру",
   ],
   signal_lost: ["Потеря сигнала", "Сигнал жоғалды"],
   workstation_state: ["Изменение рабочего места", "Жұмыс орны өзгерді"],
@@ -154,7 +155,7 @@ export function VideoPage({
     >([]),
     [token, setToken] = useState(""),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const refresh = () => setRevision((v) => v + 1);
   const msg = (code: string) =>
     executionError(code, locale) || errorText(code, locale);
@@ -211,8 +212,8 @@ export function VideoPage({
       <section className="panel">
         <p>
           {t(
-            "Видео обрабатывается отдельным обработчиком на устройстве рядом с камерой; сюда приходят только агрегированные события. Сырое видео не хранится. Личности, эмоции и чувствительные признаки не распознаются; событие — это сигнал для проверки человеком, а не обвинение. Пропуск данных не равен нулю посетителей.",
-            "Бейне камераның жанындағы құрылғыдағы жеке өңдегіште өңделеді; мұнда тек жинақталған оқиғалар келеді. Шикі бейне сақталмайды. Тұлғалар, эмоциялар және сезімтал белгілер танылмайды; оқиға — адам тексеретін сигнал, айып емес. Деректің болмауы келушілердің нөлі емес.",
+            "Видео обрабатывается отдельным обработчиком на устройстве рядом с камерой; сюда приходят только агрегированные события. Сырое видео не хранится. Личности, эмоции и чувствительные признаки не распознаются; событие: это сигнал для проверки человеком, а не обвинение. Пропуск данных не равен нулю посетителей.",
+            "Бейне камераның жанындағы құрылғыдағы жеке өңдегіште өңделеді; мұнда тек жинақталған оқиғалар келеді. Шикі бейне сақталмайды. Тұлғалар, эмоциялар және сезімтал белгілер танылмайды; оқиға: адам тексеретін сигнал, айып емес. Деректің болмауы келушілердің нөлі емес.",
           )}
         </p>
         {error && (
@@ -235,7 +236,7 @@ export function VideoPage({
                 </button>{" "}
                 <strong>{badge(s)}</strong> · {s.kind} ·{" "}
                 {t("версия разметки", "белгілеу нұсқасы")}{" "}
-                {s.config_version ?? "—"}
+                {s.config_version ?? "–"}
                 {s.last_metrics?.fps !== undefined &&
                   ` · ${Math.round(s.last_metrics.fps)} ${t("кадр/с обработки", "кадр/с өңдеу")}, ${Math.round((s.last_metrics.latencyMs || 0) * 10) / 10} ${t("мс/кадр", "мс/кадр")}`}
               </li>
@@ -661,13 +662,13 @@ export function VideoPage({
                           </td>
                           <td>
                             {Object.entries(h.zones)
-                              .map(([z, v]) => `${z}: ${v ?? "—"}`)
-                              .join(", ") || "—"}
+                              .map(([z, v]) => `${z}: ${v ?? "–"}`)
+                              .join(", ") || "–"}
                           </td>
                           <td>{h.queues}</td>
                         </>
                       )}
-                      <td>{h.versions.join(", ") || "—"}</td>
+                      <td>{h.versions.join(", ") || "–"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -675,8 +676,8 @@ export function VideoPage({
             </div>
             <p>
               {t(
-                "Повторное появление одного человека не считается уникальным посетителем. Покрытие меньше 100% — часть часа без данных.",
-                "Бір адамның қайта пайда болуы бірегей келуші болып саналмайды. 100%-дан аз қамту — сағаттың бір бөлігі деректерсіз.",
+                "Повторное появление одного человека не считается уникальным посетителем. Покрытие меньше 100%: часть часа без данных.",
+                "Бір адамның қайта пайда болуы бірегей келуші болып саналмайды. 100%-дан аз қамту: сағаттың бір бөлігі деректерсіз.",
               )}
             </p>
           </section>
@@ -798,7 +799,7 @@ export function VideoPage({
                   </Field>
                   <Field label={t("Направление", "Бағыт")}>
                     <select name="direction">
-                      <option value="">—</option>
+                      <option value="">–</option>
                       <option value="in">{t("вход", "кіру")}</option>
                       <option value="out">{t("выход", "шығу")}</option>
                     </select>

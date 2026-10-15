@@ -53,6 +53,9 @@ import {
   workloadView,
 } from "../../domain/tasks";
 import { z } from "zod";
+import { changes, changeCursor } from "../live";
+import { PrivacyService, erasureResult } from "../privacy/service";
+import { ownerExport } from "../ops/export";
 import { OutcomeService } from "../outcomes/service";
 import { outcomeView } from "../../domain/outcomes";
 import { IndustryService } from "../industry/service";
@@ -89,6 +92,46 @@ const marketing = (c: RouteContext) => new MarketingService(c.db);
 const trade = (c: RouteContext) => new KaspiTradeService(c.db);
 // Organization-scoped routes for T021–T030. Paths are relative to organizations/:id.
 export const executionRoutes: Route[] = [
+  {
+    method: "POST",
+    path: "privacy/customers/:id/erase",
+    schema: erasureResult,
+    run: (c) =>
+      new PrivacyService(c.db).eraseCustomer(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "POST",
+    path: "privacy/clinic/:id/erase",
+    schema: erasureResult,
+    run: (c) =>
+      new PrivacyService(c.db).eraseClinicRequest(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "GET",
+    path: "export",
+    run: (c) => ownerExport(c.db, c.secret, c.org),
+  },
+  {
+    method: "GET",
+    path: "privacy/requests",
+    run: (c) => new PrivacyService(c.db).requests(c.secret, c.org),
+  },
+  {
+    method: "GET",
+    path: "changes",
+    schema: changeCursor,
+    run: (c) => changes(c.db, c.secret, c.org),
+  },
   {
     method: "GET",
     path: "outcomes",

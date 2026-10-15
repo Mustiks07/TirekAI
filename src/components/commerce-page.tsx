@@ -19,6 +19,7 @@ import type {
 } from "@/domain/commerce";
 import { can } from "@/domain/permissions";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { inventoryError, moneyText, quantityText } from "@/lib/inventory-i18n";
 import { businessDate } from "@/lib/dates";
@@ -116,7 +117,7 @@ export function CommercePage({
   const [branch, setBranch] = useState(
       initialBranchId || workspace.branches[0]?.id || "",
     ),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [page, setPage] = useState(1),
     [query, setQuery] = useState("");
   const [orders, setOrders] = useState<OrdersView | null>(null),
@@ -891,11 +892,11 @@ export function CommercePage({
           </section>
           <p className="commerce-explanation">
             {t(
-              "За весь период, выбранный филиал. Выручка — исполненные строки после скидок и возвратов; оплата показана отдельно. Цены без косвенных налогов, налоговый расчёт не настроен. Операционный результат неполный: полнота расходов не подтверждена.",
-              "Бүкіл кезең, таңдалған филиал. Түсім — жеңілдік пен қайтарудан кейін орындалған жолдар; төлем бөлек көрсетіледі. Бағалар жанама салықтарсыз, салық есебі бапталмаған. Операциялық нәтиже толық емес: шығыстардың толықтығы расталмаған.",
+              "За весь период, выбранный филиал. Выручка: исполненные строки после скидок и возвратов; оплата показана отдельно. Цены без косвенных налогов, налоговый расчёт не настроен. Операционный результат неполный: полнота расходов не подтверждена.",
+              "Бүкіл кезең, таңдалған филиал. Түсім: жеңілдік пен қайтарудан кейін орындалған жолдар; төлем бөлек көрсетіледі. Бағалар жанама салықтарсыз, салық есебі бапталмаған. Операциялық нәтиже толық емес: шығыстардың толықтығы расталмаған.",
             )}{" "}
-            {t("Маржа", "Маржа")}: {summary.margin_percent ?? "—"}% ·{" "}
-            {t("Наценка", "Үстеме")}: {summary.markup_percent ?? "—"}%
+            {t("Маржа", "Маржа")}: {summary.margin_percent ?? "–"}% ·{" "}
+            {t("Наценка", "Үстеме")}: {summary.markup_percent ?? "–"}%
           </p>
           <section className="panel commerce-section">
             <h3>{t("Денежные счета · KZT", "Ақша шоттары · KZT")}</h3>

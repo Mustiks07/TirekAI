@@ -23,6 +23,7 @@ import {
 } from "@/domain/inventory";
 import { can } from "@/domain/permissions";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { dictionary, errorText } from "@/lib/i18n";
 import {
   inventoryWords,
@@ -64,7 +65,7 @@ export function InventoryPage({
     [catalogPage, setCatalogPage] = useState(1),
     [section, setSection] = useState<Section>("balances"),
     [stockPage, setStockPage] = useState(1),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const [stock, setStock] = useState<
     StockView | MovementsView | ReservationsView | TransfersView | null
   >(null);
@@ -526,7 +527,7 @@ export function InventoryPage({
                     name="destinationId"
                     required
                   >
-                    <option value="">—</option>
+                    <option value="">–</option>
                     {warehouses
                       .filter((w) => w.id !== warehouse)
                       .map((w) => (
@@ -927,7 +928,7 @@ export function InventoryPage({
             <PackagePlus size={20} />
             {t.title}
             <span className="inline-count">
-              {catalog?.pagination.total ?? "—"}
+              {catalog?.pagination.total ?? "–"}
             </span>
           </h2>
           {catalog?.canWrite && (
@@ -995,7 +996,7 @@ export function InventoryPage({
                 </small>
                 <h3>{name(i)}</h3>
                 <p>
-                  {i.category || "—"} · {unitName(i.base_unit)}
+                  {i.category || "–"} · {unitName(i.base_unit)}
                   {i.barcode ? ` · ${i.barcode}` : ""}
                 </p>
                 <div className="catalog-prices">

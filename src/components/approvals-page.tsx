@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { ProposalRow } from "@/domain/decisions";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText, roleNames } from "@/lib/i18n";
 import { moneyText } from "@/lib/inventory-i18n";
 import { businessDate } from "@/lib/dates";
@@ -51,7 +52,7 @@ export function ApprovalsPage({
     [selected, setSelected] = useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
     [assignees, setAssignees] = useState<{ id: string; name: string }[]>([]),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [error, setError] = useState("");
   const refresh = () => setRevision((v) => v + 1);
   useEffect(() => {
@@ -444,7 +445,7 @@ function Policy({
         revoked_at: string | null;
       }[];
     } | null>(null),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   useEffect(() => {
     api<typeof p>(`${base}/proposals/policy`)
       .then(setP)
@@ -525,8 +526,8 @@ function Policy({
           </Field>
           <Field
             label={t(
-              "Лимит закупки, KZT (пусто — без лимита)",
-              "Сатып алу лимиті, KZT (бос — шектеусіз)",
+              "Лимит закупки, KZT (пусто: без лимита)",
+              "Сатып алу лимиті, KZT (бос: шектеусіз)",
             )}
           >
             <input

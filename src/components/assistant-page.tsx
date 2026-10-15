@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { AssistantMessage, AssistantStatus } from "@/domain/assistant";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { executionError, stateText } from "@/lib/execution-i18n";
 import { ActionForm, Field } from "./purchasing-page";
@@ -32,7 +33,7 @@ export function AssistantPage({
     [answerLocale, setAnswerLocale] = useState<Locale>(locale),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const pending = useRef<{ text: string; key: string } | null>(null);
   const message = (code: string) =>
     executionError(code, locale) || errorText(code, locale);

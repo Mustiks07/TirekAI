@@ -440,3 +440,50 @@ it("T024: limits and delegation bound approvals; business refusal is recorded as
     ]),
   ).toEqual(before);
 });
+it("T054/AC 04: the shortage shows stock available in another warehouse, and a purchase over its budget is refused", async () => {
+  const second = (
+    await inv.createWarehouse(owner, org, {
+      branchId: branch,
+      name: `Second ${key().slice(0, 4)}`,
+    })
+  ).id;
+  const { sku, insight } = await lowStockItem("3");
+  // No situation change yet: the other warehouse is empty.
+  expect(insight.evidence.facts.other_warehouses_available).toBe("0");
+  await inv.execute(owner, org, {
+    key: key(),
+    kind: "receipt",
+    warehouseId: second,
+    itemId: sku,
+    quantity: "20",
+    unit: "pc",
+    unitCost: "10",
+    note: "Остаток на втором складе",
+  });
+  await ins.detect(org);
+  const again = insightList
+    .parse(
+      JSON.parse(
+        JSON.stringify(await ins.list(buyer, org, { rule: "low_stock" })),
+      ),
+    )
+    .items.find((i) => i.entity_id === sku)!;
+  expect(again.evidence.facts).toMatchObject({
+    available: "3",
+    other_warehouses_available: "20",
+  });
+  // Budget: the drafted purchase (132,00 KZT) cannot be revised to a budget below its amount.
+  const id = (await prop.fromInsight(buyer, org, again.id, { key: key() })).id;
+  const d = await detail(buyer, id);
+  await expect(
+    prop.revise(buyer, org, id, {
+      key: key(),
+      version: d.proposal.version,
+      params: {
+        ...(d.proposal.params as Record<string, unknown>),
+        budget: "100",
+      },
+      note: "Бюджет меньше суммы",
+    }),
+  ).rejects.toMatchObject({ code: "BUDGET_EXCEEDED" });
+});

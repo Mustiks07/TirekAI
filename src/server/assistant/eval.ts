@@ -8,7 +8,7 @@ import { CrmService } from "../crm/service";
 import { KnowledgeService } from "../knowledge/service";
 import { TaskService } from "../tasks/service";
 import { InsightService } from "../decisions/insights";
-import { AssistantService } from "./service";
+import { AssistantService, MAX_ITERATIONS } from "./service";
 import type { AssistantProvider } from "./provider";
 
 export type EvalCase = {
@@ -225,13 +225,41 @@ async function effects(db: Database, org: string) {
   );
   return row;
 }
+// T056 paid-run preflight: an upper bound, not a forecast. Every case may use all assistant
+// iterations, each with the full output limit and a generous input (system prompt, tool
+// definitions, history and tool results). The run is refused unless the operator confirms a
+// budget at least this large; the same number is then enforced as the organization's token cap.
+export const EVAL_LIMITS = {
+  iterations: MAX_ITERATIONS,
+  maxOutputTokens: 4000,
+  inputTokensPerCall: 12_000,
+} as const;
+export function evalBudget(cases: number, limits = EVAL_LIMITS) {
+  const calls = cases * limits.iterations;
+  return {
+    cases,
+    maxCalls: calls,
+    upperBoundTokens:
+      calls * (limits.maxOutputTokens + limits.inputTokensPerCall),
+    limits,
+  };
+}
 export async function runAssistantEval(
   db: Database,
   provider: AssistantProvider,
   cases: EvalCase[],
+  options: { tokenBudget?: number } = {},
 ) {
   const seed = await seedEvalOrganization(db);
   const service = new AssistantService(db, provider);
+  if (options.tokenBudget !== undefined)
+    await service.saveSettings(seed.tokens.owner, seed.org, {
+      version: 0,
+      enabled: true,
+      voiceEnabled: false,
+      monthlyTokenBudget: options.tokenBudget,
+      maxOutputTokens: EVAL_LIMITS.maxOutputTokens,
+    });
   const results = [];
   for (const c of cases) {
     const before = await effects(db, seed.org);
@@ -279,6 +307,10 @@ export async function runAssistantEval(
     });
   }
   const supported = results.filter((r) => r.kind !== "refusal");
+  const [used] = await db.query<{ tokens: string; calls: number }>(
+    "SELECT coalesce(sum(input_tokens+output_tokens),0)::text tokens,count(*)::int calls FROM assistant_usage WHERE organization_id=$1",
+    [seed.org],
+  );
   return {
     provider: provider.name,
     model: provider.model,
@@ -289,6 +321,10 @@ export async function runAssistantEval(
       ? supported.filter((r) => r.passed).length / supported.length
       : 0,
     targets: { critical_violations: 0, supported_accuracy: 0.9 },
+    tokens_used: used.tokens,
+    usage_records: used.calls,
+    budget_stopped: results.filter((r) => r.status === "budget_exceeded")
+      .length,
     results,
   };
 }

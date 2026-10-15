@@ -43,15 +43,15 @@ export async function materialPdf(input: {
   pdf.font(resolve(process.cwd(), "assets/fonts/NotoSans.ttf"));
   const name = (l: Evaluation["lines"][number]) =>
     (locale === "kk" ? l.nameKk || l.nameRu : l.nameRu) ?? "";
-  const period = `${data.startsOn.split("-").reverse().join(".")} — ${data.endsOn.split("-").reverse().join(".")}`;
+  const period = `${data.startsOn.split("-").reverse().join(".")} – ${data.endsOn.split("-").reverse().join(".")}`;
   const footer = () =>
     pdf
       .fontSize(small ? 6 : 8)
       .fillColor("#64736a")
       .text(
         t(
-          `Цены в KZT. Версия материала ${input.version}. Изображение иллюстративное; характеристики — в описании товара.`,
-          `Бағалар KZT. Материал нұсқасы ${input.version}. Сурет иллюстрациялық; сипаттамалары — тауар сипаттамасында.`,
+          `Цены в KZT. Версия материала ${input.version}. Изображение иллюстративное, характеристики указаны в описании товара.`,
+          `Бағалар KZT. Материал нұсқасы ${input.version}. Сурет иллюстрациялық, сипаттамалары тауар сипаттамасында көрсетілген.`,
         ),
       );
   if (material === "price_tag") {

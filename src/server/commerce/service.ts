@@ -156,7 +156,7 @@ export class CommerceService {
       if (
         !(
           await tx.query(
-            "SELECT id FROM customers WHERE organization_id=$1 AND id=$2 AND branch_id=$3 FOR SHARE",
+            "SELECT id FROM customers WHERE organization_id=$1 AND id=$2 AND branch_id=$3 AND erased_at IS NULL FOR SHARE",
             [org, c.customerId, c.branchId],
           )
         ).length

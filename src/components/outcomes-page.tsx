@@ -4,6 +4,7 @@ import Decimal from "decimal.js";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { OutcomeView } from "@/domain/outcomes";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { industryText, industryLabels } from "@/lib/industry-i18n";
 type Option = { id: string; name: string };
@@ -24,7 +25,7 @@ export function OutcomesPage({
     ),
     [from, setFrom] = useState(today.slice(0, 7) + "-01"),
     [to, setTo] = useState(today),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const [view, setView] = useState<OutcomeView | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -125,7 +126,7 @@ export function OutcomesPage({
     };
   }, [base, sourceId, sourceType, today]);
   const money = (v: string | null) =>
-    v === null ? "—" : new Decimal(v).div(100).toFixed(2) + " ₸";
+    v === null ? "–" : new Decimal(v).div(100).toFixed(2) + " ₸";
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
@@ -270,14 +271,14 @@ export function OutcomesPage({
               </button>
               <p>
                 {t("Связанные документы", "Байланысты құжаттар")}:{" "}
-                {f.sources.map((s) => `${s.type} ${s.id}`).join("; ") || "—"}
+                {f.sources.map((s) => `${s.type} ${s.id}`).join("; ") || "–"}
               </p>
               <p>
                 {t(
                   "События исполнения и возврата",
                   "Орындау және қайтару оқиғалары",
                 )}
-                : {f.eventIds.join(", ") || "—"}
+                : {f.eventIds.join(", ") || "–"}
               </p>
             </details>
           ))}
@@ -300,13 +301,13 @@ export function OutcomesPage({
             <p key={p.id}>
               {p.id} · {industryText(locale, p.state)} ·{" "}
               {t("Сумма действия, не экономия", "Әрекет сомасы, үнемдеу емес")}:{" "}
-              {money(p.amountMinor)} · {p.resultId ?? "—"}
+              {money(p.amountMinor)} · {p.resultId ?? "–"}
             </p>
           ))}
           <h3>
             {t(
-              "Сохранённые сравнения — все даты",
-              "Сақталған салыстырулар — барлық күндер",
+              "Сохранённые сравнения: все даты",
+              "Сақталған салыстырулар: барлық күндер",
             )}
           </h3>
           {view.measurements.map((m) => (
@@ -344,7 +345,7 @@ export function OutcomesPage({
               <p>{m.limitations}</p>
               <p>
                 {t("Источники", "Дереккөздер")}:{" "}
-                {m.evidenceIds.join(", ") || "—"}
+                {m.evidenceIds.join(", ") || "–"}
               </p>
             </details>
           ))}

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { CalendarView } from "@/domain/commerce";
 import type { Locale } from "@/domain/contracts";
 import { api, ApiError } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { moneyText } from "@/lib/inventory-i18n";
 import { errorText } from "@/lib/i18n";
 export function PaymentCalendar({
@@ -23,7 +24,7 @@ export function PaymentCalendar({
     [data, setData] = useState<CalendarView | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [refresh, setRefresh] = useState(0);
+    [refresh, setRefresh] = useRevision();
   useEffect(() => {
     let stale = false;
     api<CalendarView>(`${base}/finance/calendar?branchId=${branch}&${query}`)
@@ -189,8 +190,8 @@ export function PaymentCalendar({
           </svg>
           <p>
             {t(
-              "Сплошная зелёная — база; пунктирная коричневая — сценарий. Точные суммы доступны ниже.",
-              "Тұтас жасыл — база; үзік қоңыр — сценарий. Нақты сомалар төменде берілген.",
+              "Сплошная зелёная: база; пунктирная коричневая: сценарий. Точные суммы доступны ниже.",
+              "Тұтас жасыл: база; үзік қоңыр: сценарий. Нақты сомалар төменде берілген.",
             )}
           </p>
           <details>

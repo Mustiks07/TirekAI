@@ -4,6 +4,7 @@ import type { Locale, Workspace } from "@/domain/contracts";
 import type { TodayView, InsightRow } from "@/domain/decisions";
 import type { CatalogView, Warehouse } from "@/domain/inventory";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { moneyText, quantityText } from "@/lib/inventory-i18n";
 import { businessDate } from "@/lib/dates";
@@ -59,7 +60,7 @@ export function TodayBoard({
     role = workspace.organization.role;
   const [view, setView] = useState<TodayView | null>(null),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0),
+    [revision, setRevision] = useRevision(),
     [busy, setBusy] = useState(""),
     [notice, setNotice] = useState("");
   const [items, setItems] = useState<CatalogView["items"]>([]),

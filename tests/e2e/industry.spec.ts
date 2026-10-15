@@ -827,3 +827,169 @@ test("projects: proposal, team, time, acceptance and separate payment order", as
     .toBe("completed");
   await f.capture();
 });
+const future = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+async function recipeAndPlan(
+  page: Page,
+  f: Awaited<ReturnType<typeof setup>>,
+  title: string,
+  stages: string,
+) {
+  await f.post(`${f.base}/stock-commands`, {
+    key: key(),
+    kind: "receipt",
+    warehouseId: f.warehouse,
+    itemId: f.material,
+    quantity: "30",
+    unit: "pc",
+    unitCost: "2",
+    note: "Сырьё",
+  });
+  await f.open();
+  let form = await f.click("Рецептура / спецификация");
+  await form.getByLabel("Название", { exact: true }).fill(title);
+  await form
+    .getByLabel("Готовый товар", { exact: true })
+    .selectOption(f.product);
+  await form.getByLabel("Выход в базовых единицах", { exact: true }).fill("10");
+  await form.getByLabel("Материал 1", { exact: true }).selectOption(f.material);
+  await form.getByLabel("Количество", { exact: true }).fill("15");
+  await form.getByLabel("Этапы, через запятую", { exact: true }).fill(stages);
+  await f.submit("Рецептура / спецификация");
+  const recipe = (await f.docs()).find((x) => x.kind === "recipe")!;
+  form = await f.click("План выпуска");
+  await form.getByLabel("Склад", { exact: true }).selectOption(f.warehouse);
+  await form
+    .getByLabel("Рецептура / спецификация", { exact: true })
+    .selectOption(recipe.id);
+  await form.getByLabel("План выпуска", { exact: true }).fill("10");
+  await f.submit("План выпуска");
+  const plan = (await f.docs()).find((x) => x.kind === "production")!;
+  await page
+    .locator(".industry-card")
+    .filter({ hasText: title })
+    .filter({ hasNotText: "Рецептура" })
+    .first()
+    .click();
+  await expect(page.getByText(/План \/ годный выпуск/)).toBeVisible();
+  // Material requirements come from the recipe version (15 per 10 units).
+  await f.click("Выдать материалы");
+  await f.submit("Выдать материалы");
+  return plan;
+}
+test("food: recipe, plan, material issue, stages, dated lot, sale and expiry write-off in RU/KK", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const f = await setup(page, "food");
+  await recipeAndPlan(page, f, "Хлеб пшеничный", "Замес, Выпечка");
+  for (const stage of ["Замес", "Выпечка"]) {
+    const form = await f.click("Этап и брак");
+    await form
+      .getByLabel("Этап", { exact: true })
+      .selectOption({ label: stage });
+    await f.submit("Этап и брак");
+  }
+  let form = await f.click("Подтвердить выпуск");
+  await form.getByLabel("Годный выпуск", { exact: true }).fill("10");
+  await form.getByLabel("Безвозвратный брак", { exact: true }).fill("0");
+  await form.getByLabel("Код партии", { exact: true }).fill("BREAD-E2E");
+  await form.getByLabel("Годен до", { exact: true }).fill(future);
+  await f.submit("Подтвердить выпуск");
+  await expect(page.getByText(/10 \/ 10/)).toBeVisible();
+  // Sale of 3 from the dated lot (FEFO), through the ordinary order services.
+  const order = await f.post(`${f.base}/orders`, {
+    key: key(),
+    branchId: f.branch,
+    customerId: f.customer,
+    warehouseId: f.warehouse,
+    dueDate: future,
+    delivery: "pickup",
+    note: "Продажа хлеба",
+    taxMode: "excluded",
+    lines: [
+      {
+        itemId: f.product,
+        quantity: "3",
+        unit: "pc",
+        price: "100",
+        discount: "0",
+      },
+    ],
+  });
+  await f.post(`${f.base}/orders/${order.id}/commands`, {
+    key: key(),
+    version: 1,
+    kind: "confirm",
+    note: "Резерв",
+  });
+  const view = await f.get(`${f.base}/orders/${order.id}`);
+  await f.post(`${f.base}/orders/${order.id}/commands`, {
+    key: key(),
+    version: view.order.version,
+    kind: "fulfill",
+    lineId: view.lines[0].id,
+    quantity: "3",
+    note: "Выдача",
+  });
+  // Remaining lot is written off with an explicit waste document (not an ordinary issue).
+  await page
+    .getByRole("button", { name: "Обновить", exact: true })
+    .first()
+    .click();
+  form = await f.click("Списать партию");
+  await form.getByLabel("Склад", { exact: true }).selectOption(f.warehouse);
+  await form.getByLabel("Товар", { exact: true }).selectOption(f.product);
+  await form
+    .getByLabel("Количество в базовых единицах", { exact: true })
+    .fill("7");
+  const lot = await form
+    .getByLabel("Партия", { exact: true })
+    .locator("option", { hasText: "BREAD-E2E" })
+    .getAttribute("value");
+  await form.getByLabel("Партия", { exact: true }).selectOption(lot!);
+  await f.submit("Списать партию");
+  const balance = await f.get(
+    `${f.base}/inventory/balances?warehouseId=${f.warehouse}`,
+  );
+  const bread = balance.items.find(
+    (x: { item_id: string }) => x.item_id === f.product,
+  );
+  expect(Number(bread.quantity)).toBe(0);
+  await f.capture();
+});
+test("production: specification, issue, defects and rework, good output with irreversible scrap in RU/KK", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const f = await setup(page, "production");
+  await recipeAndPlan(page, f, "Стол", "Раскрой, Сборка");
+  let form = await f.click("Этап и брак");
+  await form
+    .getByLabel("Этап", { exact: true })
+    .selectOption({ label: "Раскрой" });
+  await form.getByLabel("Выявлено брака, единиц", { exact: true }).fill("2");
+  await form
+    .getByLabel("Исправлено переделкой, единиц", { exact: true })
+    .fill("1");
+  await f.submit("Этап и брак");
+  form = await f.click("Этап и брак");
+  await form
+    .getByLabel("Этап", { exact: true })
+    .selectOption({ label: "Сборка" });
+  await f.submit("Этап и брак");
+  form = await f.click("Подтвердить выпуск");
+  await form.getByLabel("Годный выпуск", { exact: true }).fill("9");
+  await form.getByLabel("Безвозвратный брак", { exact: true }).fill("1");
+  await form.getByLabel("Код партии", { exact: true }).fill("TABLE-E2E");
+  await f.submit("Подтвердить выпуск");
+  await expect(page.getByText(/10 \/ 9/)).toBeVisible();
+  await expect(page.getByText(/2 \/ 1/)).toBeVisible();
+  const balance = await f.get(
+    `${f.base}/inventory/balances?warehouseId=${f.warehouse}`,
+  );
+  const table = balance.items.find(
+    (x: { item_id: string }) => x.item_id === f.product,
+  );
+  expect(Number(table.quantity)).toBe(9);
+  await f.capture();
+});

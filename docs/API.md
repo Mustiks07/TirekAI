@@ -243,3 +243,20 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Для purchase baseline требуется по альтернативе на каждую позицию, один поставщик, равный фактический объём упаковок, одинаковые leadDays/paymentTerms и известные условия цены. Факт — полная приёмка плюс обязательства поставщику (с учётом корректировок). Изменённый объём или реально принятый заменяющий SKU → incomparable. Для order факт — текущая выручка исполненного заказа, difference = факт − прогноз; для purchase difference = baseline − фактическая стоимость. Это разные показатели, они не суммируются. Прогнозы не добавляются к выручке.
 
 Новые ошибки: ESTIMATE_COMMITTED, RECEIPT_REQUIRED, OUTCOME_ALREADY_TRACKED, BASELINE_TOO_LATE, RESULT_RANGE_TOO_LARGE; сохраняются VERSION_CONFLICT, SECOND_PERSON_REQUIRED, BUDGET_EXCEEDED, RESOURCE_CONFLICT, FORBIDDEN. Контакт пациента доступен только industry API своей области; общего AI tool для clinic/industry/outcomes не зарегистрировано.
+
+## T051–T058: изменения экранов, обезличивание, экспорт, эксплуатация
+
+Миграция 24. Пути относительно /api/v1/organizations/:id, кроме `/api/health`. Повтор key не отменяет проверку актуальных прав.
+
+| Метод | Путь | Данные / действие |
+| --- | --- | --- |
+| GET | changes | Любой участник. `{cursor}` (32 символа): хеш числа и времени последних записей аудита в области пользователя (организация или его филиал). Клиент (`LiveSync`) опрашивает раз в секунду при видимой вкладке и перечитывает экран при смене курсора; данных не содержит |
+| POST | privacy/customers/:customerId/erase | Только owner (`organization:write`). `{key, version, reason: subject_request/retention_expired/consent_withdrawn}` → `{id, reused?, counts}`. Необратимо обезличивает клиента, обращения, заметки CRM, строки импорта, сообщения; удаляет коды привязки; внешние сопоставления контакта/чата → deleted (повторная синхронизация не возвращает данные). Заказы, деньги и склад сохраняются с обезличенным клиентом. Ошибки: SUBJECT_ERASED, TECHNICAL_CUSTOMER (расчётные клиенты клиники/канала), VERSION_CONFLICT, NOT_FOUND |
+| POST | privacy/clinic/:documentId/erase | Только owner. Тот же ввод; стирает имя/контакт пациента в документе клиники, снимках истории и заметки персонала; время, услуга, счёт и деньги остаются |
+| GET | privacy/requests | Только owner. Журнал: кто, когда, основание, количества — без стёртых значений |
+| GET | export | Только owner. JSON-выгрузка организации (до 50 000 строк всего, при превышении — EXPORT_TOO_LARGE 413), без столбцов с секретами/хешами и без бинарных оригиналов; действие пишется в аудит. Полная выгрузка с оригиналами — `npm run org:export -- --org <id> --binaries` на сервере |
+| GET | /api/health | Без авторизации и без данных организаций: `{status ok/degraded/error, database, schema ok/mismatch, migration, pendingMigrations, worker ok/stale/unknown, workerHeartbeatAgeSeconds}`; 503 при недоступной базе или несовпадении схемы |
+
+Изменённые записи после обезличивания: команды над стёртым клиентом/документом клиники отвечают SUBJECT_ERASED (409); чтение истории остаётся.
+
+Командные инструменты (не HTTP): `test:load`, `measure:files`, `db:backup`, `db:restore`, `test:restore`, `db:migrate -- --plan`, `ops:retention [-- --apply]`, `org:export`, `check:secrets`, `live:report`, `eval:assistant [-- --confirm-budget N]`, `ocr:check`, `voice:check`, `video:probe`, `pilot:metrics`. Описание — docs/RUNBOOK.md и docs/LIVE_ACCEPTANCE.md.

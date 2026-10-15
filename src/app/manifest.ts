@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Басқару — бизнес кеңістігі",
+    name: "Басқару: бизнес кеңістігі",
     short_name: "Басқару",
     description: "Бизнес, клиенттер және қойма. Бизнес, клиенты и склад.",
     lang: "kk",

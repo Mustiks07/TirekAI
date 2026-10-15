@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { api } from "@/lib/client";
+import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { executionError } from "@/lib/execution-i18n";
 import { moneyText } from "@/lib/inventory-i18n";
@@ -75,7 +76,7 @@ export function BankStatements({
     } | null>(null),
     [selected, setSelected] = useState(""),
     [error, setError] = useState(""),
-    [revision, setRevision] = useState(0);
+    [revision, setRevision] = useRevision();
   const refresh = () => setRevision((v) => v + 1);
   const msg = (code: string) =>
     executionError(code, locale) || errorText(code, locale);
@@ -131,8 +132,8 @@ export function BankStatements({
       <h2 id="bank-statements">{t("Банковские выписки", "Банк үзінділері")}</h2>
       <p>
         {t(
-          "Формат «1С:Предприятие — Клиент банка» (1CClientBankExchange). Выписка не меняет деньги сама: каждую строку нужно провести, сопоставить с уже внесённой операцией или пропустить. Повторные строки из пересекающихся выписок не дублируются. Онлайн-касса (ОФД) не подключена: проверенного официального контракта нет.",
-          "«1С:Кәсіпорын — Банк клиенті» форматы (1CClientBankExchange). Үзінді ақшаны өзі өзгертпейді: әр жолды жүргізу, бұрын енгізілген операциямен сәйкестендіру немесе өткізіп жіберу керек. Қиылысатын үзінділердің қайталанатын жолдары көбеймейді. Онлайн-касса (ОФД) қосылмаған: тексерілген ресми келісімшарт жоқ.",
+          "Формат «1С:Предприятие: Клиент банка» (1CClientBankExchange). Выписка не меняет деньги сама: каждую строку нужно провести, сопоставить с уже внесённой операцией или пропустить. Повторные строки из пересекающихся выписок не дублируются. Онлайн-касса (ОФД) не подключена: проверенного официального контракта нет.",
+          "«1С:Кәсіпорын: Банк клиенті» форматы (1CClientBankExchange). Үзінді ақшаны өзі өзгертпейді: әр жолды жүргізу, бұрын енгізілген операциямен сәйкестендіру немесе өткізіп жіберу керек. Қиылысатын үзінділердің қайталанатын жолдары көбеймейді. Онлайн-касса (ОФД) қосылмаған: тексерілген ресми келісімшарт жоқ.",
         )}
       </p>
       {error && (
@@ -234,7 +235,7 @@ export function BankStatements({
                     className="secondary-button"
                     onClick={() => setSelected(s.id)}
                   >
-                    {s.account_name} · {s.period_start} — {s.period_end} ·{" "}
+                    {s.account_name} · {s.period_start} – {s.period_end} ·{" "}
                     {s.filename}
                   </button>{" "}
                   {s.consistent
@@ -256,17 +257,17 @@ export function BankStatements({
           {open && (
             <>
               <h3>
-                {open.statement.account_name} · {open.statement.period_start} —{" "}
+                {open.statement.account_name} · {open.statement.period_start} –{" "}
                 {open.statement.period_end}
               </h3>
               <p>
                 {t("Остаток банка на начало", "Банктің бастапқы қалдығы")}:{" "}
                 {open.statement.opening_minor === null
-                  ? "—"
+                  ? "–"
                   : `${moneyText(open.statement.opening_minor)} ₸`}{" "}
                 · {t("на конец", "соңында")}:{" "}
                 {open.statement.closing_minor === null
-                  ? "—"
+                  ? "–"
                   : `${moneyText(open.statement.closing_minor)} ₸`}{" "}
                 ·{" "}
                 {t(
