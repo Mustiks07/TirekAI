@@ -14,6 +14,9 @@ for (const [ip, bits] of [
   ["172.16.0.0", 12],
   ["192.168.0.0", 16],
   ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
   ["198.18.0.0", 15],
   ["224.0.0.0", 4],
   ["240.0.0.0", 4],
@@ -25,12 +28,23 @@ for (const [ip, bits] of [
   ["fc00::", 7],
   ["fe80::", 10],
   ["ff00::", 8],
+  ["2001::", 23],
+  ["2001:db8::", 32],
+  ["2002::", 16],
 ] as const)
   blocked.addSubnet(ip, bits, "ipv6");
+const globalV6 = new BlockList();
+globalV6.addSubnet("2000::", 3, "ipv6");
 export function publicAddress(address: string) {
   const ip = address.replace(/^\[|\]$/g, "");
   const family = isIP(ip);
-  return !!family && !blocked.check(ip, family === 6 ? "ipv6" : "ipv4");
+  // Refuse translation/tunnel and reserved ranges as well as private literals. In particular,
+  // NAT64 and IPv4-compatible IPv6 must not smuggle an internal IPv4 destination.
+  return (
+    !!family &&
+    (family !== 6 || globalV6.check(ip, "ipv6")) &&
+    !blocked.check(ip, family === 6 ? "ipv6" : "ipv4")
+  );
 }
 // Resolve at socket creation and pass those exact addresses to the connection. A separate
 // pre-flight lookup followed by ordinary fetch would allow DNS rebinding to a private host.

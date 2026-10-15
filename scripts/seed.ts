@@ -48,7 +48,9 @@ async function main() {
     await db.close();
   }
 }
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "Seed failed");
+main().catch(() => {
+  console.error(
+    "SEED_FAILED: check local configuration and database availability.",
+  );
   process.exitCode = 1;
 });

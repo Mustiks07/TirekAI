@@ -139,7 +139,13 @@ async function createLocalDatabase(): Promise<Database> {
     await lock.close();
   }
   const db = wrapPglite(new PGlite(dir), () => unlink(lockPath));
-  await migrate(db);
+  try {
+    await migrate(db);
+  } catch (error) {
+    // A failed startup must release our own handle/lock so a repaired setup can retry.
+    await db.close().catch(() => {});
+    throw error;
+  }
   return db;
 }
 const globalDb = globalThis as unknown as { smbDatabase?: Promise<Database> };
@@ -156,7 +162,10 @@ export function getDatabase(): Promise<Database> {
       throw new Error(
         "Configure DATABASE_URL or start the explicit local preview.",
       );
-    })();
+    })().catch((error) => {
+      globalDb.smbDatabase = undefined;
+      throw error;
+    });
   }
   return globalDb.smbDatabase;
 }

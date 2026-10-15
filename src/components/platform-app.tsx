@@ -72,6 +72,7 @@ import { IntegrationsPage } from "./integrations-page";
 import { BankStatements } from "./bank-statements";
 import { ChannelOrders } from "./channel-orders";
 import { VideoPage } from "./video-page";
+import { OutcomesPage } from "./outcomes-page";
 import { IndustryPage } from "./industry-page";
 import { MarketingPage } from "./marketing-page";
 import { can } from "@/domain/permissions";
@@ -93,6 +94,7 @@ type Page =
   | "assistant"
   | "integrations"
   | "video"
+  | "outcomes"
   | "industry"
   | "marketing";
 type Modal = "invite" | "newOrg" | "branch" | null;
@@ -858,6 +860,11 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
     branchId: string;
     org: string;
   } | null>(null);
+  const [focusedPurchase, setFocusedPurchase] = useState<{
+    id: string;
+    branchId: string;
+    org: string;
+  } | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [removeMember, setRemoveMember] = useState<Member | null>(null);
   const [invitation, setInvitation] = useState("");
@@ -959,6 +966,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
   }
   function navigate(p: Page) {
     setFocusedOrder(null);
+    setFocusedPurchase(null);
     setPage(p);
     setNotice("");
     setError(null);
@@ -1133,6 +1141,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               { id: "video", Icon: Camera },
               { id: "marketing", Icon: Megaphone },
               { id: "industry", Icon: Building2 },
+              { id: "outcomes", Icon: CheckCheck },
               { id: "team", Icon: Users },
               { id: "organization", Icon: Building2 },
               { id: "activity", Icon: History },
@@ -1141,6 +1150,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
             .filter((item) => {
               const r = workspace?.organization.role;
+              if (item.id === "outcomes") return !!r && can(r, "outcomes:read");
               if (item.id === "industry")
                 return (
                   !!r &&
@@ -1151,6 +1161,8 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     "education",
                     "projects",
                     "production",
+                    "construction",
+                    "clinic",
                   ].includes(workspace!.organization.profile)
                 );
               if (!r)
@@ -1301,21 +1313,23 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                                   ? t.marketingNote
                                   : page === "industry"
                                     ? t.industryNote
-                                    : page === "team"
-                                      ? t.teamNote
-                                      : page === "customers"
-                                        ? t.customersNote
-                                        : page === "orders"
-                                          ? t.ordersNote
-                                          : page === "purchasing"
-                                            ? t.purchasingNote
-                                            : page === "finance"
-                                              ? t.financeNote
-                                              : page === "inventory"
-                                                ? t.inventoryNote
-                                                : page === "organization"
-                                                  ? t.orgNote
-                                                  : t.activityNote}
+                                    : page === "outcomes"
+                                      ? t.outcomesNote
+                                      : page === "team"
+                                        ? t.teamNote
+                                        : page === "customers"
+                                          ? t.customersNote
+                                          : page === "orders"
+                                            ? t.ordersNote
+                                            : page === "purchasing"
+                                              ? t.purchasingNote
+                                              : page === "finance"
+                                                ? t.financeNote
+                                                : page === "inventory"
+                                                  ? t.inventoryNote
+                                                  : page === "organization"
+                                                    ? t.orgNote
+                                                    : t.activityNote}
               </p>
             </div>
             {page === "today" ? (
@@ -1372,6 +1386,16 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                 can(workspace.organization.role, "purchasing:read") && (
                   <PurchasingPage
                     key={workspace.organization.id}
+                    initialOrderId={
+                      focusedPurchase?.org === workspace.organization.id
+                        ? focusedPurchase.id
+                        : undefined
+                    }
+                    initialBranchId={
+                      focusedPurchase?.org === workspace.organization.id
+                        ? focusedPurchase.branchId
+                        : undefined
+                    }
                     workspace={workspace}
                     locale={locale}
                   />
@@ -1466,9 +1490,33 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                   locale={locale}
                 />
               )}
+              {page === "outcomes" &&
+                can(workspace.organization.role, "outcomes:read") && (
+                  <OutcomesPage
+                    key={workspace.organization.id}
+                    workspace={workspace}
+                    locale={locale}
+                    onOpenOrder={(id, branchId) => {
+                      navigate("finance");
+                      setFocusedOrder({
+                        id,
+                        branchId,
+                        org: workspace.organization.id,
+                      });
+                    }}
+                  />
+                )}
               {page === "industry" &&
                 can(workspace.organization.role, "industry:read") && (
                   <IndustryPage
+                    onOpenPurchase={(id, branchId) => {
+                      navigate("purchasing");
+                      setFocusedPurchase({
+                        id,
+                        branchId,
+                        org: workspace.organization.id,
+                      });
+                    }}
                     onOpenOrder={(id, branchId) => {
                       navigate("finance");
                       setFocusedOrder({

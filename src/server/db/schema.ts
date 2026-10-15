@@ -18,6 +18,8 @@ import { videoMigration } from "./video-migration";
 import { marketingMigration } from "./marketing-migration";
 import { channelTradeMigration } from "./channel-trade-migration";
 import { industryMigration } from "./industry-migration";
+import { extendedIndustryMigration } from "./extended-industry-migration";
+import { outcomesMigration } from "./outcomes-migration";
 export const migrations = [
   {
     version: 1,
@@ -87,4 +89,6 @@ CREATE TABLE auth_limits (
   marketingMigration,
   channelTradeMigration,
   industryMigration,
+  extendedIndustryMigration,
+  outcomesMigration,
 ];

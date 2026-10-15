@@ -17,6 +17,7 @@ import {
   industryText,
   organizationInstant,
 } from "@/lib/industry-i18n";
+import type { Construction, Clinic } from "@/domain/extended-industry";
 import Decimal from "decimal.js";
 import { inventoryWords } from "@/lib/inventory-i18n";
 type Option = { id: string; name: string };
@@ -37,10 +38,12 @@ export function IndustryPage({
   workspace,
   locale,
   onOpenOrder,
+  onOpenPurchase,
 }: {
   workspace: Workspace;
   locale: Locale;
   onOpenOrder: (id: string, branchId: string) => void;
+  onOpenPurchase: (id: string, branchId: string) => void;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk),
     w = (s: string) => industryText(locale, s),
@@ -49,6 +52,8 @@ export function IndustryPage({
   const [branch, setBranch] = useState(
       org.branch_id ?? workspace.branches[0]?.id ?? "",
     ),
+    [suppliers, setSuppliers] = useState<Option[]>([]),
+    [offers, setOffers] = useState<Option[]>([]),
     [docs, setDocs] = useState<IndustryRecord[]>([]),
     [selected, setSelected] = useState<IndustryRecord | null>(null),
     [history, setHistory] = useState<
@@ -201,6 +206,65 @@ export function IndustryPage({
     // Refresh the selected document without restarting on its returned object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base, selected?.id, revision]);
+  useEffect(() => {
+    if (org.profile !== "construction") return;
+    let live = true;
+    api<{ items: Option[] }>(base + "/suppliers?limit=100")
+      .then((v) => live && setSuppliers(v.items))
+      .catch((e) => live && setError(e.code));
+    const lines =
+      selected?.kind === "construction"
+        ? (selected.data as unknown as Construction).lines
+        : [];
+    Promise.all(
+      lines.map((l) =>
+        api<{
+          offers: {
+            id: string;
+            supplier_name: string;
+            total_minor: string | null;
+            data: { supplierSku: string };
+          }[];
+        }>(base + "/purchasing/compare", "POST", {
+          itemId: l.itemId,
+          quantity: l.quantity,
+          date: new Date().toISOString().slice(0, 10),
+        }),
+      ),
+    )
+      .then(
+        (rows) =>
+          live &&
+          setOffers(
+            rows.flatMap((v) =>
+              v.offers.map((o) => ({
+                id: o.id,
+                name:
+                  o.supplier_name +
+                  " · " +
+                  o.data.supplierSku +
+                  " · " +
+                  (o.total_minor === null
+                    ? t("Неполная цена", "Толық емес баға")
+                    : new Decimal(o.total_minor).div(100).toFixed(2) + " ₸"),
+              })),
+            ),
+          ),
+      )
+      .catch((e) => live && setError(e.code));
+    return () => {
+      live = false;
+    };
+    // Locale only changes labels, never requests or mutations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, org.profile, selected?.id, selected?.version, locale]);
+  const construction =
+    selected?.kind === "construction"
+      ? (selected.data as unknown as Construction)
+      : null;
+  const clinic =
+    selected?.kind === "clinic" ? (selected.data as unknown as Clinic) : null;
+  const estimateForm = ["construction", "construction_revise"].includes(action);
   const options = (kind: string) =>
     docs
       .filter((x) => x.kind === kind)
@@ -250,38 +314,61 @@ export function IndustryPage({
       min: "0",
     });
   const createActions =
-    org.profile === "food" || org.profile === "production"
-      ? ["recipe", "lot_receipt", "production_plan", "resource", "waste"]
-      : org.profile === "services"
-        ? ["resource", "appointment"]
-        : org.profile === "education"
-          ? ["resource", "course", "group", "enroll", "lesson"]
-          : ["project"];
+    org.profile === "construction"
+      ? ["construction"]
+      : org.profile === "clinic"
+        ? ["resource", "clinic"]
+        : org.profile === "food" || org.profile === "production"
+          ? ["recipe", "lot_receipt", "production_plan", "resource", "waste"]
+          : org.profile === "services"
+            ? ["resource", "appointment"]
+            : org.profile === "education"
+              ? ["resource", "course", "group", "enroll", "lesson"]
+              : ["project"];
   const recordActions =
-    selected?.kind === "recipe"
-      ? ["recipe"]
-      : selected?.kind === "production" && selected.state !== "completed"
-        ? ["production_issue", "production_stage", "production_finish"]
-        : selected?.kind === "appointment" && selected.state === "scheduled"
-          ? (selected.data as unknown as Appointment).mode === "lesson"
-            ? ["reschedule", "lesson_complete"]
-            : ["reschedule", "appointment_end", "reminder"]
-          : selected?.kind === "appointment" &&
-              (selected.data as unknown as Appointment).mode === "service"
-            ? ["reminder"]
-            : selected?.kind === "enrollment" &&
-                ["active", "frozen"].includes(selected.state)
-              ? ["enrollment_change"]
-              : selected?.kind === "project" && selected.state === "active"
-                ? [
-                    "project_task",
-                    "time",
-                    "scope_change",
-                    "scope_approve",
-                    "project_stage",
-                    "project_deliver",
-                  ]
-                : [];
+    construction && selected?.state !== "completed"
+      ? selected?.state === "pending"
+        ? ["construction_revise", "construction_approve"]
+        : [
+            "construction_revise",
+            "construction_purchase",
+            "construction_materials",
+            "construction_work",
+            "construction_confirm",
+            "construction_accept",
+          ]
+      : clinic
+        ? selected?.state === "requested"
+          ? ["clinic_book"]
+          : selected?.state === "scheduled"
+            ? ["clinic_book", "clinic_visit"]
+            : selected?.state === "visited"
+              ? ["clinic_invoice"]
+              : []
+        : selected?.kind === "recipe"
+          ? ["recipe"]
+          : selected?.kind === "production" && selected.state !== "completed"
+            ? ["production_issue", "production_stage", "production_finish"]
+            : selected?.kind === "appointment" && selected.state === "scheduled"
+              ? (selected.data as unknown as Appointment).mode === "lesson"
+                ? ["reschedule", "lesson_complete"]
+                : ["reschedule", "appointment_end", "reminder"]
+              : selected?.kind === "appointment" &&
+                  (selected.data as unknown as Appointment).mode === "service"
+                ? ["reminder"]
+                : selected?.kind === "enrollment" &&
+                    ["active", "frozen"].includes(selected.state)
+                  ? ["enrollment_change"]
+                  : selected?.kind === "project" && selected.state === "active"
+                    ? [
+                        "project_task",
+                        "time",
+                        "scope_change",
+                        "scope_approve",
+                        "project_stage",
+                        "project_deliver",
+                      ]
+                    : [];
   const changing = !!selected && recordActions.includes(action);
   const production =
     selected?.kind === "production"
@@ -414,11 +501,13 @@ export function IndustryPage({
       "resourceKind",
       "Вид ресурса",
       "Ресурс түрі",
-      (org.profile === "services"
-        ? ["specialist", "workplace"]
-        : org.profile === "education"
-          ? ["teacher", "room"]
-          : ["equipment"]
+      (org.profile === "clinic"
+        ? ["specialist", "room"]
+        : org.profile === "services"
+          ? ["specialist", "workplace"]
+          : org.profile === "education"
+            ? ["teacher", "room"]
+            : ["equipment"]
       ).map((id) => ({ id, name: w(id) })),
     );
     numeric(
@@ -444,7 +533,7 @@ export function IndustryPage({
       value: "18:00",
     });
   }
-  if (["appointment", "reschedule", "lesson"].includes(action)) {
+  if (["appointment", "reschedule", "lesson", "clinic_book"].includes(action)) {
     add("startsAt", `Начало (${org.timezone})`, `Басталуы (${org.timezone})`, {
       type: "datetime-local",
     });
@@ -586,6 +675,93 @@ export function IndustryPage({
       "Кезең",
       project?.stages.map((name, i) => ({ id: String(i), name })) ?? [],
     );
+  if (estimateForm) {
+    if (action === "construction") {
+      add("title", "Объект строительства", "Құрылыс нысаны");
+      choice("customerId", "Заказчик", "Тапсырыс беруші", customers);
+      choice("warehouseId", "Склад объекта", "Нысан қоймасы", warehouseOptions);
+      choice(
+        "billingItemId",
+        "Услуга для итогового счёта",
+        "Қорытынды шот қызметі",
+        services,
+      );
+    }
+    numeric(
+      "budget",
+      "Бюджет затрат, ₸",
+      "Шығын бюджеті, ₸",
+      construction?.budget ?? "",
+    );
+    add("stages", "Этапы, через запятую", "Кезеңдер, үтір арқылы", {
+      value: construction?.stages.join(", ") ?? "",
+    });
+  }
+  if (action === "construction_purchase") {
+    choice("supplierId", "Поставщик", "Жеткізуші", suppliers);
+    choice("offerId", "Предложение поставщика", "Жеткізуші ұсынысы", offers);
+    numeric("quantity", "Количество закупки", "Сатып алу саны", "1");
+    add("date", "Дата предложения", "Ұсыныс күні", { type: "date" });
+    add("dueDate", "Срок поставки", "Жеткізу мерзімі", { type: "date" });
+  }
+  if (action === "construction_work") {
+    choice("contractorId", "Подрядчик", "Мердігер", suppliers);
+    choice(
+      "stage",
+      "Этап",
+      "Кезең",
+      construction?.stages.map((name, i) => ({ id: String(i), name })) ?? [],
+    );
+    numeric("amount", "Стоимость работ, ₸", "Жұмыс құны, ₸", "");
+    add(
+      "evidence",
+      "Подтверждение выполненного объёма",
+      "Орындалған көлем дәлелі",
+      { type: "textarea" },
+    );
+  }
+  if (action === "construction_confirm")
+    choice(
+      "workId",
+      "Работа для проверки",
+      "Тексерілетін жұмыс",
+      construction?.work
+        .filter((w) => !w.confirmedBy)
+        .map((w) => ({
+          id: w.id,
+          name:
+            construction.stages[w.stage] +
+            " · " +
+            w.amount +
+            " ₸ · " +
+            w.evidence,
+        })) ?? [],
+    );
+  if (action === "clinic") {
+    add(
+      "patientName",
+      "Имя пациента (административный учёт)",
+      "Пациент аты (әкімшілік есеп)",
+    );
+    add("contact", "Контакт (необязательно)", "Байланыс (міндетті емес)", {
+      optional: true,
+    });
+    choice("serviceItemId", "Направление услуги", "Қызмет бағыты", services);
+    choice(
+      "warehouseId",
+      "Подразделение расчёта",
+      "Есеп бөлімі",
+      warehouseOptions,
+    );
+    numeric("price", "Стоимость посещения, ₸", "Қабылдау құны, ₸", "");
+  }
+  if (action === "clinic_visit")
+    choice(
+      "outcome",
+      "Итог посещения",
+      "Қатысу нәтижесі",
+      ["visited", "no_show", "cancelled"].map((id) => ({ id, name: w(id) })),
+    );
   if (action)
     add("note", "Основание / подтверждение", "Негіз / растау", {
       type: "textarea",
@@ -605,9 +781,12 @@ export function IndustryPage({
       x.data.groupId === selected?.data.groupId &&
       String(x.data.endsOn) >= lessonDay,
   );
-  const needsMaterials = ["recipe", "production_issue", "appointment"].includes(
-    action,
-  );
+  const needsMaterials = [
+    "recipe",
+    "production_issue",
+    "appointment",
+    "construction_materials",
+  ].includes(action);
   const materialDefaults =
     action === "production_issue"
       ? production?.requirements
@@ -617,11 +796,13 @@ export function IndustryPage({
   const resetAction = (a: string) => {
     setAction(a);
     setLineCount(
-      a === "production_issue"
-        ? (production?.requirements.length ?? 1)
-        : a === "recipe"
-          ? (recipe?.ingredients.length ?? 1)
-          : 1,
+      a === "construction_revise"
+        ? (construction?.lines.length ?? 1)
+        : a === "production_issue"
+          ? (production?.requirements.length ?? 1)
+          : a === "recipe"
+            ? (recipe?.ingredients.length ?? 1)
+            : 1,
     );
     setError("");
     setSuccess(false);
@@ -674,11 +855,29 @@ export function IndustryPage({
         delete payload.note;
       }
       if (action === "course" || action === "group") delete payload.note;
-      if (action === "project")
+      if (action === "project" || estimateForm)
         payload.stages = read(d, "stages")
           .split(",")
           .map((x) => x.trim())
           .filter(Boolean);
+      if (action === "clinic") payload.contact = read(d, "contact");
+      if (action === "construction_purchase") {
+        payload.lines = [
+          { offerId: payload.offerId, quantity: payload.quantity },
+        ];
+        delete payload.offerId;
+        delete payload.quantity;
+      }
+      if (estimateForm)
+        payload.lines = Array.from({ length: lineCount }, (_, i) => {
+          const itemId = read(d, `estimate-item-${i}`);
+          return {
+            itemId,
+            unit: items.find((x) => x.id === itemId)?.base_unit ?? "pc",
+            quantity: read(d, `estimate-qty-${i}`),
+            price: read(d, `estimate-price-${i}`),
+          };
+        });
       if (needsMaterials) {
         const materials = Array.from({ length: lineCount }, (_, i) => {
           const itemId = read(d, `item-${i}`);
@@ -965,6 +1164,115 @@ export function IndustryPage({
                     {String(selected.data.endsOn)}
                   </p>
                 )}
+                {clinic && (
+                  <>
+                    <p>
+                      {t(
+                        "Только административные сведения. Не вносите диагнозы и назначения.",
+                        "Тек әкімшілік деректер. Диагноздар мен тағайындауларды енгізбеңіз.",
+                      )}
+                    </p>
+                    <p>
+                      {clinic.patientName} · {clinic.contact}
+                    </p>
+                    <p>
+                      {clinic.price} ₸ ·{" "}
+                      {clinic.startsAt
+                        ? businessDate(
+                            new Date(clinic.startsAt),
+                            locale,
+                            org.timezone,
+                            true,
+                          )
+                        : t("Ещё не записан", "Әлі жазылмаған")}
+                    </p>
+                    <p>
+                      {t(
+                        "В общих финансах имя и контакт пациента не отображаются.",
+                        "Жалпы қаржыда пациенттің аты мен байланысы көрсетілмейді.",
+                      )}
+                    </p>
+                  </>
+                )}
+                {construction && (
+                  <>
+                    <p>
+                      {t("Версия сметы", "Смета нұсқасы")}{" "}
+                      {construction.estimateVersion} ·{" "}
+                      {t("Цена заказчику", "Тапсырыс беруші бағасы")}{" "}
+                      {money(construction.priceMinor)} ·{" "}
+                      {t("Бюджет затрат", "Шығын бюджеті")}{" "}
+                      {construction.budget} ₸
+                    </p>
+                    <p>
+                      {t("Фактические материалы", "Нақты материалдар")}:{" "}
+                      {money(construction.materialCostMinor)}
+                    </p>
+                    <ol>
+                      {construction.stages.map((stage, i) => (
+                        <li key={i}>
+                          {stage}:{" "}
+                          {construction.work
+                            .filter((w) => w.stage === i)
+                            .map((w) => (
+                              <p key={w.id}>
+                                {w.amount} ₸ · {w.evidence} ·{" "}
+                                {w.confirmedBy
+                                  ? t("Проверено", "Тексерілді")
+                                  : t("Ожидает проверки", "Тексеруді күтуде")}
+                                {w.obligationId && (
+                                  <span>
+                                    {" "}
+                                    ·{" "}
+                                    {t(
+                                      "Обязательство в финансах",
+                                      "Қаржыдағы міндеттеме",
+                                    )}
+                                    : {w.obligationId}
+                                  </span>
+                                )}
+                              </p>
+                            ))}
+                        </li>
+                      ))}
+                    </ol>
+                    <details>
+                      <summary>{t("Строки сметы", "Смета жолдары")}</summary>
+                      {construction.lines.map((l) => (
+                        <p key={l.itemId}>
+                          {items.find((i) => i.id === l.itemId)?.name_ru} ·{" "}
+                          {l.quantity} × {l.price} ₸
+                        </p>
+                      ))}
+                    </details>
+                    <p>
+                      {t(
+                        "Закупки: согласование, накладная и фактическая приёмка выполняются в разделе «Закупки».",
+                        "Сатып алу: келісу, жүкқұжат және нақты қабылдау «Сатып алу» бөлімінде орындалады.",
+                      )}
+                    </p>
+                    {construction.purchases.map((id, i) => (
+                      <p key={id}>
+                        <button
+                          className="button secondary"
+                          onClick={() => onOpenPurchase(id, selected.branch_id)}
+                        >
+                          {t(
+                            "Открыть закупку и приёмку",
+                            "Сатып алу мен қабылдауды ашу",
+                          )}{" "}
+                          {i + 1}
+                        </button>
+                      </p>
+                    ))}
+                    <p>
+                      {t(
+                        "Приёмка объекта — управленческое подтверждение, без юридической электронной подписи.",
+                        "Нысанды қабылдау — заңды электрондық қолтаңбасыз басқарушылық растау.",
+                      )}
+                    </p>
+                  </>
+                )}
                 {project && (
                   <>
                     <p>
@@ -1017,7 +1325,7 @@ export function IndustryPage({
                 )}
                 {(
                   (selected.data.orderIds as string[] | undefined) ??
-                  (project?.orderId ? [project.orderId] : [])
+                  (selected.data.orderId ? [String(selected.data.orderId)] : [])
                 ).map((id) => (
                   <p key={id}>
                     {t(
@@ -1120,6 +1428,86 @@ export function IndustryPage({
                     </label>
                   ))}
                 </div>
+                {estimateForm && (
+                  <fieldset>
+                    <legend>
+                      {t(
+                        "Строки сметы: материалы и работы",
+                        "Смета жолдары: материалдар мен жұмыстар",
+                      )}
+                    </legend>
+                    {Array.from({ length: lineCount }, (_, i) => (
+                      <div className="form-grid" key={i}>
+                        <label>
+                          {t("Позиция сметы", "Смета позициясы")} {i + 1}
+                          <select
+                            name={`estimate-item-${i}`}
+                            aria-label={
+                              t("Позиция сметы", "Смета позициясы") +
+                              " " +
+                              (i + 1)
+                            }
+                            required
+                            defaultValue={construction?.lines[i]?.itemId ?? ""}
+                          >
+                            <option value="">
+                              {t("Выберите", "Таңдаңыз")}
+                            </option>
+                            {[...goods, ...services].map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          {t("Количество по смете", "Смета саны")} {i + 1}
+                          <input
+                            name={`estimate-qty-${i}`}
+                            type="number"
+                            required
+                            min="0.000001"
+                            step="0.000001"
+                            defaultValue={
+                              construction?.lines[i]?.quantity ?? "1"
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t("Цена по смете, ₸", "Смета бағасы, ₸")} {i + 1}
+                          <input
+                            name={`estimate-price-${i}`}
+                            type="number"
+                            required
+                            min="0"
+                            step="0.000001"
+                            defaultValue={construction?.lines[i]?.price ?? ""}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="button secondary"
+                      disabled={lineCount >= 30}
+                      onClick={() => setLineCount((n) => n + 1)}
+                    >
+                      {t("Добавить строку", "Жол қосу")}
+                    </button>
+                    {lineCount > 1 && (
+                      <button
+                        type="button"
+                        className="button secondary"
+                        onClick={() => setLineCount((n) => n - 1)}
+                      >
+                        {t(
+                          "Убрать последнюю строку",
+                          "Соңғы жолды алып тастау",
+                        )}
+                      </button>
+                    )}
+                  </fieldset>
+                )}
                 {needsMaterials && (
                   <fieldset>
                     <legend>

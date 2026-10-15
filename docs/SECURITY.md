@@ -47,3 +47,23 @@ PWA: кешируются только offline HTML и три иконки, вс
 - Деньги из внешних отчётов (выписка банка, отчёт Kaspi) не проводятся автоматически: человек выбирает действие, суммы проверяются арифметически, одна строка проводится один раз; проводка — через сервис денег с правами `finance:write`.
 - Видео: устройство аутентифицируется токеном источника (хеш в БД); принимаются только агрегированные события, кадры и учётные данные камеры в приложение не передаются, `raw_storage` запрещён ограничением БД.
 - Продвижение: себестоимость и маржа скрыты без `inventory:cost`; согласование не автором версии; разрешение ниже порога — только владелец с причиной; изображения проверяются по сигнатуре PNG/JPEG.
+
+## T049: повторный аудит 15.10.2026
+
+Проверены текущие серверные точки входа и результаты общей тестовой матрицы, включая T046–T048. Статус — verified_test в синтетической среде; независимый production-пентест не заявлен.
+
+| Поверхность | Доказательство / результат |
+| --- | --- |
+| Сессии, CSRF, cookies, роли и branch/org | foundation/e2e foundation, access.ts, тесты всех сервисов; клиника закрыта для sales/purchasing/finance/employee/observer, включая detail и replay; чужие org/branch закрыты |
+| Деньги, склад, документы | inventory/commerce/purchasing/industry + PostgreSQL: точные суммы, атомарность, версии, повтор ключей, реальные источники и запрет независимого возврата связанного движения |
+| Чувствительные административные сведения | extended-industry: patientName/contact только в защищённых industry data/history; в аудит идут ID, в общие заказы — обезличенный клиент, в outcomes нет ссылки на private clinic document; AI tools не имеют доступа к clinic |
+| Файлы и оригиналы | knowledge/tasks/document-extraction/marketing: scope до чтения оригинала и до/после обработки, extension/signature/size, no-store; OS sandbox/антивирус и retention для production остаются ограничениями |
+| Реквизиты, webhooks, внешние URL | contract tests пяти адаптеров, AES-GCM/отключение/хеш секретов, лимиты входа, no redirect; public-https блокирует private, mapped/compatible/NAT64/6to4, документационные и зарезервированные диапазоны с проверкой DNS при socket lookup |
+| AI/tools | assistant tests, строгие tool inputs, контекст организации не берётся из аргументов модели; SQL/HTTP/payment/approve/clinic tools отсутствуют, неизвестные инструменты отклоняются; живой adversarial eval модели не выполнен |
+| Видео | video tests: device token, зона/версия, запрет raw storage, отсутствие камеры не обнуляет трафик; локальная ffmpeg обработка без app credentials; реальные потоки не подключены |
+| Браузер | security headers, PWA allowlist без business cache, нет dangerouslySetInnerHTML; добавлен CSP base-uri self/object-src none/frame-ancestors none/form-action self. Это частичная политика, не строгий nonce CSP для script-src |
+| Логи и зависимости | HTTP logs только requestId/code, processor без сырых stderr, seed без exception.message; npm audit результат записан в TESTING |
+
+Найденное и исправленное: расширены запрещённые IPv6 transition/reserved диапазоны (SSRF 1С); запрет object/embed и чужих form/base/framing; устранён вывод сырого seed exception. Специальные public IPv6 адреса вне принятого консервативного allowlist тоже отклоняются: для нового диапазона требуется отдельная проверка, а не снятие защиты. Новые роли clinic не вводились: доступ только owner/manager, остальные роли не получают список/историю даже по известному ID.
+
+До живой эксплуатации сохраняются прежние условия: MFA/identity recovery, retention/удаление/экспорт, права DB, полноценный CSP и sandbox файлов, независимая проверка, live AI/видео/интеграции. Не представлять локальный push как разрешение обработки реальных пациентов или внешней отправки.
