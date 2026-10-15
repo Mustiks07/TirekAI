@@ -15,12 +15,58 @@ export interface Database extends Sql {
   transaction<T>(fn: (tx: Sql) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
-export async function migrate(db: Database) {
-  await db.query(
-    "CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+type Migration = { version: number; sql: string };
+const MIGRATION_LOCK = 727163051;
+// Concurrent `CREATE TABLE IF NOT EXISTS` races in PostgreSQL; the history table is created under
+// the same advisory lock as the migrations.
+async function ensureHistory(db: Database) {
+  await db.transaction(async (tx) => {
+    await tx.query(`SELECT pg_advisory_xact_lock(${MIGRATION_LOCK})`);
+    await tx.query(
+      "CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+    );
+  });
+}
+const checksumOf = (m: Migration) =>
+  createHash("sha256").update(m.sql).digest("hex");
+// Pending migrations without applying anything (`npm run db:migrate -- --plan`, T053).
+export async function migrationPlan(
+  db: Database,
+  list: readonly Migration[] = migrations,
+) {
+  await ensureHistory(db);
+  const applied = await db.query<{ version: number; checksum: string }>(
+    "SELECT version,checksum FROM schema_migrations ORDER BY version",
   );
-  for (const migration of migrations) {
-    const checksum = createHash("sha256").update(migration.sql).digest("hex");
+  const modified = list
+    .filter((m) =>
+      applied.some(
+        (a) => a.version === m.version && a.checksum !== checksumOf(m),
+      ),
+    )
+    .map((m) => m.version);
+  const unknown = applied
+    .filter((a) => !list.some((m) => m.version === a.version))
+    .map((a) => a.version);
+  return {
+    applied: applied.map((a) => a.version),
+    pending: list
+      .filter((m) => !applied.some((a) => a.version === m.version))
+      .map((m) => m.version),
+    modified,
+    // Versions applied by a newer release: this code is older than the database.
+    unknown,
+  };
+}
+// Each migration commits atomically with its version row. Concurrent starters serialize on an
+// advisory lock and re-check inside the transaction, so a version is applied exactly once.
+export async function migrate(
+  db: Database,
+  list: readonly Migration[] = migrations,
+) {
+  await ensureHistory(db);
+  for (const migration of list) {
+    const checksum = checksumOf(migration);
     const [existing] = await db.query<{ checksum: string }>(
       "SELECT checksum FROM schema_migrations WHERE version=$1",
       [migration.version],
@@ -31,6 +77,18 @@ export async function migrate(db: Database) {
       );
     if (!existing)
       await db.transaction(async (tx) => {
+        await tx.query(`SELECT pg_advisory_xact_lock(${MIGRATION_LOCK})`);
+        const [again] = await tx.query<{ checksum: string }>(
+          "SELECT checksum FROM schema_migrations WHERE version=$1",
+          [migration.version],
+        );
+        if (again) {
+          if (again.checksum !== checksum)
+            throw new Error(
+              "Applied migration was modified. Add a new migration instead.",
+            );
+          return;
+        }
         await tx.query(migration.sql);
         await tx.query(
           "INSERT INTO schema_migrations(version, checksum) VALUES($1,$2)",

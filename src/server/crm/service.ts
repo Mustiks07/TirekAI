@@ -103,17 +103,21 @@ export class CrmService {
     org: string,
     id: string,
     branch: string | null,
+    forWrite = true,
   ) {
     idSchema.parse(id);
     const [c] = await tx.query<{
       id: string;
       branch_id: string;
       version: number;
+      erased: boolean;
     }>(
-      "SELECT id,branch_id,version FROM customers WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3) FOR UPDATE",
+      "SELECT id,branch_id,version,erased_at IS NOT NULL erased FROM customers WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3) FOR UPDATE",
       [org, id, branch],
     );
     if (!c) throw new AppError("NOT_FOUND", 404);
+    // T053: an erased customer keeps the accounting link but its record is locked.
+    if (forWrite && c.erased) throw new AppError("SUBJECT_ERASED", 409);
     return c;
   }
   private async pipelineData(tx: Sql, org: string) {
@@ -432,7 +436,7 @@ export class CrmService {
     const q = crmQuery.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "customers:read");
-      await this.customer(tx, org, id, s.branchId);
+      await this.customer(tx, org, id, s.branchId, false);
       const [n] = await tx.query<{ total: number }>(
         "SELECT count(*)::int total FROM crm_events WHERE organization_id=$1 AND customer_id=$2",
         [org, id],

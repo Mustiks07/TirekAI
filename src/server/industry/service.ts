@@ -65,13 +65,16 @@ export class IndustryService {
     org: string,
     id: string,
     kind?: Kind,
+    forWrite = true,
   ): Promise<Doc<T>> {
     z.uuid().parse(id);
-    const [d] = await tx.query<Doc<T>>(
-      `SELECT ${columns} FROM industry_documents WHERE organization_id=$1 AND id=$2 FOR UPDATE`,
+    const [d] = await tx.query<Doc<T> & { erased: boolean }>(
+      `SELECT ${columns},erased_at IS NOT NULL erased FROM industry_documents WHERE organization_id=$1 AND id=$2 FOR UPDATE`,
       [org, id],
     );
     if (!d || (kind && d.kind !== kind)) throw new AppError("NOT_FOUND", 404);
+    // T053: personal data of this request was erased; it stays readable but cannot change.
+    if (forWrite && d.erased) throw new AppError("SUBJECT_ERASED", 409);
     return d;
   }
   private async history(
@@ -224,7 +227,7 @@ export class IndustryService {
   async detail(secret: Credential, org: string, id: string) {
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "industry:read");
-      const d = await this.load(tx, org, id);
+      const d = await this.load(tx, org, id, undefined, false);
       if (s.branchId && s.branchId !== d.branch_id)
         throw new AppError("FORBIDDEN", 403);
       return {

@@ -148,3 +148,27 @@ test("open orders and stock screens of another user update within 3 s after a co
   expect(errors).toEqual([]);
   await context.close();
 });
+test("T053: health check reports database, schema and worker state without any organization data", async ({
+  request,
+}) => {
+  const r = await request.get("/api/health");
+  expect(r.status()).toBe(200);
+  const body = await r.json();
+  expect(body).toMatchObject({
+    database: "ok",
+    schema: "ok",
+    pendingMigrations: 0,
+  });
+  expect(Object.keys(body).sort()).toEqual(
+    [
+      "database",
+      "migration",
+      "pendingMigrations",
+      "schema",
+      "status",
+      "worker",
+      "workerHeartbeatAgeSeconds",
+    ].sort(),
+  );
+  expect(r.headers()["cache-control"]).toBe("no-store");
+});

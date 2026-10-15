@@ -225,7 +225,7 @@ export class TelegramService {
       const s = await sessionAccess(tx, secret, org, "customers:write");
       const conn = await connectionFor(tx, org, id, "telegram");
       const [customer] = await tx.query(
-        "SELECT id FROM customers WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3)",
+        "SELECT id FROM customers WHERE organization_id=$1 AND id=$2 AND erased_at IS NULL AND ($3::uuid IS NULL OR branch_id=$3)",
         [org, c.customerId, s.branchId],
       );
       if (!customer) throw new AppError("NOT_FOUND", 404);
@@ -419,7 +419,7 @@ export class TelegramService {
     if (conn.disconnected_at || !conn.settings.outbound)
       throw new AppError("MESSAGING_DISABLED", 409);
     const [customer] = await tx.query<{ messenger: boolean }>(
-      "SELECT (consents->>'messenger')::boolean messenger FROM customers WHERE organization_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id=$3)",
+      "SELECT (consents->>'messenger')::boolean messenger FROM customers WHERE organization_id=$1 AND id=$2 AND erased_at IS NULL AND ($3::uuid IS NULL OR branch_id=$3)",
       [org, customerId, options.branchId ?? null],
     );
     if (!customer) return "not_found";

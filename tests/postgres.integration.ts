@@ -904,3 +904,31 @@ it("T042: independent connections cannot double-book shared resources", async ()
     ),
   ).toHaveLength(2);
 });
+it("T053: two processes migrating a fresh database apply each version exactly once", async () => {
+  const name = `migrate_${randomUUID().replace(/-/g, "")}`;
+  const admin = new Client({ connectionString: url! });
+  await admin.connect();
+  try {
+    await admin.query(`CREATE DATABASE ${name}`);
+    const target = new URL(url!);
+    target.pathname = `/${name}`;
+    const a = createPostgresDatabase(target.toString()),
+      b = createPostgresDatabase(target.toString());
+    try {
+      await Promise.all([migrate(a), migrate(b)]);
+      const rows = await a.query<{ n: number; v: number }>(
+        "SELECT count(*)::int n,max(version)::int v FROM schema_migrations",
+      );
+      expect(rows[0]).toEqual({
+        n: migrations.length,
+        v: migrations.at(-1)!.version,
+      });
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  } finally {
+    await admin.query(`DROP DATABASE IF EXISTS ${name}`);
+    await admin.end();
+  }
+});
