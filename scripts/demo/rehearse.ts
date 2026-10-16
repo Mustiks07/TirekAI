@@ -380,7 +380,7 @@ async function main() {
         .getByRole("combobox", { name: "Язык ответа", exact: true })
         .selectOption(locale);
       await page
-        .getByLabel("Вопрос или поручение", { exact: true })
+        .getByRole("textbox", { name: "Вопрос или поручение", exact: true })
         .fill(question);
       await page
         .getByRole("button", { name: "Отправить", exact: true })

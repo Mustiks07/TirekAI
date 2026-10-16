@@ -1,6 +1,18 @@
 # Передача проекта следующему агенту
 
-## Актуальная передача: TirekAI, T005/T052 (16.10.2026)
+## Актуальная передача: демо, голос (T056), камера (T057) — 16.10.2026
+
+Начинать с актуального `origin/main`. Работа выполнена в `codex/demo-voice-detector` от `b3ff8a6` и опубликована в main обычным fast-forward (без force) по разрешению пользователя. Дополнительных агентов не запускать без прямого указания.
+
+- **Демо**: docs/DEMO_SCENARIOS.md. Скрипты `scripts/demo/*` (prepare/reset/rehearse/make-invoice), синтетическая накладная `docs/demo/invoice-ts-1042.jpg`, снимки прогона `docs/demo/rehearsal/`. Входы демо — только в игнорируемых `.local/tirekai-*.json`. `demo:reset` копирует `.data/local-demo-baseline` обратно при остановленном сервере (проверка `.process-lock`).
+- **OCR/закупки**: `freeTextLine` (src/server/purchasing/extract.ts) и `suggestReview` (src/lib/invoice-suggest.ts) — подсказки в форме проверки, сервер по-прежнему проверяет итог; `GET proposals/:id` → `offers[]` (только чтение).
+- **Голос**: `src/server/assistant/local-speech.ts` (долгоживущий процесс `scripts/speech-worker.mjs`, очередь 1 + 3 ожидающих, 150 с, выгрузка через 15 мин), правила пометок `src/domain/speech-review.ts`, браузерный WAV `src/lib/wav.ts`. Включение: `npm run speech:model`, `SPEECH_PROVIDER=local`, «Разрешить голос». `SPEECH_WORKER_SCRIPT` — только для e2e (тестовый двойник). Не возвращать отправку «как есть» сжатого webm: модель принимает WAV, тихий звук нормализуется до 16 бит (иначе зацикливание).
+- **Камера**: `src/server/video/detector.ts` (D-FINE COCO через onnxruntime-node), `bytetrack.ts`, `processor.ts` (опция `detector`, RGB-кадры с обратным давлением). `--detector motion` — только явно. `crossing()` в cv.ts изменён: точка на линии относится к неотрицательной стороне.
+- Зависимости: `@huggingface/transformers` 4.3.1, `onnxruntime-node` 1.30.0 (exact). `.npmrc` пропускает необязательную загрузку CUDA. Модели — `.data/models` (не в Git).
+
+Ограничения: сценарий 3 демо и живой AI — только с ключами на машине пользователя; голос проверен на FLEURS и синтетическом TTS, не на живых сотрудниках; точность D-FINE на реальных людях не измерена; режим живого разговора не реализован. Миграции 1–25 не изменены, следующая — 26.
+
+## История передачи: TirekAI, T005/T052 (16.10.2026)
 
 **Начинать с актуального `origin/main`.** Пользователь после проверок прямо попросил push в main. Коммит реализации `d930d46` опубликован обычным fast-forward от `9f40ac9`; main теперь включает всю прежнюю цепочку и дизайн. Отдельный PR дизайна не создавался. Рабочая ветка `codex/tirekai-design` сохранена. Указанная ниже база PR описывает исходный план до разрешения прямой публикации; production не развёрнут.
 

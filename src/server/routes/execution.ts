@@ -1114,6 +1114,8 @@ export const uploadLimits: { method: string; path: string; limit: number }[] = [
   { method: "POST", path: "tasks/:id/attachments", limit: 2_900_000 },
   { method: "POST", path: "bank/statements", limit: 2_900_000 },
   { method: "POST", path: "marketing/campaigns/:id/images", limit: 2_900_000 },
+  // Voice: up to 60 s of 16 kHz WAV in base64 (transcriptionInput allows 2.8 M characters).
+  { method: "POST", path: "assistant/transcriptions", limit: 2_900_000 },
 ];
 function match(pattern: string, path: string[]) {
   const parts = pattern.split("/");

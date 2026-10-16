@@ -36,10 +36,8 @@ export class LocalWhisperSpeech implements SpeechProvider {
     readonly model = process.env.SPEECH_MODEL ||
       "onnx-community/whisper-large-v3-turbo",
     // SPEECH_WORKER_SCRIPT exists for browser tests (a protocol test double); not for production.
-    private readonly script = resolve(
-      process.cwd(),
-      process.env.SPEECH_WORKER_SCRIPT || "scripts/speech-worker.mjs",
-    ),
+    private readonly script = process.env.SPEECH_WORKER_SCRIPT ||
+      resolve(process.cwd(), "scripts/speech-worker.mjs"),
   ) {}
   // Starts the process ahead of the first request (e.g. when the assistant page opens).
   warm() {
@@ -54,9 +52,8 @@ export class LocalWhisperSpeech implements SpeechProvider {
         TEMP: process.env.TEMP,
         SPEECH_MODEL: this.model,
         SPEECH_DTYPE: process.env.SPEECH_DTYPE || "q8",
-        SPEECH_MODEL_DIR: resolve(
-          process.env.SPEECH_MODEL_DIR || ".data/models",
-        ),
+        // Relative paths resolve against the same working directory as the server.
+        SPEECH_MODEL_DIR: process.env.SPEECH_MODEL_DIR || ".data/models",
         SPEECH_ALLOW_DOWNLOAD: "0",
       },
     });

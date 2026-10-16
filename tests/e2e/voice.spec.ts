@@ -61,8 +61,15 @@ test("voice transcript lands in the editable field and sending waits for checkin
   await page
     .getByRole("button", { name: "Остановить и распознать", exact: true })
     .click();
-  const field = page.getByLabel("Вопрос или поручение", { exact: true });
-  await expect(field).toHaveValue("Төлемді жүргізбе жиырма бес қорап");
+  // By role: the wrapping label's text grows with the typed value, the accessible name does not.
+  const field = page.getByRole("textbox", {
+    name: "Вопрос или поручение",
+    exact: true,
+  });
+  // Recording, browser WAV conversion and the server round trip; generous for slow CI machines.
+  await expect(field).toHaveValue("Төлемді жүргізбе жиырма бес қорап", {
+    timeout: 60_000,
+  });
   // The negation and the unsure word must be checked before sending.
   await expect(
     page.getByText("жүргізбе, қорап", { exact: true }),

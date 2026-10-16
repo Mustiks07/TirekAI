@@ -1119,6 +1119,10 @@ summary {
     min-width: 0;
     padding-bottom: 80px;
   }
+  /* Focus and scroll-into-view keep fields above the fixed quick-section bar. */
+  html {
+    scroll-padding-bottom: 96px;
+  }
   .topbar {
     padding: 10px 16px;
     gap: 10px;

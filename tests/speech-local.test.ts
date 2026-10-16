@@ -199,3 +199,7 @@ describe.skipIf(!existsSync(modelDir) || !existsSync(clips))(
     }, 240_000);
   },
 );
+it("T056: the transcription route accepts a full minute of WAV (the general 16 KB body limit refused every real recording)", async () => {
+  const { uploadLimit } = await import("../src/server/routes/execution");
+  expect(uploadLimit("POST", ["assistant", "transcriptions"])).toBe(2_900_000);
+});
