@@ -1,0 +1,527 @@
+{
+  "task": "T056",
+  "date": "2026-10-16T13:34:23.057Z",
+  "engine": "local-whisper (scripts/speech-worker.mjs)",
+  "model": "onnx-community/whisper-large-v3-turbo",
+  "dtype": "q8",
+  "modelLicense": "OpenAI Whisper weights: MIT (github.com/openai/whisper README)",
+  "dataset": "Google FLEURS dev, first clips by name; CC BY 4.0; read Wikipedia sentences, not business requests",
+  "hardware": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "memoryGb": 16
+  },
+  "modelLoadMs": 4490,
+  "kk": {
+    "clips": 30,
+    "audioSeconds": 425,
+    "wer": 0.241,
+    "realTimeFactor": 0.87,
+    "flags": {
+      "hypothesisWords": 477,
+      "wrongWords": 109,
+      "flaggedWords": 61,
+      "wrongWordsFlagged": 39,
+      "shareOfWrongWordsFlagged": 0.358,
+      "shareOfFlagsThatWereWrong": 0.639
+    },
+    "rows": [
+      {
+        "clip": "1003567887281500142.wav",
+        "seconds": 12.3,
+        "ms": 10754,
+        "wer": 0.267,
+        "confidence": 0.796,
+        "flagged": 2
+      },
+      {
+        "clip": "10045457533521947678.wav",
+        "seconds": 11.9,
+        "ms": 12487,
+        "wer": 0.176,
+        "confidence": 0.79,
+        "flagged": 3
+      },
+      {
+        "clip": "10065174762163064040.wav",
+        "seconds": 18,
+        "ms": 12846,
+        "wer": 0.188,
+        "confidence": 0.859,
+        "flagged": 2
+      },
+      {
+        "clip": "1020076568310449836.wav",
+        "seconds": 9.6,
+        "ms": 10795,
+        "wer": 0.25,
+        "confidence": 0.833,
+        "flagged": 1
+      },
+      {
+        "clip": "10297456732326522501.wav",
+        "seconds": 14.3,
+        "ms": 12104,
+        "wer": 0.214,
+        "confidence": 0.846,
+        "flagged": 2
+      },
+      {
+        "clip": "10329215465651813015.wav",
+        "seconds": 12.4,
+        "ms": 10196,
+        "wer": 0.273,
+        "confidence": 0.756,
+        "flagged": 2
+      },
+      {
+        "clip": "10364075680285909470.wav",
+        "seconds": 16.9,
+        "ms": 13503,
+        "wer": 0.294,
+        "confidence": 0.768,
+        "flagged": 2
+      },
+      {
+        "clip": "10377127842226016947.wav",
+        "seconds": 14.5,
+        "ms": 10194,
+        "wer": 0.091,
+        "confidence": 0.848,
+        "flagged": 0
+      },
+      {
+        "clip": "1039586756639574837.wav",
+        "seconds": 15.2,
+        "ms": 14200,
+        "wer": 0.25,
+        "confidence": 0.784,
+        "flagged": 7
+      },
+      {
+        "clip": "10414243032622376853.wav",
+        "seconds": 14.3,
+        "ms": 12286,
+        "wer": 0.636,
+        "confidence": 0.864,
+        "flagged": 0
+      },
+      {
+        "clip": "10453399788189054345.wav",
+        "seconds": 8.6,
+        "ms": 10594,
+        "wer": 0.308,
+        "confidence": 0.747,
+        "flagged": 2
+      },
+      {
+        "clip": "104879107577140213.wav",
+        "seconds": 15.7,
+        "ms": 11078,
+        "wer": 0,
+        "confidence": 0.883,
+        "flagged": 0
+      },
+      {
+        "clip": "10517294426238480133.wav",
+        "seconds": 10.9,
+        "ms": 10573,
+        "wer": 0.2,
+        "confidence": 0.887,
+        "flagged": 0
+      },
+      {
+        "clip": "10518042658640414677.wav",
+        "seconds": 11.6,
+        "ms": 11653,
+        "wer": 0.2,
+        "confidence": 0.894,
+        "flagged": 0
+      },
+      {
+        "clip": "10610835310624801875.wav",
+        "seconds": 11.5,
+        "ms": 10526,
+        "wer": 0.125,
+        "confidence": 0.876,
+        "flagged": 1
+      },
+      {
+        "clip": "10621574544185887215.wav",
+        "seconds": 9.6,
+        "ms": 11871,
+        "wer": 0.176,
+        "confidence": 0.858,
+        "flagged": 1
+      },
+      {
+        "clip": "10667172864973868170.wav",
+        "seconds": 11.4,
+        "ms": 10792,
+        "wer": 0.333,
+        "confidence": 0.786,
+        "flagged": 2
+      },
+      {
+        "clip": "10681453180248102549.wav",
+        "seconds": 20.8,
+        "ms": 19256,
+        "wer": 0.194,
+        "confidence": 0.791,
+        "flagged": 5
+      },
+      {
+        "clip": "10741945496149594270.wav",
+        "seconds": 14.5,
+        "ms": 13039,
+        "wer": 0.2,
+        "confidence": 0.741,
+        "flagged": 4
+      },
+      {
+        "clip": "10822682391777823630.wav",
+        "seconds": 14,
+        "ms": 10627,
+        "wer": 0.286,
+        "confidence": 0.831,
+        "flagged": 1
+      },
+      {
+        "clip": "10917637706383285328.wav",
+        "seconds": 14.3,
+        "ms": 13148,
+        "wer": 0,
+        "confidence": 0.927,
+        "flagged": 1
+      },
+      {
+        "clip": "10993575264227230036.wav",
+        "seconds": 15.5,
+        "ms": 14263,
+        "wer": 0.381,
+        "confidence": 0.813,
+        "flagged": 3
+      },
+      {
+        "clip": "11019572116968914496.wav",
+        "seconds": 12.8,
+        "ms": 13764,
+        "wer": 0.095,
+        "confidence": 0.877,
+        "flagged": 1
+      },
+      {
+        "clip": "11029657900751807376.wav",
+        "seconds": 16.3,
+        "ms": 11234,
+        "wer": 0.143,
+        "confidence": 0.869,
+        "flagged": 0
+      },
+      {
+        "clip": "11106854394437163028.wav",
+        "seconds": 24.2,
+        "ms": 15934,
+        "wer": 0.591,
+        "confidence": 0.759,
+        "flagged": 2
+      },
+      {
+        "clip": "11159947764557380645.wav",
+        "seconds": 22.3,
+        "ms": 15693,
+        "wer": 0.524,
+        "confidence": 0.682,
+        "flagged": 7
+      },
+      {
+        "clip": "11227417412431146705.wav",
+        "seconds": 11.8,
+        "ms": 10321,
+        "wer": 0.5,
+        "confidence": 0.543,
+        "flagged": 4
+      },
+      {
+        "clip": "11342228042008396939.wav",
+        "seconds": 11.9,
+        "ms": 12477,
+        "wer": 0.077,
+        "confidence": 0.867,
+        "flagged": 1
+      },
+      {
+        "clip": "11351653169957984218.wav",
+        "seconds": 20.8,
+        "ms": 12956,
+        "wer": 0,
+        "confidence": 0.85,
+        "flagged": 2
+      },
+      {
+        "clip": "11448482323377055422.wav",
+        "seconds": 6.6,
+        "ms": 9960,
+        "wer": 0.286,
+        "confidence": 0.764,
+        "flagged": 1
+      }
+    ]
+  },
+  "ru": {
+    "clips": 30,
+    "audioSeconds": 320,
+    "wer": 0.034,
+    "realTimeFactor": 0.94,
+    "flags": {
+      "hypothesisWords": 554,
+      "wrongWords": 18,
+      "flaggedWords": 14,
+      "wrongWordsFlagged": 4,
+      "shareOfWrongWordsFlagged": 0.222,
+      "shareOfFlagsThatWereWrong": 0.286
+    },
+    "rows": [
+      {
+        "clip": "10005687533826592442.wav",
+        "seconds": 13.7,
+        "ms": 14513,
+        "wer": 0,
+        "confidence": 0.964,
+        "flagged": 1
+      },
+      {
+        "clip": "10042203520901241191.wav",
+        "seconds": 7.4,
+        "ms": 8722,
+        "wer": 0.222,
+        "confidence": 0.966,
+        "flagged": 0
+      },
+      {
+        "clip": "10095490839809792710.wav",
+        "seconds": 11.8,
+        "ms": 10049,
+        "wer": 0.1,
+        "confidence": 0.891,
+        "flagged": 3
+      },
+      {
+        "clip": "10121434821159649865.wav",
+        "seconds": 7.3,
+        "ms": 10082,
+        "wer": 0.071,
+        "confidence": 0.905,
+        "flagged": 2
+      },
+      {
+        "clip": "10189896593749349276.wav",
+        "seconds": 12.1,
+        "ms": 11325,
+        "wer": 0.1,
+        "confidence": 0.887,
+        "flagged": 2
+      },
+      {
+        "clip": "10215205936009281840.wav",
+        "seconds": 11,
+        "ms": 10566,
+        "wer": 0,
+        "confidence": 0.898,
+        "flagged": 1
+      },
+      {
+        "clip": "10221250944584729444.wav",
+        "seconds": 4.8,
+        "ms": 8317,
+        "wer": 0,
+        "confidence": 0.989,
+        "flagged": 0
+      },
+      {
+        "clip": "1024552646813367065.wav",
+        "seconds": 17,
+        "ms": 12035,
+        "wer": 0.038,
+        "confidence": 0.912,
+        "flagged": 0
+      },
+      {
+        "clip": "10267351211453560920.wav",
+        "seconds": 8.4,
+        "ms": 10073,
+        "wer": 0,
+        "confidence": 0.959,
+        "flagged": 0
+      },
+      {
+        "clip": "10413922460366422025.wav",
+        "seconds": 10.3,
+        "ms": 10368,
+        "wer": 0,
+        "confidence": 0.953,
+        "flagged": 0
+      },
+      {
+        "clip": "10419862324962592525.wav",
+        "seconds": 11.2,
+        "ms": 10819,
+        "wer": 0,
+        "confidence": 0.97,
+        "flagged": 0
+      },
+      {
+        "clip": "10479463149729837036.wav",
+        "seconds": 11,
+        "ms": 10418,
+        "wer": 0,
+        "confidence": 0.961,
+        "flagged": 1
+      },
+      {
+        "clip": "10479628937192443242.wav",
+        "seconds": 7.1,
+        "ms": 8269,
+        "wer": 0,
+        "confidence": 0.979,
+        "flagged": 1
+      },
+      {
+        "clip": "1050167374088424092.wav",
+        "seconds": 10.3,
+        "ms": 8521,
+        "wer": 0.125,
+        "confidence": 0.955,
+        "flagged": 0
+      },
+      {
+        "clip": "10506159478104812570.wav",
+        "seconds": 25.6,
+        "ms": 13641,
+        "wer": 0.029,
+        "confidence": 0.937,
+        "flagged": 1
+      },
+      {
+        "clip": "10581557906207480822.wav",
+        "seconds": 11.6,
+        "ms": 10892,
+        "wer": 0,
+        "confidence": 0.955,
+        "flagged": 0
+      },
+      {
+        "clip": "1058855104882293960.wav",
+        "seconds": 9.1,
+        "ms": 9126,
+        "wer": 0,
+        "confidence": 0.945,
+        "flagged": 0
+      },
+      {
+        "clip": "1065971833196980048.wav",
+        "seconds": 13.4,
+        "ms": 10995,
+        "wer": 0.045,
+        "confidence": 0.977,
+        "flagged": 0
+      },
+      {
+        "clip": "10708884047933543059.wav",
+        "seconds": 9.1,
+        "ms": 9130,
+        "wer": 0.053,
+        "confidence": 0.922,
+        "flagged": 1
+      },
+      {
+        "clip": "10711322117471784138.wav",
+        "seconds": 8.5,
+        "ms": 9189,
+        "wer": 0.053,
+        "confidence": 0.933,
+        "flagged": 0
+      },
+      {
+        "clip": "10808105774950368408.wav",
+        "seconds": 7.3,
+        "ms": 7513,
+        "wer": 0,
+        "confidence": 0.971,
+        "flagged": 0
+      },
+      {
+        "clip": "10818189739456345343.wav",
+        "seconds": 6.2,
+        "ms": 8900,
+        "wer": 0,
+        "confidence": 0.943,
+        "flagged": 0
+      },
+      {
+        "clip": "10876485073689436425.wav",
+        "seconds": 12.9,
+        "ms": 10184,
+        "wer": 0,
+        "confidence": 0.95,
+        "flagged": 0
+      },
+      {
+        "clip": "10948790688582597154.wav",
+        "seconds": 8.2,
+        "ms": 8700,
+        "wer": 0.158,
+        "confidence": 0.946,
+        "flagged": 0
+      },
+      {
+        "clip": "10972430421637175826.wav",
+        "seconds": 15.2,
+        "ms": 10459,
+        "wer": 0,
+        "confidence": 0.972,
+        "flagged": 0
+      },
+      {
+        "clip": "11037520222095225046.wav",
+        "seconds": 6.5,
+        "ms": 9774,
+        "wer": 0.091,
+        "confidence": 0.892,
+        "flagged": 1
+      },
+      {
+        "clip": "11045999658009248618.wav",
+        "seconds": 11.9,
+        "ms": 9433,
+        "wer": 0,
+        "confidence": 0.943,
+        "flagged": 0
+      },
+      {
+        "clip": "11052966357748110461.wav",
+        "seconds": 11.2,
+        "ms": 10083,
+        "wer": 0,
+        "confidence": 0.945,
+        "flagged": 0
+      },
+      {
+        "clip": "11059399375379591775.wav",
+        "seconds": 8.1,
+        "ms": 9015,
+        "wer": 0,
+        "confidence": 0.965,
+        "flagged": 0
+      },
+      {
+        "clip": "11081957520040798492.wav",
+        "seconds": 11.5,
+        "ms": 10722,
+        "wer": 0.042,
+        "confidence": 0.928,
+        "flagged": 1
+      }
+    ]
+  }
+}

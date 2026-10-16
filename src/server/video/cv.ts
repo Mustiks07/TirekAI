@@ -249,12 +249,14 @@ export class Tracker {
 const cross = (o: Point, a: Point, b: Point) =>
   (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 // Segment p→q crosses line a–b; the sign says from which side (+1 / −1), 0 = no crossing.
+// A point exactly on the line belongs to the non-negative side, so a track that stops on the
+// line for one frame is counted once (on the step that actually changes side), never zero times.
 export function crossing(p: Point, q: Point, a: Point, b: Point) {
   const d1 = cross(a, b, p),
     d2 = cross(a, b, q),
     d3 = cross(p, q, a),
     d4 = cross(p, q, b);
-  if (d1 * d2 < 0 && d3 * d4 < 0) return d1 < 0 ? 1 : -1;
+  if (d1 < 0 !== d2 < 0 && d3 * d4 <= 0) return d1 < 0 ? 1 : -1;
   return 0;
 }
 export function inside(p: Point, polygon: Point[]) {

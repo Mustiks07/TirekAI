@@ -142,6 +142,9 @@ export function VideoPage({
         source_start: string;
         config_version: number;
         annotations: number;
+        summary: {
+          people?: { mode: "neural" | "motion"; detector: string | null };
+        } | null;
       }[]
     >([]),
     [detectors, setDetectors] = useState<
@@ -366,7 +369,7 @@ export function VideoPage({
                   "Токен показан один раз. Запуск обработчика на устройстве:",
                   "Токен бір рет көрсетіледі. Құрылғыда өңдегішті іске қосу:",
                 )}{" "}
-                <code>{`VIDEO_DEVICE_TOKEN=${token} npm run video:processor -- --server ${typeof window === "undefined" ? "" : window.location.origin} --source ${source.id} --file <запись.mp4>`}</code>
+                <code>{`VIDEO_DEVICE_TOKEN=${token} npm run video:processor -- --server ${typeof window === "undefined" ? "" : window.location.origin} --source ${source.id} --detector dfine-n --file <запись.mp4>`}</code>
               </p>
             )}
             <h3>
@@ -723,7 +726,15 @@ export function VideoPage({
                 <li key={r.id}>
                   {businessDate(new Date(r.source_start), locale, tz, true)} · v
                   {r.config_version} · {r.state} · {t("отметок", "белгі")}{" "}
-                  {r.annotations}
+                  {r.annotations} ·{" "}
+                  {r.summary?.people?.mode === "neural"
+                    ? `${t("люди: нейросеть", "адамдар: нейрожелі")} ${r.summary.people.detector} + ByteTrack`
+                    : r.summary
+                      ? t(
+                          "люди: классический режим (движение)",
+                          "адамдар: классикалық режим (қозғалыс)",
+                        )
+                      : t("сводки ещё нет", "қорытынды әлі жоқ")}
                 </li>
               ))}
             </ul>

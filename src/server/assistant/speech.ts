@@ -1,5 +1,6 @@
-// T028: replaceable speech-to-text contract. No speech provider is configured in this
-// environment, so voice reports not_configured; no endpoint is invented and no audio is stored.
+// T028/T056: replaceable speech-to-text contract. SPEECH_PROVIDER=local selects the local
+// Whisper process (local-speech.ts); otherwise voice reports not_configured. No audio is stored.
+import { localSpeech } from "./local-speech";
 export type Transcription = {
   text: string;
   locale: "ru" | "kk";
@@ -10,6 +11,10 @@ export type Transcription = {
 };
 export interface SpeechProvider {
   readonly name: string;
+  // Per-request deadline; local CPU models need longer than a hosted service.
+  readonly timeoutMs?: number;
+  // Optional preparation (model load) before the first request.
+  warm?(): Promise<void>;
   transcribe(r: {
     audio: Buffer;
     mime: string;
@@ -18,7 +23,7 @@ export interface SpeechProvider {
   }): Promise<Transcription>;
 }
 export function configuredSpeech(): SpeechProvider | null {
-  return null;
+  return process.env.SPEECH_PROVIDER === "local" ? localSpeech() : null;
 }
 export function speechStatus(p: SpeechProvider | null) {
   return p

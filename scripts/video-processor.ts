@@ -4,6 +4,11 @@ import {
   type VideoConfig,
   type VideoEvent,
 } from "../src/server/video/processor";
+import {
+  DETECTORS,
+  loadDetector,
+  type DetectorKind,
+} from "../src/server/video/detector";
 
 // T035 processing device. Started and stopped explicitly by an operator; long processing does
 // not depend on a browser tab. Raw frames never leave this process and are never stored.
@@ -11,6 +16,9 @@ import {
 //   VIDEO_DEVICE_TOKEN=… VIDEO_RTSP_URL=rtsp://user:pass@camera/stream npm run video:processor -- --server … --source … --rtsp
 //   VIDEO_DEVICE_TOKEN=… npm run video:processor -- --server … --source … --webcam /dev/video0   (Windows: --webcam "video=Camera")
 // Camera credentials stay in VIDEO_RTSP_URL on this device; they are not sent to the server.
+// People: --detector dfine-n (default, neural, model from `npm run video:model`), dfine-s, or
+// motion (the classical blob pipeline). A missing model stops the run; it never falls back.
+//   [--detector dfine-n|dfine-s|motion] [--precision fp32|int8] [--fps 5]
 const args = process.argv.slice(2);
 const arg = (name: string) => {
   const i = args.indexOf(`--${name}`);
@@ -107,6 +115,27 @@ function ffprobe(target: string) {
     p.on("error", () => resolve({}));
   });
 }
+const kind = (arg("detector") ?? "dfine-n") as DetectorKind | "motion";
+if (kind !== "motion" && !(kind in DETECTORS)) {
+  console.error(
+    `Unknown --detector ${kind}: use ${Object.keys(DETECTORS).join(", ")} or motion`,
+  );
+  process.exit(2);
+}
+const detector =
+  kind === "motion"
+    ? undefined
+    : await loadDetector(kind, {
+        precision: arg("precision") === "int8" ? "int8" : "fp32",
+      }).catch((e) => {
+        console.error(
+          e instanceof Error && e.message === "DETECTOR_MODEL_MISSING"
+            ? `Model for ${kind} is not on this device: run npm run video:model, or choose --detector motion explicitly.`
+            : "Detector failed to load.",
+        );
+        process.exit(2);
+      });
+const fps = Number(arg("fps") ?? (detector ? 5 : 10));
 const cfg = await call<VideoConfig & { mode: string }>("config");
 const startTime = arg("start") ? new Date(arg("start")!) : new Date();
 const passport = probe ? await ffprobe(probe) : {};
@@ -116,7 +145,7 @@ const { runId } = await call<{ runId: string }>("runs", {
   passport,
 });
 console.log(
-  `run ${runId}: config v${cfg.version}, ${live ? "live" : "recording"}`,
+  `run ${runId}: config v${cfg.version}, ${live ? "live" : "recording"}, people: ${detector ? `${detector.version} + ByteTrack` : "motion (classical)"}, ${fps} fps`,
 );
 const controller = new AbortController();
 process.on("SIGINT", () => controller.abort());
@@ -126,6 +155,8 @@ const summary = await processVideo({
   config: cfg,
   startTime,
   live,
+  detector,
+  fps,
   signal: controller.signal,
   onEvents: async (events: VideoEvent[]) => {
     for (let i = 0; i < events.length; i += 500)
@@ -136,4 +167,5 @@ const summary = await processVideo({
   },
 });
 await call("end", { runId, ended: summary.ended, summary });
+await detector?.dispose();
 console.log(JSON.stringify(summary));

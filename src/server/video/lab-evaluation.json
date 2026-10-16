@@ -1,8 +1,8 @@
 {
-  "checked": "2026-10-15",
+  "checked": "2026-10-16",
   "processor": "taraz-cv@1.0.0",
   "hardware": {
-    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
     "cores": 4,
     "platform": "linux x64"
   },
@@ -12,19 +12,19 @@
       "clip": "lab-single",
       "scenario": "single",
       "truthCrossings": 40,
-      "detectedCrossings": 39,
-      "matched": 39,
-      "countError": 0.025,
+      "detectedCrossings": 40,
+      "matched": 40,
+      "countError": 0,
       "precision": 1,
-      "recall": 0.975,
+      "recall": 1,
       "truthQueues": 0,
       "detectedQueues": 0,
       "queueMatched": 0,
       "run": {
         "frames": 2600,
         "unusable": 0,
-        "fps": 268.5712253527312,
-        "latencyMs": 3.7234070726923116,
+        "fps": 294.0317497410396,
+        "latencyMs": 3.400993263076938,
         "ended": "end_of_stream"
       }
     },
@@ -43,8 +43,8 @@
       "run": {
         "frames": 2000,
         "unusable": 0,
-        "fps": 261.956012837753,
-        "latencyMs": 3.817434802000011,
+        "fps": 291.4474675083978,
+        "latencyMs": 3.4311500750000032,
         "ended": "end_of_stream"
       }
     },
@@ -63,8 +63,8 @@
       "run": {
         "frames": 2200,
         "unusable": 0,
-        "fps": 282.2551638580265,
-        "latencyMs": 3.54289355181823,
+        "fps": 362.78571987085127,
+        "latencyMs": 2.756448077272699,
         "ended": "end_of_stream"
       }
     },
@@ -83,8 +83,8 @@
       "run": {
         "frames": 1800,
         "unusable": 0,
-        "fps": 281.97091203485695,
-        "latencyMs": 3.546465104444465,
+        "fps": 319.04083048586955,
+        "latencyMs": 3.134395050555419,
         "ended": "end_of_stream"
       }
     }
@@ -107,8 +107,8 @@
       "metrics": {
         "maxCountError": 0.0625,
         "queueF1": null,
-        "meanFps": 273.6883285208419,
-        "meanLatencyMs": 3.6575501327387543
+        "meanFps": 316.82644190153957,
+        "meanLatencyMs": 3.1807466164762648
       },
       "passed": true,
       "status": "experimental",
@@ -131,8 +131,8 @@
       "metrics": {
         "maxCountError": null,
         "queueF1": 1,
-        "meanFps": 273.6883285208419,
-        "meanLatencyMs": 3.6575501327387543
+        "meanFps": 316.82644190153957,
+        "meanLatencyMs": 3.1807466164762648
       },
       "passed": true,
       "status": "experimental",

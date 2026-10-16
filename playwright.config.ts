@@ -28,6 +28,9 @@ export default defineConfig({
     timeout: 120000,
     env: {
       ASSISTANT_PROVIDER: "disabled",
+      // Voice path test: the local speech adapter talks to a protocol test double, not a model.
+      SPEECH_PROVIDER: "local",
+      SPEECH_WORKER_SCRIPT: "tests/fixtures/fake-speech-worker.mjs",
       PORT: "3100",
       PGLITE_DATA_DIR: `.data/e2e-${Date.now()}`,
       NEXT_TELEMETRY_DISABLED: "1",

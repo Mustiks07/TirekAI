@@ -17,6 +17,8 @@ import {
 // browser tab or the web request path. ffmpeg decodes the source to small grayscale frames in
 // memory; no frame is written to disk and only aggregated events leave the process.
 import { PROCESSOR_VERSION, DETECTOR_VERSIONS } from "./versions";
+import { ByteTracker, type Detection } from "./bytetrack";
+import type { PersonDetector } from "./detector";
 export { PROCESSOR_VERSION, DETECTOR_VERSIONS } from "./versions";
 export type VideoLine = {
   id: string;
@@ -74,6 +76,12 @@ export type RunSummary = Heartbeat & {
   hardware: { cpu: string; cores: number; platform: string };
   ended: "end_of_stream" | "aborted" | "signal_lost" | "decoder_error";
   events: number;
+  // Which people pipeline produced the counts (T057).
+  people: {
+    mode: "neural" | "motion";
+    detector: string | null;
+    tracker: "bytetrack" | "nearest";
+  };
 };
 export async function processVideo(o: {
   input: string[];
@@ -90,6 +98,9 @@ export async function processVideo(o: {
   onFirstFrame?: () => void;
   signal?: AbortSignal;
   ffmpeg?: string;
+  // T057: people come from a neural detector + ByteTrack instead of moving blobs. Without it the
+  // classical motion pipeline runs, and the summary says which one did — never switched silently.
+  detector?: PersonDetector;
 }): Promise<RunSummary> {
   const w = o.width ?? 320,
     h = o.height ?? 180,
@@ -98,7 +109,16 @@ export async function processVideo(o: {
     aggregate = o.aggregateSeconds ?? 10,
     size = w * h;
   const bg = new Background(w, h),
-    tracker = new Tracker();
+    tracker = o.detector
+      ? new ByteTracker({
+          high: 0.5,
+          low: 0.1,
+          newTrack: 0.6,
+          matchIou: 0.2,
+          lowMatchIou: 0.5,
+          buffer: 3 * (o.fps ?? 10),
+        })
+      : new Tracker();
   const events: VideoEvent[] = [];
   let seq = 0,
     frames = 0,
@@ -150,7 +170,7 @@ export async function processVideo(o: {
       delete tr.zoneSince[zone];
     }
   };
-  const step = (frame: Uint8Array) => {
+  const step = (frame: Uint8Array, people: Detection[] | null = null) => {
     const started = performance.now(),
       i = frames++;
     if (i === 0) o.onFirstFrame?.();
@@ -175,8 +195,10 @@ export async function processVideo(o: {
     }
     const mask = open3(bg.apply(frame, 28, hold), w, h);
     hold = dilate(mask, w, h, 2);
-    const blobs = components(mask, w, h, minArea);
-    const ended = tracker.update(blobs, i);
+    const ended =
+      people && tracker instanceof ByteTracker
+        ? tracker.update(people, i)
+        : (tracker as Tracker).update(components(mask, w, h, minArea), i);
     for (const tr of ended) leaveZones(tr, i);
     for (const tr of tracker.tracks) {
       if (tr.missed > 0 || tr.age < 2) continue;
@@ -222,7 +244,10 @@ export async function processVideo(o: {
     for (const z of o.config.zones) {
       // A live track counts at its last position while briefly missed (≤ tracker tolerance).
       const visible = tracker.tracks.filter(
-        (tr) => tr.age >= 3 && inside({ x: tr.cx, y: tr.cy }, z.polygon),
+        (tr) =>
+          tr.age >= 3 &&
+          tr.missed <= fps &&
+          inside({ x: tr.cx, y: tr.cy }, z.polygon),
       ).length;
       zoneCounts[z.id].push(visible);
       if (z.kind === "queue") {
@@ -316,7 +341,9 @@ export async function processVideo(o: {
     ...o.input,
     "-an",
     "-vf",
-    `scale=${w}:${h},format=gray`,
+    o.detector
+      ? `scale=${o.detector.width}:${o.detector.height},format=rgb24`
+      : `scale=${w}:${h},format=gray`,
     "-r",
     String(fps),
     "-f",
@@ -344,29 +371,72 @@ export async function processVideo(o: {
       );
   }, 5000);
   let buffer: Buffer = Buffer.alloc(0);
+  const d = o.detector,
+    frameSize = d ? d.width * d.height * 3 : size;
+  // Neural mode: frames are processed one at a time; while the model runs, reading from ffmpeg
+  // pauses (back-pressure), so a slow device processes fewer frames instead of queueing memory.
+  // The grayscale frame for quality, gaps, shelf and workstation is derived from the RGB frame.
+  let frameQueue: Promise<void> = Promise.resolve();
+  const neural = async (rgb: Uint8Array) => {
+    const started = performance.now();
+    const people = await d!.detect(rgb);
+    // Model time counts as processing time in fps/latency figures.
+    busyMs += performance.now() - started;
+    const gray = new Uint8Array(size);
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(((y + 0.5) * d!.height) / h);
+      for (let x = 0; x < w; x++) {
+        const k = (sy * d!.width + Math.floor(((x + 0.5) * d!.width) / w)) * 3;
+        gray[y * w + x] =
+          (rgb[k] * 77 + rgb[k + 1] * 150 + rgb[k + 2] * 29) >> 8;
+      }
+    }
+    step(gray, people);
+  };
   const ended = await new Promise<RunSummary["ended"]>((resolve) => {
     child.stdout.on("data", (chunk: Buffer) => {
       buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
-      while (buffer.length >= size) {
-        step(new Uint8Array(buffer.subarray(0, size)));
-        buffer = buffer.subarray(size);
+      if (!d) {
+        while (buffer.length >= size) {
+          step(new Uint8Array(buffer.subarray(0, size)));
+          buffer = buffer.subarray(size);
+        }
+        return;
       }
+      const batch: Uint8Array[] = [];
+      while (buffer.length >= frameSize) {
+        batch.push(new Uint8Array(buffer.subarray(0, frameSize)));
+        buffer = buffer.subarray(frameSize);
+      }
+      if (!batch.length) return;
+      child.stdout.pause();
+      frameQueue = frameQueue
+        .then(async () => {
+          for (const f of batch) await neural(f);
+        })
+        .finally(() => child.stdout.resume());
     });
     child.on("error", () => resolve("decoder_error"));
     child.on("close", (code) =>
-      resolve(
-        o.signal?.aborted
-          ? "aborted"
-          : code === 0
-            ? o.live
-              ? "signal_lost"
-              : "end_of_stream"
-            : frames
-              ? "signal_lost"
-              : "decoder_error",
-      ),
+      frameQueue
+        .catch(() => {})
+        .then(() =>
+          resolve(
+            o.signal?.aborted
+              ? "aborted"
+              : code === 0
+                ? o.live
+                  ? "signal_lost"
+                  : "end_of_stream"
+                : frames
+                  ? "signal_lost"
+                  : "decoder_error",
+          ),
+        ),
     );
   });
+  // A detector failure is not a lost signal: it is raised to the operator.
+  await frameQueue;
   clearInterval(heartbeat);
   o.signal?.removeEventListener("abort", abort);
   for (const tr of tracker.tracks) leaveZones(tr, frames);
@@ -403,6 +473,9 @@ export async function processVideo(o: {
     sourceTime: at(frames),
     processor: PROCESSOR_VERSION,
     detectors: DETECTOR_VERSIONS,
+    people: o.detector
+      ? { mode: "neural", detector: o.detector.version, tracker: "bytetrack" }
+      : { mode: "motion", detector: null, tracker: "nearest" },
     width: w,
     height: h,
     targetFps: fps,

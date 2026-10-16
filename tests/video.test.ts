@@ -62,6 +62,14 @@ it("T036: line crossing side and polygon membership are geometric, not guessed",
   expect(crossing({ x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }, a, b)).toBe(-1);
   expect(crossing({ x: 0.6, y: 0.5 }, { x: 0.4, y: 0.5 }, a, b)).toBe(1);
   expect(crossing({ x: 0.4, y: 0.5 }, { x: 0.45, y: 0.5 }, a, b)).toBe(0);
+  // Landing exactly on the line and leaving it counts once, on the side-changing step.
+  const steps = [0.48, 0.5, 0.52].map((x) => ({ x, y: 0.5 }));
+  expect(
+    [
+      crossing(steps[0], steps[1], a, b),
+      crossing(steps[1], steps[2], a, b),
+    ].filter(Boolean),
+  ).toHaveLength(1);
   const square = [
     { x: 0, y: 0 },
     { x: 1, y: 0 },

@@ -3599,3 +3599,10 @@ h4 {
     gap: 6px;
   }
 }
+/* T056: voice transcript check before sending. */
+.voice-check p {
+  margin: 0 0 8px;
+}
+.voice-check .commerce-check {
+  justify-content: flex-start;
+}

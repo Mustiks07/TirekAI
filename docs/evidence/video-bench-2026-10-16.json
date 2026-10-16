@@ -1,0 +1,49 @@
+{
+  "task": "T057",
+  "date": "2026-10-16T13:39:09.574Z",
+  "source": "synthetic lab clip (speed only)",
+  "input": "640×640 RGB (model input), CPU only, onnxruntime-node",
+  "hardware": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "platform": "linux x64"
+  },
+  "results": [
+    {
+      "kind": "dfine-n",
+      "version": "dfine_n_coco@onnx-fp32",
+      "precision": "fp32",
+      "frames": 40,
+      "meanMs": 64,
+      "p95Ms": 80,
+      "maxFps": 15.6
+    },
+    {
+      "kind": "dfine-n",
+      "version": "dfine_n_coco@onnx-int8",
+      "precision": "int8",
+      "frames": 40,
+      "meanMs": 271,
+      "p95Ms": 342,
+      "maxFps": 3.7
+    },
+    {
+      "kind": "dfine-s",
+      "version": "dfine_s_coco@onnx-fp32",
+      "precision": "fp32",
+      "frames": 40,
+      "meanMs": 151,
+      "p95Ms": 183,
+      "maxFps": 6.6
+    },
+    {
+      "kind": "dfine-s",
+      "version": "dfine_s_coco@onnx-int8",
+      "precision": "int8",
+      "frames": 40,
+      "meanMs": 605,
+      "p95Ms": 739,
+      "maxFps": 1.7
+    }
+  ]
+}

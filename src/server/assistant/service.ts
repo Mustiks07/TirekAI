@@ -128,6 +128,10 @@ export class AssistantService {
       return { s, last };
     });
     const month = await this.monthTokens(org);
+    const settings = await this.settings(org);
+    // Opening the assistant with voice enabled starts loading a local speech model in the
+    // background, so the first recording does not wait for it.
+    if (settings.voice_enabled) this.speech?.warm?.().catch(() => {});
     {
       return {
         provider: this.provider
@@ -138,7 +142,7 @@ export class AssistantService {
             }
           : providerStatus(),
         speech: speechStatus(this.speech),
-        settings: await this.settings(org),
+        settings,
         usage: {
           month_tokens: month.tokens,
           committed_tokens: (await budgetState(this.db, org)).committed,
@@ -472,7 +476,7 @@ export class AssistantService {
         audio,
         mime: c.mime,
         locale: c.locale,
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(this.speech.timeoutMs ?? 30_000),
       });
       await this.usage(org, s.actorId, null, "voice", "ok", {
         latency: Date.now() - started,

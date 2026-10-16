@@ -1,4 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { decodeWav, encodeWav } from "./speech-audio.mjs";
 import { configuredSpeech } from "../src/server/assistant/speech";
 import {
   scoreTranscription,
@@ -26,6 +28,38 @@ const arg = (name: string) => {
 await mkdir("docs/evidence", { recursive: true });
 const out = `docs/evidence/voice-check-${new Date().toISOString().slice(0, 10)}.json`;
 const speech = configuredSpeech();
+// The same preparation as the browser: 16 kHz mono, peak-normalized 16-bit WAV. Non-WAV
+// recordings (phone webm/ogg/m4a) are decoded with ffmpeg on this machine.
+async function asWav(path: string) {
+  const bytes = await readFile(path);
+  if (bytes.toString("ascii", 0, 4) === "RIFF")
+    return encodeWav(decodeWav(bytes)) as Buffer;
+  const pcm = await new Promise<Buffer>((ok, fail) => {
+    const p = spawn(process.env.FFMPEG_PATH || "ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-i",
+      path,
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-f",
+      "f32le",
+      "pipe:1",
+    ]);
+    const parts: Buffer[] = [];
+    p.stdout.on("data", (d) => parts.push(d));
+    p.on("error", fail);
+    p.on("close", (code) =>
+      code === 0 ? ok(Buffer.concat(parts)) : fail(new Error("VOICE_FORMAT")),
+    );
+  });
+  return encodeWav(
+    new Float32Array(pcm.buffer, pcm.byteOffset, pcm.length / 4),
+  ) as Buffer;
+}
 const write = (r: object) => writeFile(out, JSON.stringify(r, null, 2));
 if (!speech) {
   await write({
@@ -50,6 +84,8 @@ if (!manifest.permission?.trim()) {
 const { phrases } = JSON.parse(
   await readFile("tests/fixtures/voice-phrases.json", "utf8"),
 ) as { phrases: VoicePhrase[] };
+// Model loading is not counted as recognition latency.
+await speech.warm?.();
 const results = [];
 let failures = 0;
 const errors: Record<string, number> = {};
@@ -59,10 +95,10 @@ for (const rec of manifest.recordings) {
   const started = Date.now();
   try {
     const t = await speech.transcribe({
-      audio: await readFile(rec.file),
-      mime: rec.mime,
+      audio: await asWav(rec.file),
+      mime: "audio/wav",
       locale: phrase.locale,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(speech.timeoutMs ?? 30_000),
     });
     results.push({
       ...scoreTranscription(phrase, t),
@@ -89,4 +125,5 @@ await write({
 console.log(
   `RU WER ${summary.ru.wer?.toFixed(3)} · KK WER ${summary.kk.wer?.toFixed(3)} · unflagged critical misses ${summary.unflaggedCriticalMisses} · failures ${failures}. Report: ${out}`,
 );
+(speech as { stop?: () => void }).stop?.();
 process.exit(summary.passed ? 0 : 1);

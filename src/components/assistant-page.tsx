@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { AssistantMessage, AssistantStatus } from "@/domain/assistant";
 import { api, ApiError } from "@/lib/client";
+import { toWav16k } from "@/lib/wav";
 import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { executionError, stateText } from "@/lib/execution-i18n";
@@ -30,6 +31,11 @@ export function AssistantPage({
     >([]),
     [current, setCurrent] = useState<Conversation | null>(null),
     [text, setText] = useState(""),
+    // Words from the last voice transcript that must be checked before sending (REQ AI 07).
+    [voiceCheck, setVoiceCheck] = useState<{
+      words: string[];
+      confirmed: boolean;
+    } | null>(null),
     [answerLocale, setAnswerLocale] = useState<Locale>(locale),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -57,7 +63,7 @@ export function AssistantPage({
     );
   }
   async function send() {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || (voiceCheck && !voiceCheck.confirmed)) return;
     // The same key is reused on retry of the same text, so a repeated click never asks twice.
     if (pending.current?.text !== text)
       pending.current = { text, key: crypto.randomUUID() };
@@ -76,6 +82,7 @@ export function AssistantPage({
       );
       pending.current = null;
       setText("");
+      setVoiceCheck(null);
       await open(r.conversationId);
       setRevision((v) => v + 1);
     } catch (e) {
@@ -327,16 +334,45 @@ export function AssistantPage({
         <Field label={t("Вопрос или поручение", "Сұрақ немесе тапсырма")}>
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (!e.target.value.trim()) setVoiceCheck(null);
+            }}
             rows={3}
             maxLength={2000}
           />
         </Field>
+        {voiceCheck && (
+          <div className="commerce-alert voice-check" role="status">
+            <p>
+              {t(
+                "Распознано неуверенно, сверьте с тем, что вы сказали",
+                "Сенімсіз танылды, айтқаныңызбен салыстырыңыз",
+              )}
+              : <strong>{voiceCheck.words.join(", ")}</strong>
+            </p>
+            <label className="commerce-check">
+              <input
+                type="checkbox"
+                checked={voiceCheck.confirmed}
+                onChange={(e) =>
+                  setVoiceCheck({ ...voiceCheck, confirmed: e.target.checked })
+                }
+              />
+              {t(
+                "Я проверил(а) суммы, количества, названия и отрицания в тексте",
+                "Мәтіндегі сомаларды, сандарды, атауларды және болымсыздықты тексердім",
+              )}
+            </label>
+          </div>
+        )}
         <div className="commerce-actions">
           <button
             type="button"
             className="primary-button"
-            disabled={busy || !text.trim()}
+            disabled={
+              busy || !text.trim() || (!!voiceCheck && !voiceCheck.confirmed)
+            }
             onClick={send}
           >
             {busy
@@ -350,7 +386,14 @@ export function AssistantPage({
             locale={locale}
             enabled={status.settings.voice_enabled}
             speech={status.speech.status}
-            onTranscript={(v) => setText(v)}
+            onTranscript={(v, uncertain) => {
+              setText(v);
+              setVoiceCheck(
+                uncertain.length
+                  ? { words: uncertain, confirmed: false }
+                  : null,
+              );
+            }}
           />
         )}
       </section>
@@ -370,7 +413,7 @@ function Voice({
   locale: Locale;
   enabled: boolean;
   speech: string;
-  onTranscript: (v: string) => void;
+  onTranscript: (v: string, uncertain: string[]) => void;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk);
   const [state, setState] = useState<"idle" | "recording" | "sending">("idle"),
@@ -409,9 +452,11 @@ function Voice({
         if (cancelled.current) return setState("idle");
         setState("sending");
         try {
-          const blob = new Blob(chunks.current, {
+          const recorded = new Blob(chunks.current, {
             type: r.mimeType || "audio/webm",
           });
+          // The local engine takes 16 kHz WAV; if the browser cannot convert, the original goes.
+          const blob = await toWav16k(recorded).catch(() => recorded);
           const bytes = new Uint8Array(await blob.arrayBuffer());
           let bin = "";
           for (const b of bytes) bin += String.fromCharCode(b);
@@ -430,11 +475,8 @@ function Voice({
             },
           );
           // The transcript is only placed into the editable field; the user confirms and sends it.
-          onTranscript(result.text);
-          if (result.uncertain.length)
-            setProblem(
-              `${t("Проверьте неуверенно распознанное", "Сенімсіз танылғанды тексеріңіз")}: ${result.uncertain.join(", ")}`,
-            );
+          // Unsure words (and unsure amounts, quantities, negations) block sending until checked.
+          onTranscript(result.text, result.uncertain);
         } catch (e) {
           const code = e instanceof ApiError ? e.code : "NETWORK";
           setProblem(executionError(code, locale) || errorText(code, locale));
