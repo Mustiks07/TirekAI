@@ -260,3 +260,11 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Изменённые записи после обезличивания: команды над стёртым клиентом/документом клиники отвечают SUBJECT_ERASED (409); чтение истории остаётся.
 
 Командные инструменты (не HTTP): `test:load`, `measure:files`, `db:backup`, `db:restore`, `test:restore`, `db:migrate -- --plan`, `ops:retention [-- --apply]`, `org:export`, `check:secrets`, `live:report`, `eval:assistant [-- --confirm-budget N]`, `ocr:check`, `voice:check`, `video:probe`, `pilot:metrics`. Описание — docs/RUNBOOK.md и docs/LIVE_ACCEPTANCE.md.
+
+
+## Уточнения после ревью T051–T058 (16.10.2026)
+
+- `GET …/export`: таблицы `assistant_conversations` и `assistant_messages` исключены независимо от роли владельца; приватный доступ автора остаётся через assistant API. Полная операторская резервная копия — отдельная процедура.
+- Старый `PATCH …/customers/:id` возвращает `409 SUBJECT_ERASED` для обезличенного клиента. В ответе обезличивания дополнительные counts: `importSources`, `syncConflicts`.
+- История импорта после обезличивания сохраняет четыре строковых поля `values` (пустые), `errors: ["SUBJECT_ERASED"]`; готовые строки становятся invalid, выполненные сохраняют статус и ссылку. Весь исходный CSV затронутой партии удаляется, остальные нормализованные строки доступны. Повтор того же файла дедуплицируется; новые CSV с удалённым external_id блокируют эту строку в том же филиале.
+- Assistant status: `usage.month_tokens` — подтверждённый расход месяца, `usage.committed_tokens` — расход плюс активные/неподтверждённые резервы. Chat и automation_draft используют общий бюджет. `ASSISTANT_BUDGET_EXCEEDED` возникает до платного вызова, если остатка недостаточно для резерва; `ASSISTANT_INPUT_TOO_LARGE` — слишком большой или некорректный результат счётчика входа; `ASSISTANT_BUDGET_MISMATCH` — фактический расход превысил envelope, следующие запросы заблокированы до сверки.

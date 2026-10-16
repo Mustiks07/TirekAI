@@ -195,7 +195,9 @@ export function IndustryPage({
     }>(`${base}/industry/${selected.id}`)
       .then((v) => {
         if (live) {
-          setSelected(v.document);
+          // Keep the version and defaults the user actually started editing.
+          // A concurrent update must cause VERSION_CONFLICT, never upgrade a stale draft.
+          if (!action) setSelected(v.document);
           setHistory(v.history);
           setLots(v.lots);
         }
@@ -206,7 +208,7 @@ export function IndustryPage({
     };
     // Refresh the selected document without restarting on its returned object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, selected?.id, revision]);
+  }, [base, selected?.id, revision, action]);
   useEffect(() => {
     if (org.profile !== "construction") return;
     let live = true;

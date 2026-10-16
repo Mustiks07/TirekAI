@@ -8,6 +8,12 @@ import { AppError } from "../../domain/errors";
 // table is read with its organization_id, users only through this organization's memberships.
 const SECRET =
   /(^|_)(password|token|secret)(_|$)|_hash$|^credentials$|^payload_hash$/;
+// Conversations remain private to their author even for the organization owner.
+// An organization export is not a database backup and must preserve this boundary.
+const PRIVATE_TABLES = new Set([
+  "assistant_conversations",
+  "assistant_messages",
+]);
 export type OrganizationExport = {
   organizationId: string;
   exportedAt: string;
@@ -60,6 +66,7 @@ export async function exportOrganization(
     if (
       t === "organizations" ||
       t === "users" ||
+      PRIVATE_TABLES.has(t) ||
       !cols.some((c) => c.c === "organization_id")
     )
       continue;

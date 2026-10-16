@@ -1,0 +1,76 @@
+{
+  "task": "T053",
+  "acceptance": "AC 17",
+  "date": "2026-10-16T05:50:50.606Z",
+  "environment": {
+    "os": "win32 10.0.19045",
+    "cpu": "AMD Ryzen 5 5500U with Radeon Graphics         ",
+    "cores": 12,
+    "node": "v22.20.0",
+    "postgres": "PostgreSQL 18.2 on x86_64-windows",
+    "pgDump": "pg_dump (PostgreSQL) 18.2"
+  },
+  "backups": {
+    "live": {
+      "file": "basqaru-2026-10-16T05-50-34-151Z-m25.dump",
+      "bytes": 1837573,
+      "migrations": 25
+    },
+    "encrypted": {
+      "file": "basqaru-2026-10-16T05-50-35-662Z-m25.dump.enc",
+      "bytes": 1882898
+    }
+  },
+  "steps": {
+    "seed": {
+      "seconds": 29.5,
+      "counts": {
+        "catalog_items": 300,
+        "stock_receipts": 450,
+        "customers": 300,
+        "orders_created": 400,
+        "orders_confirmed": 400,
+        "issues": 812,
+        "payments": 400,
+        "returns": 20,
+        "refunds": 20,
+        "business_operations": 2502
+      }
+    },
+    "backupDuringWrites": {
+      "seconds": 1.5,
+      "bytes": 1837573,
+      "tables": 114
+    },
+    "ordersWrittenDuringBackup": 134,
+    "encryptedBackup": {
+      "seconds": 1.4,
+      "bytes": 1882898,
+      "encrypted": true
+    },
+    "nonEmptyTarget": "refused (RESTORE_TARGET_NOT_EMPTY)",
+    "tamperedFile": "refused (BACKUP_CHECKSUM_MISMATCH)",
+    "wrongKey": "refused (BACKUP_DECRYPT_FAILED)",
+    "restoreOfLiveBackup": {
+      "tables": 114,
+      "rows": 19772,
+      "migrations": 25,
+      "seconds": 4.2
+    },
+    "sourceDropped": true,
+    "restoreOfEncryptedBackup": {
+      "tables": 114,
+      "rows": 20427,
+      "migrations": 25,
+      "seconds": 4
+    },
+    "applicationAfterRecovery": {
+      "migrationsPending": 0,
+      "ownerLogin": "ok",
+      "financeSummaryEqualsSource": true,
+      "encryptedCredentialsReadable": true,
+      "newOrderAfterRecovery": "ok"
+    }
+  },
+  "result": "PASS"
+}

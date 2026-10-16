@@ -1,3 +1,4 @@
+import { PrivacyService } from "../src/server/privacy/service";
 import { beforeAll, afterAll, it, expect } from "vitest";
 import { randomUUID, randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
@@ -391,6 +392,37 @@ it("T031: events need the path token and the application token, deduplicate, re-
     [m.internal_id],
   );
   expect(kept.n).toBe(1);
+});
+it("T053: erasure removes existing conflicts and prevents a sync from storing personal data again", async () => {
+  const [local] = await db.query<{ id: string; version: number }>(
+    "SELECT id,version FROM customers WHERE organization_id=$1 AND external_id='bitrix24:10'",
+    [org],
+  );
+  await new PrivacyService(db).eraseCustomer(owner, org, local.id, {
+    key: key(),
+    version: local.version,
+    reason: "subject_request",
+  });
+  const remote = state.contacts.find((c) => c.id === 10)!;
+  remote.lastName = "PRIVATE_ERASED_REMOTE";
+  remote.updatedTime = "2026-10-05T09:00:00+05:00";
+  await svc.syncNow(owner, org, connection);
+  const conflicts = await db.query<{
+    local: unknown;
+    remote: unknown;
+    state: string;
+  }>(
+    "SELECT local,remote,state FROM sync_conflicts WHERE organization_id=$1 AND internal_id=$2",
+    [org, local.id],
+  );
+  expect(conflicts.length).toBeGreaterThan(0);
+  for (const c of conflicts)
+    expect(c).toEqual({ local: null, remote: {}, state: "kept_local" });
+  expect(
+    JSON.stringify(
+      await db.query("SELECT * FROM customers WHERE id=$1", [local.id]),
+    ),
+  ).not.toContain("PRIVATE_ERASED_REMOTE");
 });
 it("T031: time limit and auth errors are recorded as failures; disconnect erases the webhook", async () => {
   state.fail.time = true;

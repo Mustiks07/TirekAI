@@ -3,6 +3,11 @@ import type { Database, Sql } from "../db/database";
 import { sessionAccess, audit, type Credential } from "../access";
 import { AppError } from "../../domain/errors";
 import { idempotent } from "../execution/core";
+import {
+  erasedImportValues,
+  importFingerprint,
+  lockImportPrivacy,
+} from "./import-erasure";
 
 // T053 / SPECIFICATION §20: erasure of personal data on request. The subject row stays so that
 // orders, payments and stock documents remain linked (accounting records are kept as required);
@@ -49,6 +54,7 @@ export class PrivacyService {
     return this.db.transaction(async (tx) => {
       // Owner only: erasure cannot be undone.
       const s = await sessionAccess(tx, secret, org, "organization:write");
+      await lockImportPrivacy(tx, org);
       const r = await idempotent(tx, org, c.key, {
         operation: "privacy.erase_customer",
         id,
@@ -77,6 +83,21 @@ export class PrivacyService {
       if (customer.version !== c.version)
         throw new AppError("VERSION_CONFLICT", 409);
       const counts: Record<string, number> = {};
+      await tx.query(
+        "INSERT INTO privacy_import_tombstones(organization_id,branch_id,external_hash) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+        [
+          org,
+          customer.branch_id,
+          importFingerprint(org, customer.branch_id, customer.external_id),
+        ],
+      );
+      // Remove the entire source attachment: even invalid/extra columns can contain personal
+      // data. Other customers' parsed rows, accounting links and the deduplication hash remain.
+      counts.importSources = await count(
+        tx,
+        "UPDATE import_batches b SET source_content='' WHERE b.organization_id=$1 AND b.branch_id=$3 AND EXISTS(SELECT 1 FROM import_rows r WHERE r.organization_id=b.organization_id AND r.batch_id=b.id AND (r.customer_id=$2 OR r.data->>'external_id'=$4))",
+        [org, id, customer.branch_id, customer.external_id],
+      );
       counts.customer = await count(
         tx,
         "UPDATE customers SET name=$3,email='',phone='',external_id=$4,responsible_id=NULL,consents='{\"email\":false,\"sms\":false,\"messenger\":false}'::jsonb,erased_at=now(),version=version+1,updated_at=now() WHERE organization_id=$1 AND id=$2",
@@ -99,13 +120,24 @@ export class PrivacyService {
       );
       counts.importRows = await count(
         tx,
-        "UPDATE import_rows SET data='{}'::jsonb WHERE organization_id=$1 AND customer_id=$2",
-        [org, id],
+        "UPDATE import_rows r SET data=$5::jsonb,errors='[\"SUBJECT_ERASED\"]'::jsonb,status=CASE WHEN status='ready' THEN 'invalid' ELSE status END WHERE organization_id=$1 AND (customer_id=$2 OR (data->>'external_id'=$4 AND EXISTS(SELECT 1 FROM import_batches b WHERE b.organization_id=r.organization_id AND b.id=r.batch_id AND b.branch_id=$3)))",
+        [
+          org,
+          id,
+          customer.branch_id,
+          customer.external_id,
+          JSON.stringify(erasedImportValues),
+        ],
       );
       counts.messages = await count(
         tx,
         "UPDATE messaging_messages SET text=$3 WHERE organization_id=$1 AND customer_id=$2",
         [org, id, REMOVED],
+      );
+      counts.syncConflicts = await count(
+        tx,
+        "UPDATE sync_conflicts SET local=NULL,remote='{}'::jsonb,state='kept_local',resolved_by=$3,resolved_at=now() WHERE organization_id=$1 AND internal_id=$2",
+        [org, id, s.actorId],
       );
       counts.messagingLinks = await count(
         tx,

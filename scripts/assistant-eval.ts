@@ -10,7 +10,7 @@ import {
 // Live eval of the configured provider on synthetic data. Without ANTHROPIC_API_KEY it
 // reports not_configured: a scripted test provider is never substituted for a live result.
 // With a key it is a paid run: it starts only with --confirm-budget <tokens> at or above the
-// printed upper bound, and that number becomes the eval organization's hard token cap.
+// printed admission bound. Provider counts are estimates; configure its spending limit too.
 const provider = configuredProvider();
 await mkdir("docs/evidence", { recursive: true });
 const out = `docs/evidence/assistant-eval-${new Date().toISOString().slice(0, 10)}.json`;
@@ -39,7 +39,7 @@ if (!provider) {
 const flag = process.argv.indexOf("--confirm-budget");
 const confirmed = flag >= 0 ? Number(process.argv[flag + 1]) : NaN;
 console.log(
-  `Paid eval: ${budget.cases} cases, at most ${budget.maxCalls} model calls, upper bound ${budget.upperBoundTokens} tokens (model ${provider.model}).`,
+  `Paid eval: ${budget.cases} cases, at most ${budget.maxCalls} model calls, application reservation bound ${budget.upperBoundTokens} tokens (model ${provider.model}).`,
 );
 if (
   !Number.isSafeInteger(confirmed) ||

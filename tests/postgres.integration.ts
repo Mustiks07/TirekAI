@@ -17,6 +17,14 @@ import { migrations } from "../src/server/db/schema";
 import { IndustryService } from "../src/server/industry/service";
 import { CrmService } from "../src/server/crm/service";
 import { OutcomeService } from "../src/server/outcomes/service";
+import { AssistantService } from "../src/server/assistant/service";
+import { budgetedComplete, budgetState } from "../src/server/assistant/budget";
+import type {
+  AssistantProvider,
+  ProviderResponse,
+} from "../src/server/assistant/provider";
+import { PrivacyService } from "../src/server/privacy/service";
+import { batchViewSchema } from "../src/domain/import-contracts";
 
 it("two independent pools cannot receive the same remaining invoice quantity twice", async () => {
   const s = new PurchasingService(db),
@@ -931,4 +939,160 @@ it("T053: two processes migrating a fresh database apply each version exactly on
     await admin.query(`DROP DATABASE IF EXISTS ${name}`);
     await admin.end();
   }
+});
+
+it("T056: independent pools atomically reserve one AI budget before network calls", async () => {
+  const organization = (
+    await p.createOrganization(owner.token, {
+      name: "AI concurrency",
+      profile: "retail",
+    })
+  ).id;
+  await new AssistantService(db, null).saveSettings(owner.token, organization, {
+    version: 0,
+    enabled: true,
+    voiceEnabled: false,
+    monthlyTokenBudget: 16000,
+    maxOutputTokens: 4000,
+  });
+  let release!: (r: ProviderResponse) => void, entered!: () => void;
+  const pending = new Promise<ProviderResponse>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let calls = 0;
+  const provider: AssistantProvider = {
+    name: "test",
+    model: "test",
+    countInputTokens: async () => 100,
+    complete: async () => {
+      calls++;
+      entered();
+      return pending;
+    },
+  };
+  const ctx = {
+    secret: owner.token,
+    org: organization,
+    user: owner.user.id,
+    conversation: null,
+    feature: "chat" as const,
+  };
+  const request = {
+    system: "test",
+    messages: [{ role: "user" as const, content: "test" }],
+    tools: [],
+    maxTokens: 4000,
+    signal: AbortSignal.timeout(10000),
+  };
+  const first = budgetedComplete(db, provider, ctx, request);
+  await started;
+  try {
+    await expect(
+      budgetedComplete(other, provider, ctx, request),
+    ).rejects.toMatchObject({ code: "ASSISTANT_BUDGET_EXCEEDED" });
+    expect(calls).toBe(1);
+    expect((await budgetState(other, organization)).committed).toBe(16000);
+  } finally {
+    release({
+      content: [],
+      stopReason: "end_turn",
+      inputTokens: 100,
+      outputTokens: 20,
+      model: "test",
+    });
+    await first;
+  }
+  expect((await budgetState(other, organization)).committed).toBe(120);
+});
+it("T053: erasure racing a queued import leaves no restored client or unreadable history", async () => {
+  const organization = (
+    await p.createOrganization(owner.token, {
+      name: "Privacy concurrency",
+      profile: "retail",
+    })
+  ).id;
+  const b = (await p.workspace(owner.token, organization)).branches[0].id;
+  const imports = new ImportService(db),
+    worker = new ImportWorker(other);
+  await worker.runOnce();
+  const csv =
+    "external_id,name,email,phone\npg-private,Private Person,private-pg@example.test,+77001112233\n";
+  const upload = (content: string) =>
+    imports.upload(owner.token, organization, {
+      branchId: b,
+      filename: "private.csv",
+      delimiter: ",",
+      content,
+    });
+  const first = await upload(csv),
+    queued = await upload(
+      csv + "other,Other Person,other@example.test,+77001112234\n",
+    );
+  await imports.confirm(owner.token, organization, first.batch.id, {
+    version: first.batch.version,
+  });
+  await worker.dispatch();
+  const [job] = await other.query<{
+    id: string;
+    organization_id: string;
+    branch_id: string;
+    batch_id: string;
+    actor_id: string;
+    lease_token: string;
+    attempts: number;
+  }>(
+    "UPDATE jobs SET state='running',lease_token=$2,lease_until=now()+interval '30 seconds',attempts=1 WHERE batch_id=$1 RETURNING *",
+    [first.batch.id, randomUUID()],
+  );
+  await worker.process(job);
+  await imports.confirm(owner.token, organization, queued.batch.id, {
+    version: queued.batch.version,
+  });
+  await worker.dispatch();
+  const [next] = await other.query<typeof job>(
+    "UPDATE jobs SET state='running',lease_token=$2,lease_until=now()+interval '30 seconds',attempts=1 WHERE batch_id=$1 RETURNING *",
+    [queued.batch.id, randomUUID()],
+  );
+  const [customer] = await db.query<{ id: string; version: number }>(
+    "SELECT id,version FROM customers WHERE organization_id=$1 AND external_id='pg-private'",
+    [organization],
+  );
+  await Promise.all([
+    new PrivacyService(db).eraseCustomer(
+      owner.token,
+      organization,
+      customer.id,
+      {
+        key: randomUUID(),
+        version: customer.version,
+        reason: "subject_request",
+      },
+    ),
+    worker.process(next),
+    upload(csv.replace("Private Person", "Updated Person")),
+  ]);
+  expect(
+    await db.query(
+      "SELECT id FROM customers WHERE organization_id=$1 AND external_id='pg-private'",
+      [organization],
+    ),
+  ).toHaveLength(0);
+  expect(
+    await db.query(
+      "SELECT id FROM import_batches WHERE organization_id=$1 AND source_content LIKE '%private-pg@example.test%'",
+      [organization],
+    ),
+  ).toHaveLength(0);
+  const view = batchViewSchema.parse(
+    JSON.parse(
+      JSON.stringify(
+        await imports.get(owner.token, organization, queued.batch.id),
+      ),
+    ),
+  );
+  expect(view.rows[0].values.email).toBe("");
+  expect(view.rows[1].status).toBe("imported");
 });

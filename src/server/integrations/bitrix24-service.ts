@@ -1,3 +1,4 @@
+import { lockImportPrivacy } from "../privacy/import-erasure";
 import { z } from "zod";
 import type { Database, Sql } from "../db/database";
 import { sessionAccess, InternalActor, type Credential } from "../access";
@@ -171,6 +172,7 @@ export class Bitrix24Service {
     );
   }
   private async apply(tx: Sql, conn: ConnectionRow, c: B24Contact) {
+    await lockImportPrivacy(tx, conn.organization_id);
     if (!Number.isInteger(c.id) || c.id <= 0) return "skipped";
     const org = conn.organization_id,
       external = String(c.id),
@@ -188,6 +190,8 @@ export class Bitrix24Service {
       "SELECT internal_id,external_updated,local_version,state FROM integration_mappings WHERE connection_id=$1 AND entity_type='contact' AND external_id=$2 FOR UPDATE",
       [conn.id, external],
     );
+    // Erasure leaves a tombstone: do not persist the remote person's data as a conflict.
+    if (m?.state === "deleted") return "skipped_deleted";
     if (m && m.external_updated && updated <= m.external_updated)
       return "unchanged";
     const branch = String(conn.settings.branchId || "");
@@ -352,6 +356,7 @@ export class Bitrix24Service {
       .parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "integrations:write");
+      await lockImportPrivacy(tx, org);
       const [x] = await tx.query<{
         connection_id: string;
         external_id: string;

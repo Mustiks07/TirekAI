@@ -20,6 +20,7 @@ export type ProviderResponse = {
 export interface AssistantProvider {
   readonly name: string;
   readonly model: string;
+  countInputTokens(request: ProviderRequest): Promise<number>;
   complete(request: ProviderRequest): Promise<ProviderResponse>;
 }
 export type ProviderStatus = {
@@ -44,8 +45,20 @@ export class AnthropicProvider implements AssistantProvider {
   private client: Anthropic;
   constructor(apiKey: string, model = DEFAULT_MODEL) {
     this.model = model;
-    // Bounded retries (429/5xx/connection) with SDK backoff; each call also has its own deadline.
-    this.client = new Anthropic({ apiKey, maxRetries: 2, timeout: 45_000 });
+    // An ambiguous failure retains its budget reservation; never repeat a potentially billed call.
+    this.client = new Anthropic({ apiKey, maxRetries: 0, timeout: 45_000 });
+  }
+  async countInputTokens(r: ProviderRequest): Promise<number> {
+    const count = await this.client.beta.messages.countTokens(
+      {
+        model: this.model,
+        system: r.system,
+        messages: r.messages,
+        tools: r.tools,
+      },
+      { signal: r.signal },
+    );
+    return count.input_tokens;
   }
   async complete(r: ProviderRequest): Promise<ProviderResponse> {
     try {
@@ -57,16 +70,16 @@ export class AnthropicProvider implements AssistantProvider {
           messages: r.messages,
           tools: r.tools,
           output_config: { effort: "medium" },
-          // Policy declines are retried server-side on the model Anthropic recommends.
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
         },
         { signal: r.signal },
       );
       return {
         content: response.content,
         stopReason: response.stop_reason,
-        inputTokens: response.usage.input_tokens,
+        inputTokens:
+          response.usage.input_tokens +
+          (response.usage.cache_creation_input_tokens ?? 0) +
+          (response.usage.cache_read_input_tokens ?? 0),
         outputTokens: response.usage.output_tokens,
         model: response.model,
       };

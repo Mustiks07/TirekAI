@@ -11,6 +11,11 @@ import { CommerceService } from "../src/server/commerce/service";
 import { CrmService } from "../src/server/crm/service";
 import { IndustryService } from "../src/server/industry/service";
 import { PrivacyService } from "../src/server/privacy/service";
+import { ImportService } from "../src/server/imports/service";
+import { ImportWorker } from "../src/server/jobs/worker";
+import { batchViewSchema } from "../src/domain/import-contracts";
+import { ownerExport } from "../src/server/ops/export";
+import { AssistantService } from "../src/server/assistant/service";
 
 // T053: erasure of personal data keeps accounting links, locks the subject and leaves no copy
 // outside the accounting journal (which is retained by law and listed explicitly).
@@ -222,6 +227,14 @@ it("T053: owner erases a customer; accounting stays linked, the record is locked
   );
   // The subject is locked for changes and for new orders; history stays readable.
   await expect(
+    new ImportService(db).updateCustomer(owner, org, customer, {
+      version: version + 1,
+      name: NAME,
+      email: EMAIL,
+      phone: PHONE,
+    }),
+  ).rejects.toMatchObject({ code: "SUBJECT_ERASED" });
+  await expect(
     crm.profile(owner, org, customer, {
       key: key(),
       version: version + 1,
@@ -260,6 +273,98 @@ it("T053: owner erases a customer; accounting stays linked, the record is locked
     { details: { customerId: customer, reason: "subject_request" } },
   ]);
   expect((await privacy().requests(owner, org)).items).toHaveLength(1);
+});
+it("T053: source CSV, duplicates and queued previews are erased; history and other customers survive", async () => {
+  const imports = new ImportService(db),
+    worker = new ImportWorker(db);
+  await worker.runOnce();
+  const header = "external_id,name,email,phone\n";
+  const subject = "erase-csv,Ержан Тест,erase-csv@example.test,+77001112233\n";
+  const other = "keep-csv,Другой Клиент,keep-csv@example.test,+77001112234\n";
+  const upload = (content: string) =>
+    imports.upload(owner, org, {
+      branchId: branch,
+      filename: "synthetic.csv",
+      delimiter: ",",
+      content,
+    });
+  // Both previews exist before the customer is imported; the second may already be queued.
+  const first = await upload(header + subject + other);
+  const queued = await upload(header + subject);
+  await imports.confirm(owner, org, first.batch.id, {
+    version: first.batch.version,
+  });
+  await worker.runOnce();
+  await imports.confirm(owner, org, queued.batch.id, {
+    version: queued.batch.version,
+  });
+  const duplicate = await upload(header + subject + subject);
+  const [customer] = await db.query<{ id: string; version: number }>(
+    "SELECT id,version FROM customers WHERE organization_id=$1 AND external_id='erase-csv'",
+    [org],
+  );
+  const erased = await privacy().eraseCustomer(owner, org, customer.id, {
+    key: key(),
+    version: customer.version,
+    reason: "subject_request",
+  });
+  expect(erased.counts).toMatchObject({ importSources: 3, importRows: 4 });
+  await worker.runOnce();
+  for (const batch of [first, queued, duplicate]) {
+    const view = batchViewSchema.parse(
+      JSON.parse(JSON.stringify(await imports.get(owner, org, batch.batch.id))),
+    );
+    expect(view.rows[0].values).toEqual({
+      external_id: "",
+      name: "",
+      email: "",
+      phone: "",
+    });
+    expect(view.rows[0].errors).toEqual(["SUBJECT_ERASED"]);
+    const [raw] = await db.query<{ source_content: string }>(
+      "SELECT source_content FROM import_batches WHERE id=$1",
+      [batch.batch.id],
+    );
+    expect(raw.source_content).toBe("");
+  }
+  expect(
+    (await imports.get(owner, org, first.batch.id)).rows[1].values.email,
+  ).toBe("keep-csv@example.test");
+  expect(await occurrences("erase-csv@example.test")).toEqual([]);
+  expect(JSON.stringify(await ownerExport(db, owner, org))).not.toContain(
+    "erase-csv@example.test",
+  );
+  // Same file remains deduplicated; a different file cannot recreate the erased external ID.
+  expect((await upload(header + subject + other)).reused).toBe(true);
+  const reimport = await upload(
+    header + subject.replace("Ержан Тест", "Новое Имя"),
+  );
+  expect(reimport.rows[0]).toMatchObject({
+    status: "invalid",
+    errors: ["SUBJECT_ERASED"],
+    values: { email: "" },
+  });
+  expect(
+    await db.query(
+      "SELECT id FROM customers WHERE organization_id=$1 AND external_id='erase-csv'",
+      [org],
+    ),
+  ).toHaveLength(0);
+});
+it("T053: owner export respects the private assistant conversation boundary", async () => {
+  const assistant = new AssistantService(db, null);
+  const answer = await assistant.ask(manager, org, {
+    key: key(),
+    locale: "ru",
+    text: "PRIVATE_EXPORT_REGRESSION",
+  });
+  await expect(
+    assistant.conversation(owner, org, answer.conversationId),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  const exported = await ownerExport(db, owner, org);
+  expect(exported.tables).not.toHaveProperty("assistant_messages");
+  expect(exported.tables).not.toHaveProperty("assistant_conversations");
+  expect(JSON.stringify(exported)).not.toContain("PRIVATE_EXPORT_REGRESSION");
 });
 it("T053: a clinic request loses the patient's name and contact everywhere and stays locked", async () => {
   const stock = new InventoryService(db);
