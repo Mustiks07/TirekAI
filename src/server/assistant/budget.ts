@@ -28,16 +28,46 @@ export async function budgetState(tx: Sql, org: string) {
   return state;
 }
 
+type BudgetContext = {
+  secret: Credential;
+  org: string;
+  user: string;
+  conversation: string | null;
+  feature: "chat" | "automation_draft";
+};
 export async function budgetedComplete(
   db: Database,
   provider: AssistantProvider,
-  ctx: {
-    secret: Credential;
-    org: string;
-    user: string;
-    conversation: string | null;
-    feature: "chat" | "automation_draft";
-  },
+  ctx: BudgetContext,
+  request: ProviderRequest,
+) {
+  const candidates = [provider, ...(provider.fallbacks ?? [])].slice(0, 3);
+  for (let i = 0; i < candidates.length; i++) {
+    if (request.signal.aborted) throw new AppError("ASSISTANT_TIMEOUT", 504);
+    try {
+      return await completeAttempt(db, candidates[i], ctx, request);
+    } catch (error) {
+      // Refusals, malformed responses, input, authorization and budget failures cannot be bypassed.
+      if (
+        i === candidates.length - 1 ||
+        request.signal.aborted ||
+        !(error instanceof AppError) ||
+        ![
+          "ASSISTANT_RATE_LIMITED",
+          "ASSISTANT_UNAVAILABLE",
+          "ASSISTANT_NOT_CONFIGURED",
+          "ASSISTANT_TIMEOUT",
+        ].includes(error.code)
+      )
+        throw error;
+    }
+  }
+  throw new AppError("ASSISTANT_UNAVAILABLE", 503);
+}
+async function completeAttempt(
+  db: Database,
+  provider: AssistantProvider,
+  ctx: BudgetContext,
   request: ProviderRequest,
 ) {
   await db.transaction((tx) =>

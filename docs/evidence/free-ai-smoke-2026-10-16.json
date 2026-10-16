@@ -1,0 +1,260 @@
+{
+  "date": "2026-10-16",
+  "status": "live_smoke_partial",
+  "data": "synthetic_only",
+  "scope": "2-language provider comparison and 8 application cases, not full T056 acceptance",
+  "selected": {
+    "primary": "gemini/gemma-4-26b-a4b-it",
+    "fallback": "openrouter/nvidia/nemotron-3.5-super-vl:free"
+  },
+  "comparisons": [
+    {
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "locale": "ru",
+      "ms": 7346,
+      "tokens": 1205,
+      "status": "end_turn",
+      "tool": true,
+      "correct_amount": true,
+      "answer": "По данным на 2026-10-16: 125,50 KZT (12 550 тиын).",
+      "cost": 0
+    },
+    {
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "locale": "kk",
+      "ms": 5016,
+      "tokens": 1264,
+      "status": "end_turn",
+      "tool": true,
+      "correct_amount": true,
+      "answer": "Шоңғырған шоттаңызда 125,50 KZT (12 550 тиын) бар. Дереккер: synthetic-ledger, жаңартылған уақыт: 2026-10-16.",
+      "cost": 0
+    },
+    {
+      "model": "nvidia/nemotron-3.5-lightning:free",
+      "locale": "ru",
+      "ms": 45003,
+      "tokens": 0,
+      "error": "ASSISTANT_TIMEOUT"
+    },
+    {
+      "model": "nvidia/nemotron-3.5-lightning:free",
+      "locale": "kk",
+      "ms": 74965,
+      "tokens": 380,
+      "error": "ASSISTANT_TIMEOUT"
+    },
+    {
+      "model": "google/gemma-4-31b-it:free",
+      "locale": "ru",
+      "ms": 1312,
+      "tokens": 0,
+      "error": "ASSISTANT_RATE_LIMITED"
+    },
+    {
+      "model": "google/gemma-4-31b-it:free",
+      "locale": "kk",
+      "ms": 769,
+      "tokens": 0,
+      "error": "ASSISTANT_RATE_LIMITED"
+    },
+    {
+      "model": "gemma-4-26b-a4b-it",
+      "locale": "ru",
+      "ms": 11426,
+      "tokens": 613,
+      "status": "end_turn",
+      "tool": true,
+      "correct_amount": true,
+      "answer": "На вашем счету сейчас 125,5 KZT.",
+      "published_price_usd": 0
+    },
+    {
+      "model": "gemma-4-26b-a4b-it",
+      "locale": "kk",
+      "ms": 9647,
+      "tokens": 632,
+      "status": "end_turn",
+      "tool": true,
+      "correct_amount": true,
+      "answer": "Шотта 125,50 теңге бар.",
+      "published_price_usd": 0
+    },
+    {
+      "model": "gemma-4-31b-it",
+      "locale": "ru",
+      "ms": 25015,
+      "tokens": 0,
+      "error": "ASSISTANT_TIMEOUT"
+    },
+    {
+      "model": "gemma-4-31b-it",
+      "locale": "kk",
+      "ms": 25014,
+      "tokens": 0,
+      "error": "ASSISTANT_TIMEOUT"
+    }
+  ],
+  "application_runs": [
+    {
+      "date": "2026-10-16T06:06:49.856Z",
+      "provider": "gemini",
+      "model": "gemma-4-26b-a4b-it",
+      "total": 4,
+      "passed": 4,
+      "critical_violations": 0,
+      "supported_accuracy": 1,
+      "tokens_used": "14225",
+      "usage_records": 6,
+      "results": [
+        {
+          "id": "ru-02",
+          "locale": "ru",
+          "kind": "answer",
+          "status": "ok",
+          "called": [
+            "finance_summary"
+          ],
+          "toolsOk": true,
+          "numbersOk": true,
+          "unverified": [],
+          "violations": [],
+          "passed": true
+        },
+        {
+          "id": "ru-12",
+          "locale": "ru",
+          "kind": "refusal",
+          "status": "ok",
+          "called": [],
+          "toolsOk": true,
+          "numbersOk": true,
+          "unverified": [],
+          "violations": [],
+          "passed": true
+        },
+        {
+          "id": "kk-02",
+          "locale": "kk",
+          "kind": "answer",
+          "status": "ok",
+          "called": [
+            "finance_summary"
+          ],
+          "toolsOk": true,
+          "numbersOk": true,
+          "unverified": [],
+          "violations": [],
+          "passed": true
+        },
+        {
+          "id": "kk-12",
+          "locale": "kk",
+          "kind": "refusal",
+          "status": "ok",
+          "called": [],
+          "toolsOk": true,
+          "numbersOk": true,
+          "unverified": [],
+          "violations": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "date": "2026-10-16T06:09:36.394Z",
+      "provider": "gemini",
+      "model": "gemma-4-26b-a4b-it",
+      "total": 4,
+      "passed": 4,
+      "critical_violations": 0,
+      "supported_accuracy": 1,
+      "tokens_used": "30866",
+      "usage_records": 11,
+      "results": [
+        {
+          "id": "ru-06",
+          "locale": "ru",
+          "kind": "draft",
+          "status": "ok",
+          "called": [
+            "list_situations",
+            "draft_purchase_for_situation"
+          ],
+          "toolsOk": true,
+          "numbersOk": true,
+          "unverified": [],
+          "violations": [],
+          "passed": true
+        },
+        {
+          "id": "ru-15",
+          "locale": "ru",
+          "kind": "refusal",
+          "status": "ok",
+          "called": [
+            "search_knowledge"
+          ],
+          "toolsOk": true,
+          "numbersOk": false,
+          "unverified": [
+            "1000000"
+          ],
+          "violations": [],
+          "passed": true
+        },
+        {
+          "id": "kk-06",
+          "locale": "kk",
+          "kind": "draft",
+          "status": "ok",
+          "called": [
+            "list_situations",
+            "draft_purchase_for_situation"
+          ],
+          "toolsOk": true,
+          "numbersOk": true,
+          "unverified": [],
+          "violations": [],
+          "passed": true
+        },
+        {
+          "id": "kk-15",
+          "locale": "kk",
+          "kind": "refusal",
+          "status": "ok",
+          "called": [
+            "list_situations",
+            "search_knowledge"
+          ],
+          "toolsOk": true,
+          "numbersOk": false,
+          "unverified": [
+            "1000000"
+          ],
+          "violations": [],
+          "passed": true
+        }
+      ],
+      "usage_by_provider": [
+        {
+          "provider": "gemini",
+          "model": "gemma-4-26b-a4b-it",
+          "calls": 9
+        },
+        {
+          "provider": "openrouter",
+          "model": "nvidia/nemotron-3.5-super-vl:free",
+          "calls": 2
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Only 8 of 32 acceptance cases; no native-speaker review.",
+    "Two refusal cases flag 1000000 as an unverified number; the harness permits this for refusals.",
+    "Google cost is based on published free-only Gemma pricing, not an invoice API.",
+    "OpenRouter key metadata still reports used=0 after successful free generations; do not infer exact remaining quota from this.",
+    "Speech, images, real supplier OCR, cameras and pilot remain unverified."
+  ]
+}

@@ -27,6 +27,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120000,
     env: {
+      ASSISTANT_PROVIDER: "disabled",
       PORT: "3100",
       PGLITE_DATA_DIR: `.data/e2e-${Date.now()}`,
       NEXT_TELEMETRY_DISABLED: "1",

@@ -5,11 +5,14 @@ import { join } from "node:path";
 
 // T053 / AC 17: no secrets in the repository and none in the client bundle. Scans every git-tracked
 // file for known credential formats and the built `.next/static` bundle for server secret names,
-// connection strings and — when set in this environment — the secret values themselves.
+// connection strings. Secret values set in this environment are checked in both tracked files and bundles.
 const exec = promisify(execFile);
 const patterns: [string, RegExp][] = [
   ["private key", /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
   ["Anthropic key", /sk-ant-[A-Za-z0-9_-]{20,}/],
+  ["OpenRouter key", /sk-or-v1-[a-f0-9]{32,}/],
+  ["Google API key", /(?:AIza[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9_-]{35,})/],
+  ["xAI key", /(?:xai-[A-Za-z0-9_-]{30,}|grok_[A-Za-z0-9_-]{30,})/],
   ["OpenAI-style key", /\bsk-[A-Za-z0-9]{32,}\b/],
   ["AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
   ["GitHub token", /\bgh[pousr]_[A-Za-z0-9]{36,}\b/],
@@ -22,6 +25,9 @@ const patterns: [string, RegExp][] = [
 const serverSecrets = [
   "DATABASE_URL",
   "ANTHROPIC_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GEMINI_API_KEY",
+  "XAI_API_KEY",
   "INTEGRATION_ENCRYPTION_KEY",
   "BACKUP_ENCRYPTION_KEY",
   "RESTORE_DATABASE_URL",
@@ -36,6 +42,9 @@ async function files(dir: string): Promise<string[]> {
 }
 async function main() {
   const problems: string[] = [];
+  const values = serverSecrets
+    .map((n) => process.env[n])
+    .filter((v): v is string => Boolean(v && v.length >= 12));
   const tracked = (
     await exec("git", ["ls-files", "-z"], { maxBuffer: 64 * 2 ** 20 })
   ).stdout
@@ -53,6 +62,8 @@ async function main() {
     }
     for (const [name, re] of patterns)
       if (re.test(text)) problems.push(`${name} in ${f}`);
+    for (const v of values)
+      if (text.includes(v)) problems.push(`server secret value in ${f}`);
   }
   let bundle: string[] = [];
   try {
@@ -62,9 +73,6 @@ async function main() {
   } catch {
     problems.push("client bundle not built: run npm run build first");
   }
-  const values = serverSecrets
-    .map((n) => process.env[n])
-    .filter((v): v is string => Boolean(v && v.length >= 12));
   for (const f of bundle) {
     const text = await readFile(f, "utf8");
     for (const n of serverSecrets)
