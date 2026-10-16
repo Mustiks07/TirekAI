@@ -1,3 +1,7 @@
+import { PurchasingService } from "../purchasing/service";
+import { purchaseQuantities } from "../purchasing/quantities";
+import { CrmService } from "../crm/service";
+import type { Construction, Clinic } from "../../domain/extended-industry";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Database, Sql } from "../db/database";
@@ -273,39 +277,50 @@ export class IndustryService {
             ? (existing.data as Recipe).mode
             : null;
       if (
-        !["food", "services", "education", "projects", "production"].includes(
-          o.profile,
-        )
+        ![
+          "food",
+          "services",
+          "education",
+          "projects",
+          "production",
+          "construction",
+          "clinic",
+        ].includes(o.profile)
       )
         throw new AppError("PROFILE_NOT_SUPPORTED", 409);
-      const required =
-        c.kind.startsWith("production") ||
-        c.kind === "recipe" ||
-        c.kind === "lot_receipt" ||
-        c.kind === "waste"
-          ? ["food", "production"]
-          : [
-                "course",
-                "group",
-                "enroll",
-                "enrollment_change",
-                "lesson",
-                "lesson_complete",
-              ].includes(c.kind)
-            ? ["education"]
+      const required = c.kind.startsWith("construction")
+        ? ["construction"]
+        : c.kind.startsWith("clinic")
+          ? ["clinic"]
+          : c.kind.startsWith("production") ||
+              c.kind === "recipe" ||
+              c.kind === "lot_receipt" ||
+              c.kind === "waste"
+            ? ["food", "production"]
             : [
-                  "project",
-                  "project_task",
-                  "time",
-                  "scope_change",
-                  "scope_approve",
-                  "project_stage",
-                  "project_deliver",
+                  "course",
+                  "group",
+                  "enroll",
+                  "enrollment_change",
+                  "lesson",
+                  "lesson_complete",
                 ].includes(c.kind)
-              ? ["projects"]
-              : ["appointment", "appointment_end", "reminder"].includes(c.kind)
-                ? ["services"]
-                : ["food", "services", "education", "production"];
+              ? ["education"]
+              : [
+                    "project",
+                    "project_task",
+                    "time",
+                    "scope_change",
+                    "scope_approve",
+                    "project_stage",
+                    "project_deliver",
+                  ].includes(c.kind)
+                ? ["projects"]
+                : ["appointment", "appointment_end", "reminder"].includes(
+                      c.kind,
+                    )
+                  ? ["services"]
+                  : ["food", "services", "education", "production", "clinic"];
       if (!required.includes(o.profile) || (mode && mode !== o.profile))
         throw new AppError("PROFILE_NOT_SUPPORTED", 409);
       let id = existing?.id ?? r.id;
@@ -1430,6 +1445,458 @@ export class IndustryService {
           [s.org, d.data.quoteId, d.data.orderId],
         );
         await this.save(tx, s, d, "project.delivered", c.note, "completed");
+        return;
+      }
+      default:
+        return this.extended(tx, s, c, id);
+    }
+  }
+  private async constructionBudget(tx: Sql, s: Scope, d: Construction) {
+    const [row] = await tx.query<{ total: string }>(
+      "SELECT coalesce(sum(greatest(o.total_minor,coalesce((SELECT sum(amount_minor) FROM supplier_obligations b WHERE b.organization_id=o.organization_id AND b.purchase_order_id=o.id),0))),0)::text total FROM purchase_orders o WHERE o.organization_id=$1 AND o.id=ANY($2::uuid[]) AND o.state<>'cancelled'",
+      [s.org, d.purchases],
+    );
+    const work = d.work.reduce((n, w) => n + minorUnits(w.amount), 0n);
+    const material =
+      BigInt(row.total) > BigInt(d.materialCostMinor)
+        ? BigInt(row.total)
+        : BigInt(d.materialCostMinor);
+    if (material + work > minorUnits(d.budget))
+      throw new AppError("BUDGET_EXCEEDED", 409);
+  }
+  private async estimate(
+    tx: Sql,
+    s: Scope,
+    data: Pick<Construction, "lines" | "stages">,
+  ) {
+    unique(data.lines.map((l) => l.itemId));
+    let price = 0n;
+    for (const l of data.lines) {
+      toBase(l.quantity, l.unit, await this.item(tx, s, l.itemId));
+      price += lineAmount(l.price, l.quantity);
+    }
+    return price.toString();
+  }
+  private async extended(
+    tx: Sql,
+    s: Scope,
+    c: IndustryCommand,
+    id: string,
+  ): Promise<void> {
+    switch (c.kind) {
+      case "construction": {
+        await this.customer(tx, s, c.customerId);
+        await this.warehouse(tx, s, c.warehouseId);
+        await this.item(tx, s, c.billingItemId, "service");
+        await this.create<Construction>(
+          tx,
+          s,
+          id,
+          "construction",
+          c.title,
+          {
+            customerId: c.customerId,
+            warehouseId: c.warehouseId,
+            billingItemId: c.billingItemId,
+            budget: c.budget,
+            lines: c.lines,
+            stages: c.stages,
+            estimateVersion: 1,
+            authorId: s.actor,
+            approverId: null,
+            priceMinor: await this.estimate(tx, s, c),
+            materialCostMinor: "0",
+            issued: [],
+            purchases: [],
+            work: [],
+            orderId: null,
+          },
+          "pending",
+          c.note,
+        );
+        await this.items(tx, s, id, [
+          c.billingItemId,
+          ...c.lines.map((l) => l.itemId),
+        ]);
+        return;
+      }
+      case "construction_revise": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        if (!["pending", "active"].includes(d.state))
+          throw new AppError("INDUSTRY_STATE", 409);
+        // Existing work and purchased quantities survive a new estimate; approval is invalidated.
+        if (
+          d.data.work.some((w) => c.stages[w.stage] !== d.data.stages[w.stage])
+        )
+          throw new AppError("ESTIMATE_COMMITTED", 409);
+        for (const used of await purchaseQuantities(
+          tx,
+          s.org,
+          d.data.purchases,
+          true,
+        )) {
+          const item = await this.item(tx, s, used.item_id);
+          const next = c.lines.find((l) => l.itemId === used.item_id);
+          if (
+            new D(used.quantity).gt(
+              next ? toBase(next.quantity, next.unit, item) : "0",
+            )
+          )
+            throw new AppError("ESTIMATE_COMMITTED", 409);
+        }
+        d.data.lines = c.lines;
+        d.data.stages = c.stages;
+        d.data.budget = c.budget;
+        d.data.priceMinor = await this.estimate(tx, s, c);
+        d.data.estimateVersion++;
+        d.data.authorId = s.actor;
+        d.data.approverId = null;
+        await this.constructionBudget(tx, s, d.data);
+        await this.items(
+          tx,
+          s,
+          id,
+          c.lines.map((l) => l.itemId),
+        );
+        await this.save(tx, s, d, "construction.revised", c.note, "pending");
+        return;
+      }
+      case "construction_approve": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        if (d.state !== "pending") throw new AppError("INDUSTRY_STATE", 409);
+        if (s.actor === d.data.authorId)
+          throw new AppError("SECOND_PERSON_REQUIRED", 403);
+        await this.constructionBudget(tx, s, d.data);
+        d.data.approverId = s.actor;
+        await this.save(tx, s, d, "construction.approved", c.note, "active");
+        return;
+      }
+      case "construction_purchase": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        if (d.state !== "active") throw new AppError("INDUSTRY_STATE", 409);
+        const result = await new PurchasingService(this.db).createInTransaction(
+          tx,
+          s.secret,
+          s.org,
+          {
+            key: stableUuid(`${c.key}:purchase`),
+            branchId: s.branch,
+            warehouseId: d.data.warehouseId,
+            supplierId: c.supplierId,
+            date: c.date,
+            dueDate: c.dueDate,
+            budget: d.data.budget,
+            lines: c.lines,
+            note: c.note,
+          },
+        );
+        d.data.purchases.push(result.id);
+        const lines = await purchaseQuantities(
+          tx,
+          s.org,
+          d.data.purchases,
+          true,
+        );
+        for (const line of lines) {
+          const estimate = d.data.lines.find((l) => l.itemId === line.item_id);
+          const item = await this.item(tx, s, line.item_id, "goods");
+          if (
+            !estimate ||
+            new D(line.quantity).gt(
+              toBase(estimate.quantity, estimate.unit, item),
+            )
+          )
+            throw new AppError("ESTIMATE_COMMITTED", 409);
+        }
+        await this.constructionBudget(tx, s, d.data);
+        await tx.query(
+          "INSERT INTO construction_purchases(organization_id,document_id,purchase_id) VALUES($1,$2,$3)",
+          [s.org, id, result.id],
+        );
+        await this.save(tx, s, d, "construction.purchase", c.note);
+        return;
+      }
+      case "construction_materials": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        if (d.state !== "active") throw new AppError("INDUSTRY_STATE", 409);
+        const materials = await this.materials(tx, s, c.materials);
+        for (const m of materials) {
+          const received = (
+            await purchaseQuantities(tx, s.org, d.data.purchases)
+          ).find((l) => l.item_id === m.itemId);
+          const used = d.data.issued
+            .filter((l) => l.itemId === m.itemId)
+            .reduce((n, l) => n.plus(l.quantity), new D(0));
+          if (used.plus(m.quantity).gt(received?.quantity ?? "0"))
+            throw new AppError("RECEIPT_REQUIRED", 409);
+          const line = d.data.lines.find((l) => l.itemId === m.itemId);
+          if (
+            !line ||
+            used
+              .plus(m.quantity)
+              .gt(
+                toBase(
+                  line.quantity,
+                  line.unit,
+                  await this.item(tx, s, m.itemId),
+                ),
+              )
+          )
+            throw new AppError("ESTIMATE_COMMITTED", 409);
+        }
+        const cost = await this.consume(
+          tx,
+          s,
+          id,
+          c.key,
+          d.data.warehouseId,
+          materials,
+          c.note,
+        );
+        d.data.materialCostMinor = (
+          BigInt(d.data.materialCostMinor) + cost
+        ).toString();
+        d.data.issued.push(...materials);
+        await this.constructionBudget(tx, s, d.data);
+        await this.save(tx, s, d, "construction.materials", c.note);
+        return;
+      }
+      case "construction_work": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        if (d.state !== "active" || c.stage >= d.data.stages.length)
+          throw new AppError("INDUSTRY_STATE", 409);
+        if (
+          !(
+            await tx.query(
+              "SELECT id FROM suppliers WHERE organization_id=$1 AND id=$2",
+              [s.org, c.contractorId],
+            )
+          ).length
+        )
+          throw new AppError("NOT_FOUND", 404);
+        if (
+          d.data.stages
+            .slice(0, c.stage)
+            .some(
+              (_, i) =>
+                !d.data.work.some((w) => w.stage === i && w.confirmedBy),
+            )
+        )
+          throw new AppError("PREVIOUS_STAGE_REQUIRED", 409);
+        d.data.work.push({
+          id: randomUUID(),
+          stage: c.stage,
+          contractorId: c.contractorId,
+          amount: c.amount,
+          evidence: c.evidence,
+          authorId: s.actor,
+          confirmedBy: null,
+        });
+        await this.constructionBudget(tx, s, d.data);
+        await this.save(tx, s, d, "construction.work", c.note);
+        return;
+      }
+      case "construction_confirm": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        const work = d.data.work.find((w) => w.id === c.workId);
+        if (d.state !== "active" || !work || work.confirmedBy)
+          throw new AppError("INDUSTRY_STATE", 409);
+        if (work.authorId === s.actor)
+          throw new AppError("SECOND_PERSON_REQUIRED", 403);
+        if (minorUnits(work.amount) > 0n) {
+          const [contractor] = await tx.query<{ name: string }>(
+            "SELECT name FROM suppliers WHERE organization_id=$1 AND id=$2",
+            [s.org, work.contractorId],
+          );
+          work.obligationId = (
+            await new CommerceService(this.db).createObligationInTransaction(
+              tx,
+              s.secret,
+              s.org,
+              {
+                key: stableUuid(c.key + ":obligation"),
+                branchId: s.branch,
+                supplier: contractor.name,
+                amount: work.amount,
+                dueDate: (await organizationClock(tx, s.org)).today,
+                note: c.note,
+              },
+            )
+          ).id;
+        }
+        work.confirmedBy = s.actor;
+        await this.save(tx, s, d, "construction.work_confirmed", c.note);
+        return;
+      }
+      case "construction_accept": {
+        const d = await this.load<Construction>(tx, s.org, id, "construction");
+        if (
+          d.state !== "active" ||
+          d.data.work.some((w) => !w.confirmedBy) ||
+          d.data.stages.some((_, i) => !d.data.work.some((w) => w.stage === i))
+        )
+          throw new AppError("PROJECT_TASKS_OPEN", 409);
+        if (
+          (
+            await tx.query(
+              "SELECT id FROM purchase_orders WHERE organization_id=$1 AND id=ANY($2::uuid[]) AND state NOT IN ('completed','cancelled')",
+              [s.org, d.data.purchases],
+            )
+          ).length
+        )
+          throw new AppError("RECEIPT_REQUIRED", 409);
+        for (const line of d.data.lines) {
+          const item = await this.item(tx, s, line.itemId);
+          if (
+            item.kind === "goods" &&
+            !new D(toBase(line.quantity, line.unit, item)).eq(
+              d.data.issued
+                .filter((m) => m.itemId === item.id)
+                .reduce((n, m) => n.plus(m.quantity), new D(0)),
+            )
+          )
+            throw new AppError("MATERIALS_REQUIRED", 409);
+        }
+        await this.constructionBudget(tx, s, d.data);
+        const item = await this.item(tx, s, d.data.billingItemId, "service");
+        const cost =
+          BigInt(d.data.materialCostMinor) +
+          d.data.work.reduce((n, w) => n + minorUnits(w.amount), 0n);
+        d.data.orderId = await this.invoice(
+          tx,
+          s,
+          id,
+          c.key,
+          d.data.customerId,
+          d.data.warehouseId,
+          [
+            {
+              itemId: item.id,
+              unit: item.base_unit,
+              quantity: "1",
+              price: kzt(d.data.priceMinor),
+              discount: "0",
+            },
+          ],
+          cost,
+        );
+        await this.save(tx, s, d, "construction.accepted", c.note, "completed");
+        return;
+      }
+      case "clinic": {
+        await this.item(tx, s, c.serviceItemId, "service");
+        await this.warehouse(tx, s, c.warehouseId);
+        await this.create<Clinic>(
+          tx,
+          s,
+          id,
+          "clinic",
+          `Приём / Қабылдау ${id.slice(0, 8)}`,
+          {
+            patientName: c.patientName,
+            contact: c.contact,
+            serviceItemId: c.serviceItemId,
+            warehouseId: c.warehouseId,
+            price: c.price,
+            orderId: null,
+          },
+          "requested",
+          "Административная заявка / Әкімшілік өтініш",
+        );
+        await this.items(tx, s, id, [c.serviceItemId]);
+        return;
+      }
+      case "clinic_book": {
+        const d = await this.load<Clinic>(tx, s.org, id, "clinic");
+        if (!["requested", "scheduled"].includes(d.state))
+          throw new AppError("INDUSTRY_STATE", 409);
+        await this.book(tx, s, id, c.resources, c.startsAt, c.endsAt, [
+          "specialist",
+          "room",
+        ]);
+        d.data.startsAt = c.startsAt;
+        d.data.endsAt = c.endsAt;
+        d.data.resources = c.resources;
+        await this.save(
+          tx,
+          s,
+          d,
+          "clinic.booked",
+          "Запись / Жазылу",
+          "scheduled",
+        );
+        return;
+      }
+      case "clinic_visit": {
+        const d = await this.load<Clinic>(tx, s.org, id, "clinic");
+        if (d.state !== "scheduled") throw new AppError("INDUSTRY_STATE", 409);
+        if (
+          c.outcome !== "cancelled" &&
+          new Date(d.data.startsAt!) > new Date()
+        )
+          throw new AppError("VISIT_NOT_STARTED", 409);
+        if (c.outcome !== "visited")
+          await tx.query(
+            "DELETE FROM industry_slots WHERE organization_id=$1 AND document_id=$2",
+            [s.org, id],
+          );
+        await this.save(
+          tx,
+          s,
+          d,
+          `clinic.${c.outcome}`,
+          "Статус посещения / Қатысу күйі",
+          c.outcome,
+        );
+        return;
+      }
+      case "clinic_invoice": {
+        const d = await this.load<Clinic>(tx, s.org, id, "clinic");
+        if (d.state !== "visited") throw new AppError("INDUSTRY_STATE", 409);
+        let [customer] = await tx.query<{ customer_id: string }>(
+          "SELECT customer_id FROM clinic_billing_customers WHERE organization_id=$1 AND branch_id=$2",
+          [s.org, s.branch],
+        );
+        if (!customer) {
+          const result = await new CrmService(
+            this.db,
+          ).createCustomerInTransaction(tx, s.secret, s.org, {
+            key: stableUuid(`clinic-billing:${s.org}:${s.branch}`),
+            branchId: s.branch,
+            name: "Обезличенный расчёт / Иесіздендірілген есеп",
+            email: "",
+            phone: "",
+            kind: "person",
+            responsibleId: null,
+            consents: { email: false, sms: false, messenger: false },
+            consentNote: "Без персональных данных / Жеке дерексіз",
+          });
+          customer = { customer_id: result.id };
+          await tx.query(
+            "INSERT INTO clinic_billing_customers(organization_id,branch_id,customer_id) VALUES($1,$2,$3)",
+            [s.org, s.branch, result.id],
+          );
+        }
+        const item = await this.item(tx, s, d.data.serviceItemId, "service");
+        d.data.orderId = await this.invoice(
+          tx,
+          s,
+          id,
+          c.key,
+          customer.customer_id,
+          d.data.warehouseId,
+          [
+            {
+              itemId: item.id,
+              unit: item.base_unit,
+              quantity: "1",
+              price: d.data.price,
+              discount: "0",
+            },
+          ],
+          null,
+        );
+        await this.save(tx, s, d, "clinic.invoiced", "Счёт / Шот", "completed");
         return;
       }
       default:

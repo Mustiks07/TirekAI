@@ -609,8 +609,18 @@ export class CommerceService {
     });
   }
   async createObligation(secret: Credential, org: string, input: unknown) {
+    return this.db.transaction((tx) =>
+      this.createObligationInTransaction(tx, secret, org, input),
+    );
+  }
+  async createObligationInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    input: unknown,
+  ) {
     const c = obligationInput.parse(input);
-    return this.db.transaction(async (tx) => {
+    {
       const s = await sessionAccess(
           tx,
           secret,
@@ -639,7 +649,7 @@ export class CommerceService {
         obligationId: r.id,
       });
       return r;
-    });
+    }
   }
   async money(secret: Credential, org: string, input: unknown) {
     const c = moneyCommand.parse(input);

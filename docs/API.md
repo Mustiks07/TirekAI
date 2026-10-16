@@ -219,3 +219,27 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 Складские receipt/count и строки фактической приёмки закупки дополнены необязательным `lot:{code,expiresOn}`. Для товара с партиями новая положительная операция требует партии. issue дополнен lotId (для явного выбора). Стоимость по-прежнему средневзвешенная SKU/склад; FEFO используется только для физического выбора партий. Возврат восстанавливает исходное распределение, перемещение сохраняет родительскую партию/срок. Обычная выдача просроченного товара запрещена. Списание просрочки — только industry waste с основанием. Независимый складской возврат связанного производственного расхода запрещён.
 
 Ключевые ошибки: VERSION_CONFLICT, RESOURCE_CONFLICT, OUTSIDE_WORKING_HOURS, GROUP_FULL, ATTENDANCE_INCOMPLETE, COURSE_LIMIT, BUDGET_EXCEEDED, SECOND_PERSON_REQUIRED, PROJECT_TASKS_OPEN, STAGES_REQUIRED, OUTPUT_MISMATCH, LOT_AVAILABLE_EXCEEDED, LOT_REQUIRED, LOT_OPENING_REQUIRED, PROFILE_NOT_SUPPORTED. Тексты отраслевой формы RU/KK — industry-i18n.ts.
+
+## T046–T050: строительство, клиника, результаты
+
+Миграции 22–23. Пути относительно /api/v1/organizations/:id. Все команды требуют текущую авторизацию, UUID key, Zod input/output; изменяемые industry документы требуют id/version/note. Повтор key не отменяет проверку прав. Смета и клиника используют тот же industry/commands, history и scope, что T041–T045.
+
+| Команда | Данные / действие |
+| --- | --- |
+| construction | branchId, title, customerId, warehouseId, billingItemId(service), budget, lines[{itemId,quantity,unit,price}], stages, note → pending |
+| construction_revise | id/version, budget, lines, stages → новая версия сметы, pending; фиксированные работы/закупки сохраняются |
+| construction_approve | Другой owner/manager утверждает текущую версию |
+| construction_purchase | supplierId, date, dueDate, lines[{offerId,quantity}] → реальный draft закупки в рамках сметы/бюджета |
+| construction_materials | materials[{itemId,quantity,unit}] → фактическая выдача только после приёмки |
+| construction_work / construction_confirm | stage, contractorId, amount, evidence / workId; другой проверяющий создаёт обязательство, но не платёж |
+| construction_accept | Все этапы/работы проверены, закупки приняты или отменены, материалы выданы → исполненный заказ |
+| clinic | branchId, patientName, contact, serviceItemId, warehouseId, price, note → приватная requested |
+| clinic_book | startsAt/endsAt, resources (specialist+room) → scheduled; повтор — перенос с сохранением старого слота при ошибке |
+| clinic_visit | outcome visited/no_show/cancelled; посещение не ранее начала |
+| clinic_invoice | Только visited → один обезличенный исполненный заказ; финансовое движение отдельно |
+| GET outcomes?branchId&from&to | outcomes:read, owner/manager; когорта до 366 дней, до 5000 записей с явным отказом при превышении; facts/proposals/actions/measurements и раздельные итоги |
+| POST outcomes | outcomes:write; key, branchId, sourceType order/purchase, sourceId, forecast(decimal|null), alternativeOfferIds[], limitations; immutable baseline до исполнения |
+
+Для purchase baseline требуется по альтернативе на каждую позицию, один поставщик, равный фактический объём упаковок, одинаковые leadDays/paymentTerms и известные условия цены. Факт — полная приёмка плюс обязательства поставщику (с учётом корректировок). Изменённый объём или реально принятый заменяющий SKU → incomparable. Для order факт — текущая выручка исполненного заказа, difference = факт − прогноз; для purchase difference = baseline − фактическая стоимость. Это разные показатели, они не суммируются. Прогнозы не добавляются к выручке.
+
+Новые ошибки: ESTIMATE_COMMITTED, RECEIPT_REQUIRED, OUTCOME_ALREADY_TRACKED, BASELINE_TOO_LATE, RESULT_RANGE_TOO_LARGE; сохраняются VERSION_CONFLICT, SECOND_PERSON_REQUIRED, BUDGET_EXCEEDED, RESOURCE_CONFLICT, FORBIDDEN. Контакт пациента доступен только industry API своей области; общего AI tool для clinic/industry/outcomes не зарегистрировано.

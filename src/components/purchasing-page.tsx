@@ -263,9 +263,13 @@ export function ActionForm({
 export function PurchasingPage({
   workspace,
   locale,
+  initialOrderId,
+  initialBranchId,
 }: {
   workspace: Workspace;
   locale: Locale;
+  initialOrderId?: string;
+  initialBranchId?: string;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk),
     word = (key: string) => words[key]?.[locale === "ru" ? 0 : 1] || key,
@@ -273,7 +277,12 @@ export function PurchasingPage({
     write = can(workspace.organization.role, "purchasing:write"),
     approve = can(workspace.organization.role, "purchasing:approve");
   const [tab, setTab] = useState<"orders" | "suppliers" | "planning">("orders"),
-    [branch, setBranch] = useState(workspace.branches[0]?.id || ""),
+    [branch, setBranch] = useState(
+      initialBranchId ||
+        workspace.organization.branch_id ||
+        workspace.branches[0]?.id ||
+        "",
+    ),
     [revision, setRevision] = useState(0),
     [search, setSearch] = useState(""),
     [page, setPage] = useState(1),
@@ -288,7 +297,7 @@ export function PurchasingPage({
     [itemSearch, setItemSearch] = useState(""),
     [warehouses, setWarehouses] = useState<Warehouse[]>([]),
     [orders, setOrders] = useState<z.infer<typeof purchaseList> | null>(null),
-    [selected, setSelected] = useState(""),
+    [selected, setSelected] = useState(initialOrderId || ""),
     [loadedDetail, setDetail] = useState<PurchaseDetail | null>(null),
     [historyPage, setHistoryPage] = useState(1);
   const [compared, setCompared] = useState<Comparison | null>(null),

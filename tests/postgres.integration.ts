@@ -16,6 +16,7 @@ import { documentView } from "../src/domain/purchasing";
 import { migrations } from "../src/server/db/schema";
 import { IndustryService } from "../src/server/industry/service";
 import { CrmService } from "../src/server/crm/service";
+import { OutcomeService } from "../src/server/outcomes/service";
 
 it("two independent pools cannot receive the same remaining invoice quantity twice", async () => {
   const s = new PurchasingService(db),
@@ -204,6 +205,156 @@ it("runs all migrations on PostgreSQL without modifying applied history", async 
   expect(
     await db.query("SELECT version FROM schema_migrations ORDER BY version"),
   ).toEqual(migrations.map(({ version }) => ({ version })));
+});
+it("T047/T048 independent pools serialize clinic bookings, anonymous invoices and baseline uniqueness", async () => {
+  const organization = (
+    await p.createOrganization(owner.token, {
+      name: "Clinic concurrency",
+      profile: "clinic",
+    })
+  ).id;
+  const b = (await p.workspace(owner.token, organization)).branches[0].id;
+  const stock = new InventoryService(db),
+    svc = new IndustryService(db),
+    second = new IndustryService(other),
+    commerce = new CommerceService(db);
+  const wh = (
+    await stock.createWarehouse(owner.token, organization, {
+      branchId: b,
+      name: "Clinic",
+    })
+  ).id;
+  const service = (
+    await stock.saveItem(owner.token, organization, {
+      sku: "SERVICE",
+      name_ru: "Приём",
+      kind: "service",
+      base_unit: "pc",
+      purchase_price: null,
+      sale_price: "10",
+    })
+  ).id!;
+  const resources: string[] = [];
+  for (const kind of ["specialist", "room"])
+    resources.push(
+      (
+        await svc.command(owner.token, organization, {
+          key: randomUUID(),
+          branchId: b,
+          kind: "resource",
+          title: kind,
+          resourceKind: kind,
+          capacity: 1,
+          bufferMinutes: 0,
+          days: [1, 2, 3, 4, 5, 6, 7],
+          opens: "00:00",
+          closes: "23:59",
+        })
+      ).id,
+    );
+  const request = async () =>
+    (
+      await svc.command(owner.token, organization, {
+        key: randomUUID(),
+        branchId: b,
+        kind: "clinic",
+        patientName: "Private test",
+        contact: "",
+        serviceItemId: service,
+        warehouseId: wh,
+        price: "10",
+        note: "Synthetic",
+      })
+    ).id;
+  const a = await request(),
+    c = await request();
+  const date = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const slot = (id: string) => ({
+    key: randomUUID(),
+    id,
+    version: 1,
+    kind: "clinic_book",
+    resources,
+    startsAt: date + "T09:00:00Z",
+    endsAt: date + "T10:00:00Z",
+    note: "Synthetic",
+  });
+  const results = await Promise.allSettled([
+    svc.command(owner.token, organization, slot(a)),
+    second.command(owner.token, organization, slot(c)),
+  ]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { code: "RESOURCE_CONFLICT" },
+  });
+  const scheduled = results[0].status === "fulfilled" ? a : c;
+  await svc.command(owner.token, organization, {
+    key: randomUUID(),
+    id: scheduled,
+    version: 2,
+    kind: "clinic_visit",
+    outcome: "visited",
+    note: "Synthetic",
+  });
+  const invoice = {
+    key: randomUUID(),
+    id: scheduled,
+    version: 3,
+    kind: "clinic_invoice",
+    note: "Synthetic",
+  };
+  const billed = await Promise.all([
+    svc.command(owner.token, organization, invoice),
+    second.command(owner.token, organization, invoice),
+  ]);
+  expect(billed.filter((x) => x.reused)).toHaveLength(1);
+  expect(
+    await db.query("SELECT id FROM sales_orders WHERE organization_id=$1", [
+      organization,
+    ]),
+  ).toHaveLength(1);
+  const [customer] = await db.query<{ customer_id: string }>(
+    "SELECT customer_id FROM clinic_billing_customers WHERE organization_id=$1",
+    [organization],
+  );
+  const order = (
+    await commerce.create(owner.token, organization, {
+      key: randomUUID(),
+      branchId: b,
+      customerId: customer.customer_id,
+      warehouseId: wh,
+      dueDate: date,
+      delivery: "pickup",
+      note: "Synthetic",
+      taxMode: "excluded",
+      lines: [
+        {
+          itemId: service,
+          quantity: "1",
+          unit: "pc",
+          price: "10",
+          discount: "0",
+        },
+      ],
+    })
+  ).id;
+  const baseline = () => ({
+    key: randomUUID(),
+    branchId: b,
+    sourceType: "order",
+    sourceId: order,
+    forecast: "10",
+    alternativeOfferIds: [],
+    limitations: "Synthetic comparison, no causal claim",
+  });
+  const tracked = await Promise.allSettled([
+    new OutcomeService(db).create(owner.token, organization, baseline()),
+    new OutcomeService(other).create(owner.token, organization, baseline()),
+  ]);
+  expect(tracked.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(tracked.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { code: "OUTCOME_ALREADY_TRACKED" },
+  });
 });
 it("allows one reservation of the final unit through independent pools", async () => {
   const id = await item();

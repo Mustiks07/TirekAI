@@ -1,3 +1,4 @@
+import { extendedIndustryCommands } from "./extended-industry";
 import { z } from "zod";
 import { decimalInput } from "./inventory";
 import Decimal from "decimal.js";
@@ -18,6 +19,8 @@ export const industryKinds = [
   "enrollment",
   "project",
   "waste",
+  "construction",
+  "clinic",
 ] as const;
 export const material = z
   .object({ itemId: z.uuid(), quantity: qty, unit: z.string().min(1).max(20) })
@@ -29,6 +32,7 @@ const slot = {
   resources: z.array(z.uuid()).min(1).max(8),
 };
 export const industryCommand = z.discriminatedUnion("kind", [
+  ...extendedIndustryCommands,
   z
     .object({
       ...base,

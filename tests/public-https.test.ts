@@ -14,6 +14,13 @@ it("rejects private IPv4, IPv6 and mapped literals before a 1C connection", asyn
     "[fd00::1]",
     "[::ffff:127.0.0.1]",
     "[::ffff:a9fe:a9fe]",
+    "[64:ff9b::7f00:1]",
+    "[::127.0.0.1]",
+    "[2002:7f00:1::]",
+    "[2001:db8::1]",
+    "192.0.2.1",
+    "198.51.100.1",
+    "203.0.113.1",
   ]) {
     expect(publicAddress(host)).toBe(false);
     expect(validInfobaseUrl(`https://${host}/trade`)).toBe(false);

@@ -191,8 +191,18 @@ export class CrmService {
     });
   }
   async createCustomer(secret: Credential, org: string, input: unknown) {
+    return this.db.transaction((tx) =>
+      this.createCustomerInTransaction(tx, secret, org, input),
+    );
+  }
+  async createCustomerInTransaction(
+    tx: Sql,
+    secret: Credential,
+    org: string,
+    input: unknown,
+  ) {
     const c = customerInput.parse(input);
-    return this.db.transaction(async (tx) => {
+    {
       const s = await sessionAccess(
           tx,
           secret,
@@ -227,7 +237,7 @@ export class CrmService {
         customerId: r.id,
       });
       return r;
-    });
+    }
   }
   // Composition for integrations (T031): same validation, scope and audit as the forms, inside the
   // caller's transaction. Imported contacts carry no marketing consent.
