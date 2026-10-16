@@ -25,6 +25,16 @@ type Detail = {
   }[];
   canApprove: boolean;
   canExecute: boolean;
+  offers: {
+    offerId: string;
+    supplier: string;
+    sku: string;
+    name_ru: string;
+    name_kk: string;
+    packQuantity: string;
+    packPrice: string;
+    currency: string;
+  }[];
 };
 type Purchase = {
   supplierId: string;
@@ -177,12 +187,17 @@ export function ApprovalsPage({
           )}
           {purchase && (
             <ul className="today-list">
-              {purchase.lines.map((l) => (
-                <li key={l.offerId}>
-                  {t("Предложение", "Ұсыныс")} {l.offerId.slice(0, 8)} ·{" "}
-                  {t("количество", "саны")} {l.quantity}
-                </li>
-              ))}
+              {purchase.lines.map((l) => {
+                const o = d.offers.find((x) => x.offerId === l.offerId);
+                return (
+                  <li key={l.offerId}>
+                    {o
+                      ? `${o.sku} · ${locale === "kk" && o.name_kk ? o.name_kk : o.name_ru} · ${o.supplier} · ${t("упаковка", "қаптама")} ${o.packQuantity} × ${o.packPrice} ${o.currency}`
+                      : `${t("Предложение", "Ұсыныс")} ${l.offerId.slice(0, 8)}`}{" "}
+                    · {t("количество", "саны")} {l.quantity}
+                  </li>
+                );
+              })}
               <li>
                 {t("Бюджет", "Бюджет")} {purchase.budget} KZT ·{" "}
                 {t("срок", "мерзім")} {purchase.dueDate}

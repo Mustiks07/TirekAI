@@ -25,6 +25,7 @@ import { errorText } from "@/lib/i18n";
 import { moneyText, quantityText, inventoryError } from "@/lib/inventory-i18n";
 import { can } from "@/domain/permissions";
 import { executionError } from "@/lib/execution-i18n";
+import { suggestReview } from "@/lib/invoice-suggest";
 const f = (data: FormData, n: string) => String(data.get(n) || "").trim();
 // Exact minor units → "123.45" without binary floating point.
 const minorInput = (minor: string) => {
@@ -1454,6 +1455,11 @@ export function PurchasingPage({
                         ),
                     ),
                     extraCount = Math.max(extraRows, savedExtras.length);
+                  // Before the first saved review, OCR fills editable defaults; nothing is saved
+                  // or counted until the person submits the checked form.
+                  const hint = doc.document.review
+                    ? null
+                    : suggestReview(doc.document.extraction, detail.lines);
                   return (
                     <ActionForm
                       key={`${doc.document.id}-${doc.document.version}`}
@@ -1524,12 +1530,22 @@ export function PurchasingPage({
                           </option>
                         </select>
                       </Field>
+                      {hint && (
+                        <p className="commerce-alert" role="note">
+                          {t(
+                            "Поля заполнены по распознанному документу. Сверьте каждое значение с оригиналом: строки без уверенного совпадения оставлены пустыми.",
+                            "Өрістер танылған құжат бойынша толтырылды. Әр мәнді түпнұсқамен салыстырыңыз: сенімді сәйкестігі жоқ жолдар бос қалдырылды.",
+                          )}
+                        </p>
+                      )}
                       <Field label={t("Номер документа", "Құжат нөмірі")}>
                         <input
                           name="number"
                           required
                           maxLength={80}
-                          defaultValue={doc.document.review?.number}
+                          defaultValue={
+                            doc.document.review?.number ?? hint?.number ?? ""
+                          }
                         />
                       </Field>
                       <Field label={t("Дата документа", "Құжат күні")}>
@@ -1537,7 +1553,9 @@ export function PurchasingPage({
                           type="date"
                           name="date"
                           required
-                          defaultValue={doc.document.review?.date}
+                          defaultValue={
+                            doc.document.review?.date ?? hint?.date ?? ""
+                          }
                         />
                       </Field>
                       <Field label={t("Срок оплаты", "Төлем мерзімі")}>
@@ -1549,9 +1567,20 @@ export function PurchasingPage({
                         />
                       </Field>
                       {detail.lines.map((l) => {
-                        const prior = orderedFor(l.item_id);
+                        const prior = orderedFor(l.item_id),
+                          suggested = hint?.lines[l.id];
                         return (
                           <div key={l.id} className="procurement-review-line">
+                            {hint && (
+                              <p className="procurement-hint">
+                                {suggested
+                                  ? `${t("В документе", "Құжатта")}: ${suggested.source}`
+                                  : t(
+                                      "Строка в распознанном документе не найдена: заполните по оригиналу или снимите отметку.",
+                                      "Танылған құжатта жол табылмады: түпнұсқа бойынша толтырыңыз немесе белгіні алыңыз.",
+                                    )}
+                              </p>
+                            )}
                             <label className="commerce-check">
                               <input
                                 type="checkbox"
@@ -1597,7 +1626,7 @@ export function PurchasingPage({
                             {number(
                               `qty-${l.id}`,
                               t("Количество в документе", "Құжаттағы саны"),
-                              prior?.quantity || "",
+                              prior?.quantity || suggested?.quantity || "",
                               false,
                             )}
                             <Field
@@ -1618,7 +1647,7 @@ export function PurchasingPage({
                                 "Цена за эту единицу, включая налоги, KZT",
                                 "Осы бірлік бағасы, салықтармен, KZT",
                               ),
-                              prior?.unitPrice || "",
+                              prior?.unitPrice || suggested?.unitPrice || "",
                               false,
                             )}
                           </div>
@@ -1748,7 +1777,7 @@ export function PurchasingPage({
                       {number(
                         "delivery",
                         t("Доставка, KZT", "Жеткізу, KZT"),
-                        doc.document.review?.delivery || "0",
+                        doc.document.review?.delivery ?? hint?.delivery ?? "",
                       )}
                       {number(
                         "total",
@@ -1756,7 +1785,7 @@ export function PurchasingPage({
                           "Итог по оригиналу, KZT",
                           "Түпнұсқа қорытындысы, KZT",
                         ),
-                        doc.document.review?.total || "",
+                        doc.document.review?.total ?? hint?.total ?? "",
                       )}
                       {note}
                       <label className="commerce-check">

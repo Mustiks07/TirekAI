@@ -753,6 +753,30 @@ export class ProposalService {
         canApprove: approve,
         canExecute:
           p.state === "approved" && can(s.role, writePermission[p.kind]),
+        offers:
+          p.kind === "purchase_order"
+            ? await tx.query<{
+                offerId: string;
+                supplier: string;
+                sku: string;
+                name_ru: string;
+                name_kk: string;
+                packQuantity: string;
+                packPrice: string;
+                currency: string;
+              }>(
+                `SELECT f.id "offerId",s.name supplier,i.sku,i.name_ru,i.name_kk,f.data->>'packQuantity' "packQuantity",f.data->>'packPrice' "packPrice",f.data->>'currency' currency
+                 FROM supplier_offers f JOIN suppliers s ON s.organization_id=f.organization_id AND s.id=f.supplier_id
+                 JOIN catalog_items i ON i.organization_id=f.organization_id AND i.id=f.item_id
+                 WHERE f.organization_id=$1 AND f.id=ANY($2::uuid[])`,
+                [
+                  org,
+                  (
+                    (p.params as { lines?: { offerId: string }[] }).lines ?? []
+                  ).map((l) => l.offerId),
+                ],
+              )
+            : [],
       };
     });
   }

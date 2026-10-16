@@ -1,5 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { AppError } from "../../domain/errors";
+import { D } from "../../domain/purchasing";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 let running = 0;
@@ -46,26 +47,108 @@ function candidates(rows: string[][], confidence: number | null) {
       }));
   return rows
     .flatMap((r) => {
-      const tokens = r.join(" ").trim().split(/\s+/);
-      if (tokens.length < 4) return [];
-      const total = numeric(tokens.at(-1)),
-        unitPrice = numeric(tokens.at(-2)),
-        quantity = numeric(tokens.at(-3));
-      return total && unitPrice && quantity
-        ? [
-            {
-              name: tokens.slice(0, -3).join(" "),
-              quantity,
-              unit: null,
-              unitPrice,
-              total,
-              confidence:
-                confidence === null ? null : Math.min(confidence, 0.6),
-            },
-          ]
-        : [];
+      const line = freeTextLine(r.join(" "));
+      if (!line) return [];
+      const { consistent, ...fields } = line;
+      return [
+        {
+          ...fields,
+          confidence:
+            confidence === null
+              ? null
+              : Math.min(confidence, consistent ? 0.75 : 0.6),
+        },
+      ];
     })
     .slice(0, 100);
+}
+const UNITS = new Set([
+  "шт",
+  "шт.",
+  "pc",
+  "pcs",
+  "дана",
+  "кг",
+  "kg",
+  "г",
+  "л",
+  "l",
+  "м",
+  "уп",
+  "уп.",
+  "упак",
+  "ед",
+  "ед.",
+]);
+// A printed amount may be split by thousand separators: "1 300,00", "52 000,00".
+function grouped(tokens: string[]) {
+  if (!tokens.length) return null;
+  if (tokens.length === 1)
+    return /^\d+([.,]\d{1,6})?$/.test(tokens[0])
+      ? tokens[0].replace(",", ".")
+      : null;
+  if (!/^\d{1,3}$/.test(tokens[0])) return null;
+  for (const t of tokens.slice(1, -1)) if (!/^\d{3}$/.test(t)) return null;
+  if (!/^\d{3}([.,]\d{1,6})?$/.test(tokens.at(-1)!)) return null;
+  return tokens.join("").replace(",", ".");
+}
+// Free-text row "name qty [unit] price total". Every split of the trailing numbers into three
+// amounts is tried; a split where quantity × price = total wins. Without such a split the
+// last three single tokens are kept as before, marked inconsistent (lower confidence).
+export function freeTextLine(row: string) {
+  const tokens = row.trim().split(/\s+/);
+  if (tokens.length < 4) return null;
+  for (let tw = 1; tw <= 3; tw++) {
+    const total = grouped(tokens.slice(-tw));
+    if (!total) continue;
+    for (let pw = 1; pw <= 3; pw++) {
+      const end = tokens.length - tw,
+        price = grouped(tokens.slice(end - pw, end));
+      if (!price) continue;
+      let at = end - pw;
+      const unit = UNITS.has(tokens[at - 1]?.toLowerCase())
+        ? tokens[--at]
+        : null;
+      for (let qw = 1; qw <= 2; qw++) {
+        const quantity = grouped(tokens.slice(at - qw, at));
+        if (!quantity || at - qw < 1) continue;
+        try {
+          if (!new D(quantity).times(price).minus(total).abs().lte("0.01"))
+            continue;
+        } catch {
+          continue;
+        }
+        return {
+          name: tokens
+            .slice(0, at - qw)
+            .join(" ")
+            .replace(/^\d{1,3}\s+(?=\p{L})/u, ""),
+          quantity,
+          unit,
+          unitPrice: price,
+          total,
+          consistent: true,
+        };
+      }
+    }
+  }
+  const single = (v: string | undefined) => {
+    const x = v?.replace(",", ".");
+    return x && /^\d+(\.\d{1,6})?$/.test(x) ? x : null;
+  };
+  const total = single(tokens.at(-1)),
+    unitPrice = single(tokens.at(-2)),
+    quantity = single(tokens.at(-3));
+  return total && unitPrice && quantity
+    ? {
+        name: tokens.slice(0, -3).join(" "),
+        quantity,
+        unit: null,
+        unitPrice,
+        total,
+        consistent: false,
+      }
+    : null;
 }
 export async function extractDocument(
   filename: string,

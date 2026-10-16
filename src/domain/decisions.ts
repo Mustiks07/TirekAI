@@ -221,6 +221,19 @@ export const proposalDetail = z.object({
   ),
   canApprove: z.boolean(),
   canExecute: z.boolean(),
+  // Read-only names for a purchase proposal's lines; the parameters themselves are unchanged.
+  offers: z.array(
+    z.object({
+      offerId: z.uuid(),
+      supplier: z.string(),
+      sku: z.string(),
+      name_ru: z.string(),
+      name_kk: z.string(),
+      packQuantity: z.string(),
+      packPrice: z.string(),
+      currency: z.string(),
+    }),
+  ),
 });
 export const limitInput = z
   .object({

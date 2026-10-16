@@ -3190,6 +3190,11 @@ fieldset {
 .procurement-offer h3 {
   margin-top: 0;
 }
+.procurement-hint {
+  margin: 0 0 8px;
+  color: var(--muted, #5b6660);
+  font-size: 0.875rem;
+}
 .procurement-offer button {
   margin-top: 12px;
 }

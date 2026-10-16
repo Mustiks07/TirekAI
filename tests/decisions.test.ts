@@ -205,6 +205,13 @@ it("T023/T024: low stock → evidence → draft purchase → approval → execut
     amount_minor: "13200",
     origin: "situation",
   });
+  // The approver sees supplier and item names for each line, not only an offer ID.
+  expect(d.offers).toHaveLength(1);
+  expect(d.offers[0]).toMatchObject({
+    offerId: (d.proposal.params as { lines: { offerId: string }[] }).lines[0]
+      .offerId,
+  });
+  expect(d.offers[0].supplier.length).toBeGreaterThan(0);
   await prop.revise(buyer, org, id, {
     key: key(),
     version: d.proposal.version,

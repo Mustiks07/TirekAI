@@ -80,3 +80,29 @@ it("T056: the OCR acceptance score finds fields and line triplets in a real reco
     }),
   ).toMatchObject({ fieldsFound: 0, linesMatched: 0 });
 }, 90000);
+it("demo: free-text invoice rows keep thousand separators and require quantity × price = total", async () => {
+  const { freeTextLine } = await import("../src/server/purchasing/extract");
+  expect(freeTextLine("1 Чай чёрный 250 г 40 шт 1 300,00 52 000,00")).toEqual({
+    name: "Чай чёрный 250 г",
+    quantity: "40",
+    unit: "шт",
+    unitPrice: "1300.00",
+    total: "52000.00",
+    consistent: true,
+  });
+  // No unit word: the split 12 × 1 250,50 = 15 006,00 is the only consistent reading.
+  expect(freeTextLine("Кофе 12 1 250,50 15 006,00")).toMatchObject({
+    quantity: "12",
+    unitPrice: "1250.50",
+    total: "15006.00",
+    consistent: true,
+  });
+  // Nothing multiplies out: the old single-token reading stays, marked inconsistent.
+  expect(freeTextLine("Сахар 5 300 999")).toMatchObject({
+    quantity: "5",
+    unitPrice: "300",
+    total: "999",
+    consistent: false,
+  });
+  expect(freeTextLine("Итого к оплате")).toBeNull();
+});
