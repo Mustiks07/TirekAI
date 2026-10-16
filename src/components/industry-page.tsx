@@ -85,6 +85,14 @@ export function IndustryPage({
     [filter, setFilter] = useState(""),
     [lineCount, setLineCount] = useState(1),
     [success, setSuccess] = useState(false);
+  const actionForm = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!action) return;
+    actionForm.current?.scrollIntoView({ block: "start" });
+    actionForm.current
+      ?.querySelector<HTMLElement>("input:not([type=hidden]),select,textarea")
+      ?.focus({ preventScroll: true });
+  }, [action, selected?.id]);
   const words = inventoryWords(locale),
     unitName = (unit: string) =>
       words[`unit_${unit}` as keyof typeof words] || unit;
@@ -1376,6 +1384,7 @@ export function IndustryPage({
             )}
             {action && (
               <form
+                ref={actionForm}
                 key={`${action}:${selected?.id ?? "new"}`}
                 onSubmit={submit}
                 aria-label={w(action)}

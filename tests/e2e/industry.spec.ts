@@ -202,6 +202,7 @@ test("clinic: private request, appointment, visit and invoice through RU/KK mobi
   expect(doc.state).toBe("completed");
   await f.capture();
   await page.getByRole("button", { name: "РУС", exact: true }).click();
+  await page.getByRole("button", { name: "Меню", exact: true }).click();
   await page
     .getByRole("navigation")
     .getByRole("button", { name: "Результаты", exact: true })

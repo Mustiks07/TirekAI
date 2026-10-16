@@ -3,16 +3,17 @@ import { PwaStatus } from "@/components/pwa-status";
 import { cookies } from "next/headers";
 import "@fontsource-variable/noto-sans";
 import "./globals.css";
+import "./tirekai.css";
 export const metadata: Metadata = {
-  title: "Басқару | Бизнес кеңістігі",
+  title: "TirekAI | Бизнес кеңістігі",
   description: "Ұйым мен команданы басқаруға арналған жұмыс кеңістігі.",
-  appleWebApp: { capable: true, title: "Басқару", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "TirekAI", statusBarStyle: "default" },
   icons: { icon: "/icons/app-192.png", apple: "/icons/app-192.png" },
 };
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#244936",
+  themeColor: "#173c33",
 };
 export default async function RootLayout({
   children,

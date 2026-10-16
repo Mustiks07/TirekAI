@@ -1,0 +1,83 @@
+{
+  "synthetic": true,
+  "date": "2026-10-16T07:31:43.980Z",
+  "counts": {
+    "branches": 3,
+    "members": 6,
+    "orders": 72,
+    "products": 36,
+    "customers": 36,
+    "tasks": 24,
+    "knowledge": 6
+  },
+  "orderStates": {
+    "cancelled": 9,
+    "fulfilled": 36,
+    "partial": 9,
+    "confirmed": 9,
+    "draft": 9
+  },
+  "branches": [
+    {
+      "name": "01",
+      "summary": {
+        "revenue_minor": "18786000",
+        "cost_minor": "12687000",
+        "operating_expenses_minor": "10500000",
+        "cash_minor": "205737275",
+        "receivable_minor": "6231600",
+        "customer_credit_minor": "182875",
+        "payable_minor": "24750000",
+        "overdue_minor": "6024500",
+        "gross_profit_minor": "6099000",
+        "operating_result_minor": "-4401000",
+        "margin_percent": "32.47",
+        "markup_percent": "48.07",
+        "unknown_cost_events": 0,
+        "tax_mode": "excluded",
+        "expenses_complete": false
+      }
+    },
+    {
+      "name": "Магазин · Астана",
+      "summary": {
+        "revenue_minor": "27349250",
+        "cost_minor": "18544000",
+        "operating_expenses_minor": "11500000",
+        "cash_minor": "214094000",
+        "receivable_minor": "5616250",
+        "customer_credit_minor": "361000",
+        "payable_minor": "28500000",
+        "overdue_minor": "5497500",
+        "gross_profit_minor": "8805250",
+        "operating_result_minor": "-2694750",
+        "margin_percent": "32.20",
+        "markup_percent": "47.48",
+        "unknown_cost_events": 0,
+        "tax_mode": "excluded",
+        "expenses_complete": false
+      }
+    },
+    {
+      "name": "Оптовый отдел · Тараз",
+      "summary": {
+        "revenue_minor": "38608700",
+        "cost_minor": "26151000",
+        "operating_expenses_minor": "12500000",
+        "cash_minor": "216766600",
+        "receivable_minor": "13172700",
+        "customer_credit_minor": "330600",
+        "payable_minor": "32250000",
+        "overdue_minor": "12967500",
+        "gross_profit_minor": "12457700",
+        "operating_result_minor": "-42300",
+        "margin_percent": "32.27",
+        "markup_percent": "47.64",
+        "unknown_cost_events": 0,
+        "tax_mode": "excluded",
+        "expenses_complete": false
+      }
+    }
+  ],
+  "status": "PASS"
+}

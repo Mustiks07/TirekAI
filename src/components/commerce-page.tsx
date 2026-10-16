@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { ShoppingBag, Wallet, RefreshCw, Plus, ArrowLeft } from "lucide-react";
+import { RefreshCw, Plus, ArrowLeft } from "lucide-react";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { Item, Warehouse, CatalogView } from "@/domain/inventory";
 import type {
@@ -23,6 +23,7 @@ import { useRevision } from "@/lib/live";
 import { errorText } from "@/lib/i18n";
 import { inventoryError, moneyText, quantityText } from "@/lib/inventory-i18n";
 import { businessDate } from "@/lib/dates";
+import { BankStatements } from "./bank-statements";
 import { PaymentCalendar } from "./payment-calendar";
 const field = (f: FormData, n: string) => String(f.get(n) || "").trim();
 const labels: Record<string, [string, string]> = {
@@ -124,6 +125,30 @@ export function CommercePage({
     [selected, setSelected] = useState(initialOrderId || ""),
     [detail, setDetail] = useState<OrderView | null>(null),
     [historyPage, setHistoryPage] = useState(1);
+  const [financeTab, setFinanceTab] = useState(
+    initialOrderId ? "orders" : "overview",
+  );
+  const [expandedMetrics, setExpandedMetrics] = useState(false);
+  const detailRef = useRef<HTMLElement>(null);
+  const lastOrderButton = useRef<HTMLButtonElement | null>(null);
+  const focusedDetail = useRef("");
+  useEffect(() => {
+    if (detail && focusedDetail.current !== detail.order.id) {
+      focusedDetail.current = detail.order.id;
+      detailRef.current?.focus({ preventScroll: true });
+      if (window.innerWidth < 1300)
+        detailRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [detail]);
+  function closeDetail() {
+    setSelected("");
+    setDetail(null);
+    setOperation(null);
+    focusedDetail.current = "";
+    requestAnimationFrame(() =>
+      lastOrderButton.current?.focus({ preventScroll: true }),
+    );
+  }
   const [accounts, setAccounts] = useState<Account[]>([]),
     [ledger, setLedger] = useState<Ledger | null>(null),
     [obligations, setObligations] = useState<Obligations | null>(null),
@@ -152,17 +177,34 @@ export function CommercePage({
     [success, setSuccess] = useState(false);
   const retry = useRef<{ signature: string; key: string } | null>(null),
     editor = useRef<HTMLElement>(null);
+  const loadedScope = useRef("");
   useEffect(() => {
     editor.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    editor.current
+      ?.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea")
+      ?.focus({ preventScroll: true });
   }, [form, operation]);
   useEffect(() => {
     let stale = false;
     const q = `branchId=${branch}&q=${encodeURIComponent(query)}&page=${page}`;
+    const scope = JSON.stringify([
+      base,
+      branch,
+      mode,
+      page,
+      query,
+      selected,
+      historyPage,
+    ]);
     const read = async () => {
       await Promise.resolve();
       if (stale) return;
-      setLoading(true);
-      setError(null);
+      // Live refresh must not disable a button between pointer-down and click.
+      // Keep the loaded screen interactive; a different selection still waits for its data.
+      if (loadedScope.current !== scope) {
+        setLoading(true);
+        setError(null);
+      }
       const list = await api<OrdersView>(`${base}/orders?${q}`);
       if (stale) return;
       setOrders(list);
@@ -187,6 +229,7 @@ export function CommercePage({
         );
         if (!stale) setDetail(d);
       }
+      if (!stale) loadedScope.current = scope;
     };
     void read()
       .catch((e) => {
@@ -245,6 +288,10 @@ export function CommercePage({
       setForm(null);
       setOperation(null);
       setSuccess(true);
+      if (mode === "finance") {
+        if (form === "account" || form === "money") setFinanceTab("accounts");
+        if (form === "obligation") setFinanceTab("obligations");
+      }
       if (form === "order") {
         setSelected(result.id);
         setDetail(null);
@@ -320,31 +367,11 @@ export function CommercePage({
     inventoryError(errorCode, locale) ||
     errorText(errorCode || "INTERNAL_ERROR", locale);
   return (
-    <div className="commerce-page inventory-page" aria-busy={loading || busy}>
+    <div
+      className={`commerce-page inventory-page commerce-${mode} ${detail ? "has-order-detail" : ""}`}
+      aria-busy={loading || busy}
+    >
       <section className="panel commerce-toolbar">
-        <div>
-          <h2>
-            {mode === "orders" ? (
-              <ShoppingBag aria-hidden size={23} />
-            ) : (
-              <Wallet aria-hidden size={23} />
-            )}{" "}
-            {t(
-              mode === "orders"
-                ? "Заказы и исполнение"
-                : "Деньги и обязательства",
-              mode === "orders"
-                ? "Тапсырыстар және орындау"
-                : "Ақша және міндеттемелер",
-            )}
-          </h2>
-          <p>
-            {t(
-              "Каждая операция сохраняет автора, время и связь с документом.",
-              "Әр операция авторын, уақытын және құжатпен байланысын сақтайды.",
-            )}
-          </p>
-        </div>
         <Field label={t("Филиал", "Филиал")}>
           <select
             aria-label={t("Филиал", "Филиал")}
@@ -385,7 +412,11 @@ export function CommercePage({
             ).map((f) => (
               <button
                 key={f}
-                className="secondary-button"
+                className={
+                  f === "order" || f === "money"
+                    ? "primary-button"
+                    : "secondary-button"
+                }
                 disabled={busy || loading}
                 onClick={() => {
                   setForm(f as typeof form);
@@ -408,6 +439,33 @@ export function CommercePage({
           </div>
         )}
       </section>
+      {mode === "finance" && (
+        <div
+          className="workspace-tabs"
+          role="group"
+          aria-label={t("Разделы финансов", "Қаржы бөлімдері")}
+        >
+          {[
+            ["overview", t("Обзор", "Шолу")],
+            ["accounts", t("Счета и журнал", "Шоттар мен журнал")],
+            ["orders", t("Заказы и оплаты", "Тапсырыстар мен төлемдер")],
+            ["calendar", t("Календарь", "Күнтізбе")],
+            ["obligations", t("Обязательства", "Міндеттемелер")],
+            ["statements", t("Выписки", "Үзінділер")],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              aria-pressed={financeTab === id}
+              onClick={() => {
+                setFinanceTab(id);
+                setPage(1);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {!!error && (
         <div role="alert" className="commerce-alert">
           {errorMessage}
@@ -830,7 +888,7 @@ export function CommercePage({
         </section>
       )}
       {mode === "finance" && summary && (
-        <>
+        <div className="finance-overview" hidden={financeTab !== "overview"}>
           <section
             className="commerce-metrics"
             aria-label={t("Финансовая сводка", "Қаржы жиынтығы")}
@@ -879,17 +937,28 @@ export function CommercePage({
                 ),
                 summary.customer_credit_minor,
               ],
-            ].map(([name, value]) => (
-              <article className="panel commerce-metric" key={name}>
-                <span>{name}</span>
-                <strong>
-                  {value === null
-                    ? t("Недостаточно данных", "Дерек жеткіліксіз")
-                    : `${moneyText(value!)} ₸`}
-                </strong>
-              </article>
-            ))}
+            ]
+              .filter((_, index) => expandedMetrics || index < 4)
+              .map(([name, value]) => (
+                <article className="panel commerce-metric" key={name}>
+                  <span>{name}</span>
+                  <strong>
+                    {value === null
+                      ? t("Недостаточно данных", "Дерек жеткіліксіз")
+                      : `${moneyText(value!)} ₸`}
+                  </strong>
+                </article>
+              ))}
           </section>
+          <button
+            className="text-button"
+            aria-expanded={expandedMetrics}
+            onClick={() => setExpandedMetrics(!expandedMetrics)}
+          >
+            {expandedMetrics
+              ? t("Скрыть подробные показатели", "Толық көрсеткіштерді жасыру")
+              : t("Все показатели и прибыль", "Барлық көрсеткіштер мен пайда")}
+          </button>
           <p className="commerce-explanation">
             {t(
               "За весь период, выбранный филиал. Выручка: исполненные строки после скидок и возвратов; оплата показана отдельно. Цены без косвенных налогов, налоговый расчёт не настроен. Операционный результат неполный: полнота расходов не подтверждена.",
@@ -898,299 +967,376 @@ export function CommercePage({
             {t("Маржа", "Маржа")}: {summary.margin_percent ?? "–"}% ·{" "}
             {t("Наценка", "Үстеме")}: {summary.markup_percent ?? "–"}%
           </p>
-          <section className="panel commerce-section">
-            <h3>{t("Денежные счета · KZT", "Ақша шоттары · KZT")}</h3>
-            {accounts.length ? (
-              accounts.map((a) => (
-                <div className="commerce-row" key={a.id}>
-                  <span>{a.name}</span>
-                  <strong>{moneyText(a.balance_minor)} ₸</strong>
-                </div>
-              ))
-            ) : (
-              <p>{t("Счетов пока нет.", "Әзірге шоттар жоқ.")}</p>
-            )}
-          </section>
-        </>
+        </div>
       )}
-      <section className="panel commerce-section">
-        <div className="commerce-list-head">
-          <h3>
-            {mode === "orders"
-              ? t("Заказы", "Тапсырыстар")
-              : t("Заказы и сроки оплат", "Тапсырыстар мен төлем мерзімдері")}
-          </h3>
-          <Field
-            label={t(
-              "Поиск по клиенту или номеру",
-              "Клиент немесе нөмір бойынша іздеу",
-            )}
-          >
-            <input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(1);
-              }}
-            />
-          </Field>
-        </div>
-        {!loading && !orders?.items.length && (
-          <p>{t("Заказов не найдено.", "Тапсырыстар табылмады.")}</p>
-        )}
-        {orders?.items.map((o) => (
-          <button
-            className={`commerce-order ${selected === o.id ? "active" : ""}`}
-            key={o.id}
-            onClick={() => {
-              setSelected(o.id);
-              setDetail(null);
-              setHistoryPage(1);
-              setOperation(null);
-              setForm(null);
-            }}
-          >
-            <span>
-              <strong>
-                №{o.number} · {o.customer_name}
-              </strong>
-              <small>
-                {word(o.state)} · {t("Срок", "Мерзім")}: {o.due_date}
-              </small>
-            </span>
-            <span>
-              <strong>{moneyText(o.total_minor)} ₸</strong>
-              <small>
-                {t("Исполнено", "Орындалды")}: {moneyText(o.revenue_minor)} ·{" "}
-                {t("Оплачено", "Төленді")}: {moneyText(o.paid_minor)}
-              </small>
-            </span>
-          </button>
-        ))}
-        <div className="commerce-pagination">
-          <button
-            className="secondary-button"
-            disabled={loading || page === 1}
-            onClick={() => setPage((v) => v - 1)}
-          >
-            {t("Назад", "Артқа")}
-          </button>
-          <span>
-            {t("Страница", "Бет")} {page}
-          </span>
-          <button
-            className="secondary-button"
-            disabled={
-              loading ||
-              page >=
-                Math.max(
-                  orders?.pagination.pages || 1,
-                  ledger?.pagination.pages || 1,
-                  obligations?.pagination.pages || 1,
-                )
-            }
-            onClick={() => setPage((v) => v + 1)}
-          >
-            {t("Далее", "Келесі")}
-          </button>
-        </div>
-      </section>
-      {detail && (
+      {mode === "finance" && (
         <section
           className="panel commerce-section"
-          aria-label={t("Карточка заказа", "Тапсырыс карточкасы")}
+          hidden={financeTab !== "accounts"}
         >
-          <h3>
-            {t("Заказ", "Тапсырыс")} №{detail.order.number} ·{" "}
-            {word(detail.order.state)}
-          </h3>
-          <p>
-            {detail.order.customer_name} ·{" "}
-            {detail.order.delivery === "delivery"
-              ? t("Доставка", "Жеткізу")
-              : t("Выдача", "Беру")}{" "}
-            · {detail.order.note}
-          </p>
-          <div className="commerce-order-totals">
-            <p>
-              {t("Долг за исполненное", "Орындалған тапсырыс қарызы")}:{" "}
-              <strong>{moneyText(detail.order.receivable_minor)} ₸</strong>
-            </p>
-            <p>
-              {t(
-                "Ожидается по всему заказу",
-                "Бүкіл тапсырыс бойынша күтіледі",
-              )}
-              : <strong>{moneyText(detail.order.expected_minor)} ₸</strong>
-            </p>
-            <p>
-              {t(
-                "Переплата после отмены / возврата",
-                "Бас тарту / қайтарудан кейінгі артық төлем",
-              )}
-              : <strong>{moneyText(detail.order.credit_minor)} ₸</strong>
-            </p>
-          </div>
-          {mode === "orders" && write && (
-            <div className="commerce-actions">
-              {detail.order.state === "draft" && (
-                <button
-                  className="primary-button"
-                  disabled={loading || busy}
-                  onClick={() => {
-                    setOperation({ kind: "confirm" });
-                    setForm(null);
-                  }}
-                >
-                  {t("Подтвердить и зарезервировать", "Растау және резервтеу")}
-                </button>
-              )}
-              {["draft", "confirmed", "partial"].includes(
-                detail.order.state,
-              ) && (
-                <button
-                  className="secondary-button"
-                  disabled={loading || busy}
-                  onClick={() => {
-                    setOperation({ kind: "cancel" });
-                    setForm(null);
-                  }}
-                >
-                  {t("Отменить остаток", "Қалдықты болдырмау")}
-                </button>
-              )}
-            </div>
-          )}
-          {detail.lines.map((l) => (
-            <article key={l.id} className="commerce-line-card">
-              <div>
-                <strong>
-                  {locale === "kk" && l.name_kk ? l.name_kk : l.name_ru} ·{" "}
-                  {l.sku}
-                </strong>
-                <p>
-                  {quantityText(l.quantity)} {l.unit} × {quantityText(l.price)}{" "}
-                  ₸ · {t("Скидка", "Жеңілдік")} {quantityText(l.discount)}% ·{" "}
-                  {moneyText(l.total_minor)} ₸
-                </p>
-                <p>
-                  {t("Исполнено", "Орындалды")}: {quantityText(l.fulfilled)} ·{" "}
-                  {t("Возвращено", "Қайтарылды")}: {quantityText(l.returned)}
-                </p>
+          <h3>{t("Денежные счета · KZT", "Ақша шоттары · KZT")}</h3>
+          {accounts.length ? (
+            accounts.map((a) => (
+              <div className="commerce-row" key={a.id}>
+                <span>{a.name}</span>
+                <strong>{moneyText(a.balance_minor)} ₸</strong>
               </div>
-              {mode === "orders" &&
-                write &&
-                ["confirmed", "partial"].includes(detail.order.state) &&
-                l.fulfilled !== l.quantity && (
+            ))
+          ) : (
+            <p>{t("Счетов пока нет.", "Әзірге шоттар жоқ.")}</p>
+          )}
+        </section>
+      )}
+      <div
+        className="orders-workspace"
+        hidden={mode === "finance" && financeTab !== "orders" && !detail}
+      >
+        <section
+          className="panel commerce-section order-list-panel"
+          hidden={mode === "finance" && financeTab !== "orders"}
+        >
+          <div className="commerce-list-head">
+            <h3>
+              {mode === "orders"
+                ? t("Заказы", "Тапсырыстар")
+                : t("Заказы и сроки оплат", "Тапсырыстар мен төлем мерзімдері")}
+            </h3>
+            <Field
+              label={t(
+                "Поиск по клиенту или номеру",
+                "Клиент немесе нөмір бойынша іздеу",
+              )}
+            >
+              <input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </Field>
+          </div>
+          {!loading && !orders?.items.length && (
+            <p>{t("Заказов не найдено.", "Тапсырыстар табылмады.")}</p>
+          )}
+          <div className="orders-table-scroll">
+            <table className="orders-table">
+              <caption className="sr-only">
+                {t(
+                  "Заказы, исполнение и оплата",
+                  "Тапсырыстар, орындау және төлем",
+                )}
+              </caption>
+              <thead>
+                <tr>
+                  <th>{t("Заказ / клиент", "Тапсырыс / клиент")}</th>
+                  <th>{t("Срок", "Мерзім")}</th>
+                  <th>{t("Исполнение", "Орындалуы")}</th>
+                  <th>{t("Сумма", "Сома")}</th>
+                  <th>{t("Оплата", "Төлем")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders?.items.map((o) => (
+                  <tr
+                    key={o.id}
+                    className={selected === o.id ? "selected" : ""}
+                  >
+                    <td>
+                      <button
+                        className={`commerce-order ${selected === o.id ? "active" : ""}`}
+                        aria-expanded={selected === o.id}
+                        onClick={(event) => {
+                          lastOrderButton.current = event.currentTarget;
+                          setSelected(o.id);
+                          setDetail(null);
+                          setHistoryPage(1);
+                          setOperation(null);
+                          setForm(null);
+                        }}
+                      >
+                        <strong>
+                          №{o.number} · {o.customer_name}
+                        </strong>
+                      </button>
+                    </td>
+                    <td data-label={t("Срок", "Мерзім")}>{o.due_date}</td>
+                    <td data-label={t("Исполнение", "Орындалуы")}>
+                      <span className={`order-status status-${o.state}`}>
+                        {word(o.state)}
+                      </span>
+                      <small>{moneyText(o.revenue_minor)} ₸</small>
+                    </td>
+                    <td data-label={t("Сумма", "Сома")} className="numeric">
+                      <strong>{moneyText(o.total_minor)} ₸</strong>
+                    </td>
+                    <td data-label={t("Оплата", "Төлем")}>
+                      <strong>{moneyText(o.paid_minor)} ₸</strong>
+                      <small>
+                        {t("Осталось", "Қалды")}: {moneyText(o.expected_minor)}{" "}
+                        ₸
+                      </small>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="commerce-pagination">
+            <button
+              className="secondary-button"
+              disabled={loading || page === 1}
+              onClick={() => setPage((v) => v - 1)}
+            >
+              {t("Назад", "Артқа")}
+            </button>
+            <span>
+              {t("Страница", "Бет")} {page}
+            </span>
+            <button
+              className="secondary-button"
+              disabled={
+                loading ||
+                page >=
+                  Math.max(
+                    orders?.pagination.pages || 1,
+                    ledger?.pagination.pages || 1,
+                    obligations?.pagination.pages || 1,
+                  )
+              }
+              onClick={() => setPage((v) => v + 1)}
+            >
+              {t("Далее", "Келесі")}
+            </button>
+          </div>
+        </section>
+        {detail && (
+          <section
+            className="panel commerce-section order-detail-panel"
+            ref={detailRef}
+            tabIndex={-1}
+            aria-label={t("Карточка заказа", "Тапсырыс карточкасы")}
+          >
+            <button
+              className="text-button order-detail-back"
+              onClick={closeDetail}
+              disabled={busy}
+            >
+              <ArrowLeft size={17} />
+              {t("К списку заказов", "Тапсырыстар тізіміне")}
+            </button>
+            <h3>
+              {t("Заказ", "Тапсырыс")} №{detail.order.number} ·{" "}
+              {word(detail.order.state)}
+            </h3>
+            <p>
+              {detail.order.customer_name} ·{" "}
+              {detail.order.delivery === "delivery"
+                ? t("Доставка", "Жеткізу")
+                : t("Выдача", "Беру")}{" "}
+              · {detail.order.note}
+            </p>
+            <div className="order-financial-summary">
+              <div>
+                <span>{t("Сумма заказа", "Тапсырыс сомасы")}</span>
+                <strong>{moneyText(detail.order.total_minor)} ₸</strong>
+              </div>
+              <div>
+                <span>{t("Оплачено", "Төленді")}</span>
+                <strong>{moneyText(detail.order.paid_minor)} ₸</strong>
+              </div>
+            </div>
+            <div className="commerce-order-totals">
+              <p>
+                {t("Долг за исполненное", "Орындалған тапсырыс қарызы")}:{" "}
+                <strong>{moneyText(detail.order.receivable_minor)} ₸</strong>
+              </p>
+              <p>
+                {t(
+                  "Ожидается по всему заказу",
+                  "Бүкіл тапсырыс бойынша күтіледі",
+                )}
+                : <strong>{moneyText(detail.order.expected_minor)} ₸</strong>
+              </p>
+              <p>
+                {t(
+                  "Переплата после отмены / возврата",
+                  "Бас тарту / қайтарудан кейінгі артық төлем",
+                )}
+                : <strong>{moneyText(detail.order.credit_minor)} ₸</strong>
+              </p>
+            </div>
+            {mode === "orders" && write && (
+              <div className="commerce-actions">
+                {detail.order.state === "draft" && (
+                  <button
+                    className="primary-button"
+                    disabled={loading || busy}
+                    onClick={() => {
+                      setOperation({ kind: "confirm" });
+                      setForm(null);
+                    }}
+                  >
+                    {t(
+                      "Подтвердить и зарезервировать",
+                      "Растау және резервтеу",
+                    )}
+                  </button>
+                )}
+                {["draft", "confirmed", "partial"].includes(
+                  detail.order.state,
+                ) && (
+                  <button
+                    className="secondary-button"
+                    disabled={loading || busy}
+                    onClick={() => {
+                      setOperation({ kind: "cancel" });
+                      setForm(null);
+                    }}
+                  >
+                    {t("Отменить остаток", "Қалдықты болдырмау")}
+                  </button>
+                )}
+              </div>
+            )}
+            {detail.lines.map((l) => (
+              <article key={l.id} className="commerce-line-card">
+                <div>
+                  <strong>
+                    {locale === "kk" && l.name_kk ? l.name_kk : l.name_ru} ·{" "}
+                    {l.sku}
+                  </strong>
+                  <p>
+                    {quantityText(l.quantity)} {l.unit} ×{" "}
+                    {quantityText(l.price)} ₸ · {t("Скидка", "Жеңілдік")}{" "}
+                    {quantityText(l.discount)}% · {moneyText(l.total_minor)} ₸
+                  </p>
+                  <p>
+                    {t("Исполнено", "Орындалды")}: {quantityText(l.fulfilled)} ·{" "}
+                    {t("Возвращено", "Қайтарылды")}: {quantityText(l.returned)}
+                  </p>
+                </div>
+                {mode === "orders" &&
+                  write &&
+                  ["confirmed", "partial"].includes(detail.order.state) &&
+                  l.fulfilled !== l.quantity && (
+                    <button
+                      className="secondary-button"
+                      disabled={busy || loading}
+                      onClick={() => {
+                        setOperation({
+                          kind: "fulfill",
+                          lineId: l.id,
+                          service: l.kind === "service",
+                        });
+                        setForm(null);
+                      }}
+                    >
+                      {t("Исполнить часть", "Бір бөлігін орындау")}
+                    </button>
+                  )}
+              </article>
+            ))}
+            <h4>
+              {t(
+                "История и связанные операции",
+                "Тарих және байланысты операциялар",
+              )}
+            </h4>
+            <div className="commerce-pagination">
+              <button
+                className="secondary-button"
+                disabled={loading || historyPage === 1}
+                onClick={() => setHistoryPage((v) => v - 1)}
+              >
+                {t("Новые события", "Жаңа оқиғалар")}
+              </button>
+              <span>
+                {historyPage} / {detail.eventPagination.pages || 1}
+              </span>
+              <button
+                className="secondary-button"
+                disabled={
+                  loading || historyPage >= detail.eventPagination.pages
+                }
+                onClick={() => setHistoryPage((v) => v + 1)}
+              >
+                {t("Предыдущие события", "Бұрынғы оқиғалар")}
+              </button>
+            </div>
+            {detail.events.map((e) => (
+              <article className="commerce-event" key={e.id}>
+                <div>
+                  <strong>{word(e.kind)}</strong>
+                  <small>
+                    {businessDate(
+                      new Date(e.created_at),
+                      locale,
+                      org.timezone,
+                      true,
+                    )}{" "}
+                    · {e.actor_name}
+                  </small>
+                  <p>
+                    {e.note}
+                    {e.line_id ? ` · ${quantityText(e.quantity)}` : ""}
+                    {e.kind === "fulfill" || e.kind === "return"
+                      ? ` · ${t("Выручка", "Түсім")}: ${moneyText(e.revenue_minor)} ₸`
+                      : ""}
+                  </p>
+                  {e.cost_minor !== undefined &&
+                    ["fulfill", "return"].includes(e.kind) && (
+                      <small>
+                        {t("Себестоимость", "Өзіндік құн")}:{" "}
+                        {e.cost_minor === null
+                          ? t("Не указана", "Көрсетілмеген")
+                          : `${moneyText(e.cost_minor)} ₸`}
+                      </small>
+                    )}
+                  {e.source_id && (
+                    <small>
+                      {t("Исходное исполнение", "Бастапқы орындау")}:{" "}
+                      {e.source_id}
+                    </small>
+                  )}
+                </div>
+                {mode === "orders" && write && e.kind === "fulfill" && (
                   <button
                     className="secondary-button"
                     disabled={busy || loading}
                     onClick={() => {
-                      setOperation({
-                        kind: "fulfill",
-                        lineId: l.id,
-                        service: l.kind === "service",
-                      });
+                      setOperation({ kind: "return", eventId: e.id });
                       setForm(null);
                     }}
                   >
-                    {t("Исполнить часть", "Бір бөлігін орындау")}
+                    {t("Оформить возврат", "Қайтаруды рәсімдеу")}
                   </button>
                 )}
-            </article>
-          ))}
-          <h4>
-            {t(
-              "История и связанные операции",
-              "Тарих және байланысты операциялар",
-            )}
-          </h4>
-          <div className="commerce-pagination">
-            <button
-              className="secondary-button"
-              disabled={loading || historyPage === 1}
-              onClick={() => setHistoryPage((v) => v - 1)}
-            >
-              {t("Новые события", "Жаңа оқиғалар")}
-            </button>
-            <span>
-              {historyPage} / {detail.eventPagination.pages || 1}
-            </span>
-            <button
-              className="secondary-button"
-              disabled={loading || historyPage >= detail.eventPagination.pages}
-              onClick={() => setHistoryPage((v) => v + 1)}
-            >
-              {t("Предыдущие события", "Бұрынғы оқиғалар")}
-            </button>
-          </div>
-          {detail.events.map((e) => (
-            <article className="commerce-event" key={e.id}>
-              <div>
-                <strong>{word(e.kind)}</strong>
-                <small>
-                  {businessDate(
-                    new Date(e.created_at),
-                    locale,
-                    org.timezone,
-                    true,
-                  )}{" "}
-                  · {e.actor_name}
-                </small>
-                <p>
-                  {e.note}
-                  {e.line_id ? ` · ${quantityText(e.quantity)}` : ""}
-                  {e.kind === "fulfill" || e.kind === "return"
-                    ? ` · ${t("Выручка", "Түсім")}: ${moneyText(e.revenue_minor)} ₸`
-                    : ""}
-                </p>
-                {e.cost_minor !== undefined &&
-                  ["fulfill", "return"].includes(e.kind) && (
-                    <small>
-                      {t("Себестоимость", "Өзіндік құн")}:{" "}
-                      {e.cost_minor === null
-                        ? t("Не указана", "Көрсетілмеген")
-                        : `${moneyText(e.cost_minor)} ₸`}
-                    </small>
-                  )}
-                {e.source_id && (
-                  <small>
-                    {t("Исходное исполнение", "Бастапқы орындау")}:{" "}
-                    {e.source_id}
-                  </small>
-                )}
-              </div>
-              {mode === "orders" && write && e.kind === "fulfill" && (
-                <button
-                  className="secondary-button"
-                  disabled={busy || loading}
-                  onClick={() => {
-                    setOperation({ kind: "return", eventId: e.id });
-                    setForm(null);
-                  }}
-                >
-                  {t("Оформить возврат", "Қайтаруды рәсімдеу")}
-                </button>
-              )}
-            </article>
-          ))}
-        </section>
-      )}
+              </article>
+            ))}
+          </section>
+        )}
+      </div>
       {mode === "finance" && (
         <>
-          <PaymentCalendar
-            key={branch}
-            base={base}
-            branch={branch}
-            revision={revision}
-            locale={locale}
-            onOrder={(id) => {
-              setSelected(id);
-              setDetail(null);
-              setHistoryPage(1);
-            }}
-          />
-          <section className="panel commerce-section">
+          <div hidden={financeTab !== "calendar"}>
+            <PaymentCalendar
+              key={branch}
+              base={base}
+              branch={branch}
+              revision={revision}
+              locale={locale}
+              onOrder={(id) => {
+                setSelected(id);
+                setDetail(null);
+                setHistoryPage(1);
+              }}
+            />
+          </div>
+          <section
+            className="panel commerce-section"
+            hidden={financeTab !== "obligations"}
+          >
             <h3>
               {t(
                 "Обязательства и сроки поставщиков",
@@ -1221,7 +1367,10 @@ export function CommercePage({
               </article>
             ))}
           </section>
-          <section className="panel commerce-section">
+          <section
+            className="panel commerce-section"
+            hidden={financeTab !== "accounts"}
+          >
             <h3>{t("Журнал денег", "Ақша журналы")}</h3>
             {!ledger?.items.length && (
               <p>{t("Операций нет.", "Операциялар жоқ.")}</p>
@@ -1266,6 +1415,36 @@ export function CommercePage({
               </article>
             ))}
           </section>
+          {["accounts", "obligations"].includes(financeTab) && (
+            <div className="commerce-pagination">
+              <button
+                className="secondary-button"
+                disabled={loading || page === 1}
+                onClick={() => setPage((v) => v - 1)}
+              >
+                {t("Назад", "Артқа")}
+              </button>
+              <span>
+                {t("Страница", "Бет")} {page}
+              </span>
+              <button
+                className="secondary-button"
+                disabled={
+                  loading ||
+                  page >=
+                    (financeTab === "accounts"
+                      ? ledger?.pagination.pages || 1
+                      : obligations?.pagination.pages || 1)
+                }
+                onClick={() => setPage((v) => v + 1)}
+              >
+                {t("Далее", "Келесі")}
+              </button>
+            </div>
+          )}
+          <div hidden={financeTab !== "statements"}>
+            <BankStatements workspace={workspace} locale={locale} />
+          </div>
         </>
       )}
     </div>

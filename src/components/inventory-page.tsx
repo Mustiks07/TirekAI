@@ -1,4 +1,5 @@
 "use client";
+import { StockThresholds } from "./stock-thresholds";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   PackagePlus,
@@ -982,23 +983,25 @@ export function InventoryPage({
                 className={`catalog-card ${!i.active ? "archived-card" : ""}`}
                 key={i.id}
               >
-                <div className="catalog-card-top">
-                  <span className="inventory-icon">
-                    <Package size={22} />
-                  </span>
-                  <span className="import-status">
-                    {i.active ? t[i.kind] : t.archived}
-                  </span>
+                <div className="catalog-identity">
+                  <div className="catalog-card-top">
+                    <span className="inventory-icon">
+                      <Package size={22} />
+                    </span>
+                    <span className="import-status">
+                      {i.active ? t[i.kind] : t.archived}
+                    </span>
+                  </div>
+                  <small>
+                    {i.sku}
+                    {i.variant ? ` · ${i.variant}` : ""}
+                  </small>
+                  <h3>{name(i)}</h3>
+                  <p>
+                    {i.category || "–"} · {unitName(i.base_unit)}
+                    {i.barcode ? ` · ${i.barcode}` : ""}
+                  </p>
                 </div>
-                <small>
-                  {i.sku}
-                  {i.variant ? ` · ${i.variant}` : ""}
-                </small>
-                <h3>{name(i)}</h3>
-                <p>
-                  {i.category || "–"} · {unitName(i.base_unit)}
-                  {i.barcode ? ` · ${i.barcode}` : ""}
-                </p>
                 <div className="catalog-prices">
                   <div>
                     <span>{t.sale_price}</span>
@@ -1058,6 +1061,7 @@ export function InventoryPage({
             setCatalogPage(p);
           })}
       </section>
+      <StockThresholds workspace={workspace} locale={locale} />
     </div>
   );
 }

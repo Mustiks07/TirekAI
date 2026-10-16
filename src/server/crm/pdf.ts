@@ -9,7 +9,7 @@ export async function quotePdf(q: Quote, locale: "ru" | "kk") {
       margin: 48,
       info: {
         Title: `${t("Предложение", "Ұсыныс")} ${q.number}`,
-        Author: "Басқару",
+        Author: "TirekAI",
       },
     }),
     parts: Buffer[] = [];

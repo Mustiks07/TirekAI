@@ -22,7 +22,7 @@ async function createOrg(page: Page, name: string) {
     .getByRole("button", { name: "Создать организацию", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Сегодня.", exact: true }),
+    page.getByRole("heading", { name: "Сегодня", exact: true }),
   ).toBeVisible();
 }
 test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile and KK/RU", async ({
@@ -35,6 +35,7 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   const employeeEmail = `staff-${randomUUID()}@example.test`;
   await register(page, ownerEmail, "Мустафа");
   await createOrg(page, "Taraz Market");
+  await page.locator(".onboarding-disclosure > summary").click();
   await expect(
     page.getByText("Пространство создано.", { exact: false }),
   ).toBeVisible();
@@ -105,7 +106,7 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
     .getByRole("button", { name: "Принять приглашение", exact: true })
     .click();
   await expect(
-    employee.getByRole("heading", { name: "Сегодня.", exact: true }),
+    employee.getByRole("heading", { name: "Сегодня", exact: true }),
   ).toBeVisible();
   await employee
     .getByRole("navigation")
@@ -172,7 +173,7 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   await page.getByRole("button", { name: "ҚАЗ", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "kk");
   await expect(
-    page.getByRole("heading", { name: "Бүгін.", exact: true }),
+    page.getByRole("heading", { name: "Бүгін", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: "docs/evidence/desktop-kk.png",
@@ -195,7 +196,7 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   }
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Бүгін.", exact: true }),
+    page.getByRole("heading", { name: "Бүгін", exact: true }),
   ).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

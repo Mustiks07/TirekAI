@@ -1,6 +1,6 @@
 /* Only public offline assets are cached. Business pages, APIs and mutations
    always use the network; no background sync or offline command replay. */
-const CACHE = "basqaru-public-v1";
+const CACHE = "tirekai-public-v2";
 const ASSETS = [
   "/offline.html",
   "/icons/app-192.png",
@@ -14,7 +14,11 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       for (const key of await caches.keys())
-        if (key.startsWith("basqaru-public-") && key !== CACHE)
+        if (
+          (key.startsWith("basqaru-public-") ||
+            key.startsWith("tirekai-public-")) &&
+          key !== CACHE
+        )
           await caches.delete(key);
       await self.clients.claim();
     })(),

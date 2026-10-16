@@ -31,7 +31,7 @@ export async function materialPdf(input: {
       autoFirstPage: material !== "price_tag",
       info: {
         Title: `${text.title} · v${input.version}`,
-        Author: "Басқару",
+        Author: "TirekAI",
       },
     }),
     parts: Buffer[] = [];

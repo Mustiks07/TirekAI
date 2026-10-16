@@ -2,15 +2,15 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Басқару: бизнес кеңістігі",
-    short_name: "Басқару",
+    name: "TirekAI: бизнес кеңістігі",
+    short_name: "TirekAI",
     description: "Бизнес, клиенттер және қойма. Бизнес, клиенты и склад.",
     lang: "kk",
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#f5f6f8",
-    theme_color: "#244936",
+    background_color: "#f5f6f2",
+    theme_color: "#173c33",
     icons: [
       {
         src: "/icons/app-192.png",

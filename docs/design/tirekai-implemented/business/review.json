@@ -1,0 +1,817 @@
+{
+  "checks": [
+    {
+      "id": "section-00",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-01",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-02",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-03",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-04",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-05",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-06",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-07",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-08",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-09",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-10",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-11",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-12",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-13",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-14",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-15",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-16",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-17",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-00",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-01",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-02",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-03",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-04",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-05",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-06",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-07",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-08",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-09",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-10",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-11",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-12",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-13",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-14",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-15",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-16",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-17",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-00",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-01",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-02",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-03",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-04",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-05",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-06",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-07",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-08",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-09",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-10",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-11",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-12",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-13",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-14",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-15",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-16",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-17",
+      "width": 360,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-00",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-01",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-02",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-03",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-04",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-05",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-06",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-07",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-08",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-09",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-10",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-11",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-12",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-13",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-14",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-15",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-16",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-17",
+      "width": 768,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-00",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-01",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-02",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-03",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-04",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-05",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-06",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-07",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-08",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-09",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-10",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-11",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-12",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-13",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-14",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-15",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-16",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "section-17",
+      "width": 1024,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "order-detail",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "order-create",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-0",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-1",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-2",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-3",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-4",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-5",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-form-0",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-form-1",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-form-2",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "situation-open",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "invite-dialog",
+      "width": 1440,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "order-detail",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "order-create",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-0",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-1",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-2",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-3",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-4",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-tab-5",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-form-0",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-form-1",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "finance-form-2",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "situation-open",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    },
+    {
+      "id": "invite-dialog",
+      "width": 390,
+      "overflow": 0,
+      "emptyPanels": 0,
+      "violations": []
+    }
+  ],
+  "errors": []
+}

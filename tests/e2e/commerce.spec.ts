@@ -198,6 +198,7 @@ test("orders, partial fulfillment, payment, return, refund and financial breakdo
     gross_profit_minor: "8000",
     receivable_minor: "0",
   });
+  await page.getByRole("button", { name: "Календарь", exact: true }).click();
   const calendar = page.getByRole("region", {
     name: "Платёжный календарь и сценарий",
     exact: true,
@@ -235,7 +236,7 @@ test("orders, partial fulfillment, payment, return, refund and financial breakdo
   });
   await page.getByRole("button", { name: "ҚАЗ", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Ақша және міндеттемелер", exact: true }),
+    page.getByRole("heading", { name: "Қаржы", exact: true }),
   ).toBeVisible();
   for (const width of [360, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });

@@ -105,7 +105,7 @@ test("customer CSV preview, durable import, replay, editing and mobile KK", asyn
   await page.getByRole("button", { name: "ҚАЗ", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
-    page.getByRole("heading", { name: "Клиенттер.", exact: true }),
+    page.getByRole("heading", { name: "Клиенттер", exact: true }),
   ).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({

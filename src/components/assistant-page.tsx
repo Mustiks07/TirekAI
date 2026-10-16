@@ -92,8 +92,13 @@ export function AssistantPage({
         </p>
       )}
       {status && (
-        <section className="panel">
-          <h2>{t("Состояние помощника", "Көмекші күйі")}</h2>
+        <details className="panel assistant-settings">
+          <summary>
+            {t(
+              "Состояние помощника и настройки",
+              "Көмекшінің күйі мен баптаулары",
+            )}
+          </summary>
           <p>
             {t("Модель", "Модель")}: {stateText(status.provider.status, locale)}
             {status.provider.model && ` · ${status.provider.model}`} ·{" "}
@@ -196,9 +201,21 @@ export function AssistantPage({
               </ActionForm>
             </details>
           )}
-        </section>
+        </details>
       )}
-      <section className="panel">
+      <section className="panel assistant-conversation">
+        <div className="assistant-heading">
+          <span className="ai-label">AI</span>
+          <h2>{t("Помощник TirekAI", "TirekAI көмекшісі")}</h2>
+        </div>
+        {status?.provider.status === "not_configured" && (
+          <p className="commerce-alert">
+            {t(
+              "Помощник пока не подключён. История разговоров доступна.",
+              "Көмекші әзірге қосылмаған. Әңгімелер тарихы қолжетімді.",
+            )}
+          </p>
+        )}
         <div className="commerce-toolbar">
           <Field label={t("Разговор", "Әңгіме")}>
             <select
@@ -228,6 +245,38 @@ export function AssistantPage({
           </Field>
         </div>
         <div className="assistant-log" aria-live="polite">
+          {!current?.messages.length && (
+            <div className="assistant-empty">
+              <h3>{t("С чего начнём?", "Неден бастаймыз?")}</h3>
+              <p>
+                {t(
+                  "Задайте вопрос о бизнесе. Помощник использует доступные вам данные и показывает источники.",
+                  "Бизнес туралы сұрақ қойыңыз. Көмекші сізге қолжетімді деректерді пайдаланып, дереккөздерді көрсетеді.",
+                )}
+              </p>
+              <div className="assistant-suggestions">
+                {[
+                  t(
+                    "Какие заказы требуют внимания?",
+                    "Қай тапсырыстар назар аударуды қажет етеді?",
+                  ),
+                  t("Что заканчивается на складе?", "Қоймада не азайып жатыр?"),
+                  t(
+                    "Какие задачи просрочены?",
+                    "Қай тапсырмалардың мерзімі өтті?",
+                  ),
+                ].map((prompt) => (
+                  <button
+                    className="secondary-button"
+                    key={prompt}
+                    onClick={() => setText(prompt)}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {current?.messages.map((m) => (
             <article key={m.id} className={`assistant-message ${m.role}`}>
               <strong>

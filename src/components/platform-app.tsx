@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -9,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Menu,
   ArrowDownLeft,
   BookOpen,
   Bot,
@@ -69,7 +71,6 @@ import { ApprovalsPage } from "./approvals-page";
 import { AutomationsPage } from "./automations-page";
 import { AssistantPage } from "./assistant-page";
 import { IntegrationsPage } from "./integrations-page";
-import { BankStatements } from "./bank-statements";
 import { ChannelOrders } from "./channel-orders";
 import { VideoPage } from "./video-page";
 import { OutcomesPage } from "./outcomes-page";
@@ -327,7 +328,9 @@ function Auth({
         <Link className="brand" href="/">
           <Mark />
           <span>
-            {t.brand}
+            <span className="brand-name">
+              Tirek<span>AI</span>
+            </span>
             <small>{t.workspace}</small>
           </span>
         </Link>
@@ -856,6 +859,31 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
   const [organizationId, setOrganizationId] = useState("");
   const [workspace, setWorkspace] = useState<Workspace>();
   const [page, setPage] = useState<Page>("today");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.querySelector<HTMLButtonElement>(".mobile-menu-close")?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        requestAnimationFrame(() => menuButton.current?.focus());
+      }
+    };
+    document.addEventListener("keydown", escape);
+    const desktop = window.matchMedia("(min-width: 801px)");
+    const resized = () => {
+      if (desktop.matches) setMenuOpen(false);
+    };
+    desktop.addEventListener("change", resized);
+    return () => {
+      document.removeEventListener("keydown", escape);
+      desktop.removeEventListener("change", resized);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menuOpen]);
   const [focusedOrder, setFocusedOrder] = useState<{
     id: string;
     branchId: string;
@@ -966,6 +994,11 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
     window.history.replaceState(null, "", window.location.pathname);
   }
   function navigate(p: Page) {
+    setMenuOpen(false);
+    window.scrollTo({ top: 0 });
+    requestAnimationFrame(() =>
+      document.getElementById("main-content")?.focus({ preventScroll: true }),
+    );
     setFocusedOrder(null);
     setFocusedPurchase(null);
     setPage(p);
@@ -1044,7 +1077,11 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
         <div className="auth-top">
           <div className="brand">
             <Mark />
-            <span>{t.brand}</span>
+            <span>
+              <span className="brand-name">
+                Tirek<span>AI</span>
+              </span>
+            </span>
           </div>
           <div className="top-actions">
             <Language locale={locale} onChange={changeLocale} />
@@ -1083,15 +1120,27 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
   const ready = workspace?.organization.id === organizationId;
   const currentOrg = session.organizations.find((o) => o.id === organizationId);
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${menuOpen ? "menu-open" : ""}`}>
       <a href="#main-content" className="skip-link">
         {t.continue}
       </a>
-      <aside className="sidebar">
+      <aside className="sidebar" id="workspace-menu">
+        <button
+          className="mobile-menu-close icon-button"
+          aria-label={t.dismiss}
+          onClick={() => {
+            setMenuOpen(false);
+            menuButton.current?.focus();
+          }}
+        >
+          <X size={20} />
+        </button>
         <Link className="brand" href="/">
           <Mark />
           <span>
-            {t.brand}
+            <span className="brand-name">
+              Tirek<span>AI</span>
+            </span>
             <small>{t.workspace}</small>
           </span>
         </Link>
@@ -1123,29 +1172,28 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           </select>
           <ChevronDown size={15} />
         </div>
-        <div className="sidebar-label">{t.workspace}</div>
         <nav aria-label={t.workspace}>
           {(
             [
-              { id: "today", Icon: LayoutDashboard },
-              { id: "tasks", Icon: ListChecks },
-              { id: "approvals", Icon: ClipboardCheck },
-              { id: "customers", Icon: Users },
-              { id: "inventory", Icon: Database },
-              { id: "orders", Icon: CheckCheck },
-              { id: "finance", Icon: ArrowRight },
-              { id: "purchasing", Icon: Building2 },
-              { id: "knowledge", Icon: BookOpen },
-              { id: "automations", Icon: Workflow },
-              { id: "assistant", Icon: Bot },
-              { id: "integrations", Icon: Plug },
-              { id: "video", Icon: Camera },
-              { id: "marketing", Icon: Megaphone },
-              { id: "industry", Icon: Building2 },
-              { id: "outcomes", Icon: CheckCheck },
-              { id: "team", Icon: Users },
-              { id: "organization", Icon: Building2 },
-              { id: "activity", Icon: History },
+              { id: "today", Icon: LayoutDashboard, group: "work" },
+              { id: "tasks", Icon: ListChecks, group: "work" },
+              { id: "approvals", Icon: ClipboardCheck, group: "work" },
+              { id: "orders", Icon: CheckCheck, group: "business" },
+              { id: "customers", Icon: Users, group: "business" },
+              { id: "inventory", Icon: Database, group: "business" },
+              { id: "purchasing", Icon: Building2, group: "business" },
+              { id: "finance", Icon: ArrowRight, group: "business" },
+              { id: "industry", Icon: Building2, group: "business" },
+              { id: "outcomes", Icon: CheckCheck, group: "management" },
+              { id: "marketing", Icon: Megaphone, group: "management" },
+              { id: "automations", Icon: Workflow, group: "management" },
+              { id: "knowledge", Icon: BookOpen, group: "management" },
+              { id: "video", Icon: Camera, group: "management" },
+              { id: "assistant", Icon: Bot, group: "assistant" },
+              { id: "team", Icon: Users, group: "system" },
+              { id: "organization", Icon: Building2, group: "system" },
+              { id: "integrations", Icon: Plug, group: "system" },
+              { id: "activity", Icon: History, group: "system" },
             ] as const
           )
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
@@ -1213,17 +1261,31 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                 (workspace &&
                   can(workspace.organization.role, "customers:read")),
             )
-            .map(({ id, Icon }) => (
-              <button
-                key={id}
-                className={`nav-item ${page === id ? "selected" : ""}`}
-                onClick={() => navigate(id)}
-                aria-current={page === id ? "page" : undefined}
-              >
-                <Icon size={19} />
-                <span>{t[id]}</span>
-                {page === id && <span className="nav-dot" />}
-              </button>
+            .map(({ id, Icon, group }, index, items) => (
+              <Fragment key={id}>
+                {(index === 0 || items[index - 1].group !== group) && (
+                  <div className="nav-group-label">
+                    {
+                      {
+                        work: locale === "ru" ? "Работа" : "Жұмыс",
+                        business: locale === "ru" ? "Бизнес" : "Бизнес",
+                        management: locale === "ru" ? "Управление" : "Басқару",
+                        assistant: "TirekAI",
+                        system: locale === "ru" ? "Система" : "Жүйе",
+                      }[group]
+                    }
+                  </div>
+                )}
+                <button
+                  className={`nav-item ${page === id ? "selected" : ""}`}
+                  onClick={() => navigate(id)}
+                  aria-current={page === id ? "page" : undefined}
+                >
+                  <Icon size={19} />
+                  <span>{t[id]}</span>
+                  {page === id && <span className="nav-dot" />}
+                </button>
+              </Fragment>
             ))}
         </nav>
         <button className="new-org-button" onClick={() => setModal("newOrg")}>
@@ -1231,14 +1293,10 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           {t.newOrg}
         </button>
         <div className="sidebar-bottom">
-          <div className="foundation-card">
-            <span className="tag">
-              <span className="status-dot" />
-              {t.testData}
-            </span>
-            <p>{t.foundationNote}</p>
-            <small>{t.futureNote}</small>
-          </div>
+          <span className="tag sidebar-test">
+            <span className="status-dot" />
+            {t.testData}
+          </span>
           <div className="user-card">
             <span className="user-avatar">{session.user.name.slice(0, 1)}</span>
             <div>
@@ -1257,8 +1315,57 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           </div>
         </div>
       </aside>
-      <div className="app-main">
+      <div
+        className="mobile-bottom"
+        role="region"
+        aria-label={locale === "ru" ? "Быстрые разделы" : "Жылдам бөлімдер"}
+      >
+        <button
+          onClick={() => navigate("today")}
+          aria-pressed={page === "today"}
+        >
+          <LayoutDashboard size={21} />
+          <span>{t.today}</span>
+        </button>
+        {workspace && can(workspace.organization.role, "orders:read") && (
+          <button
+            onClick={() => navigate("orders")}
+            aria-pressed={page === "orders"}
+          >
+            <CheckCheck size={21} />
+            <span>{t.orders}</span>
+          </button>
+        )}
+        <button
+          onClick={() => navigate("assistant")}
+          aria-pressed={page === "assistant"}
+        >
+          <Sparkles size={21} />
+          <span>{t.assistant}</span>
+        </button>
+        <button
+          onClick={() => {
+            setMenuOpen(!menuOpen);
+            menuButton.current?.focus();
+          }}
+          aria-expanded={menuOpen}
+        >
+          <Menu size={21} />
+          <span>{locale === "ru" ? "Ещё" : "Тағы"}</span>
+        </button>
+      </div>
+      <div className="app-main" inert={menuOpen}>
         <header className="topbar">
+          <button
+            ref={menuButton}
+            className="mobile-menu-button icon-button"
+            aria-label={locale === "ru" ? "Меню" : "Мәзір"}
+            aria-expanded={menuOpen}
+            aria-controls="workspace-menu"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            <Menu size={22} />
+          </button>
           <div className="breadcrumb">
             <span>{t.workspace}</span>
             <span>/</span>
@@ -1266,6 +1373,14 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           </div>
           <span className="tag mobile-test">{t.testData}</span>
           <div className="top-actions">
+            <button
+              className="assistant-shortcut text-button"
+              onClick={() => navigate("assistant")}
+            >
+              <Sparkles size={17} />
+              <span>{t.assistant}</span>
+            </button>
+
             <span className="local-indicator">
               <span className="status-dot" />
               {t.localOnly}
@@ -1281,7 +1396,11 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             </button>
           </div>
         </header>
-        <main id="main-content" className="content">
+        <main
+          id="main-content"
+          className={`content page-${page}`}
+          tabIndex={-1}
+        >
           <LiveSync organizationId={organizationId}>
             <div className="page-heading">
               <div>
@@ -1432,14 +1551,6 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                       locale={locale}
                     />
                   )}
-                {page === "finance" &&
-                  can(workspace.organization.role, "finance:read") && (
-                    <BankStatements
-                      key={`${workspace.organization.id}-bank`}
-                      workspace={workspace}
-                      locale={locale}
-                    />
-                  )}
                 {page === "inventory" &&
                   can(workspace.organization.role, "inventory:read") && (
                     <InventoryPage
@@ -1565,12 +1676,19 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                   />
                 )}
                 {page === "today" && (
-                  <Today
-                    workspace={workspace}
-                    locale={locale}
-                    onNavigate={navigate}
-                    onInvite={() => setModal("invite")}
-                  />
+                  <details className="onboarding-disclosure">
+                    <summary>
+                      {locale === "ru"
+                        ? "Настройка рабочего пространства"
+                        : "Жұмыс кеңістігін баптау"}
+                    </summary>
+                    <Today
+                      workspace={workspace}
+                      locale={locale}
+                      onNavigate={navigate}
+                      onInvite={() => setModal("invite")}
+                    />
+                  </details>
                 )}
                 {page === "activity" && (
                   <section className="panel">

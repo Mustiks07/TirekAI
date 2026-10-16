@@ -1,6 +1,6 @@
 import type { Locale, Profile, Role } from "../domain/contracts";
 const ru = {
-  brand: "Басқару",
+  brand: "TirekAI",
   brandNote: "Рабочее название",
   workspace: "Рабочее пространство",
   today: "Сегодня",
@@ -235,7 +235,7 @@ const kk: Dictionary = {
   customers: "Клиенттер",
   customersNote:
     "Клиенттердің байланыстары және кестелерді тексеріп импорттау.",
-  brand: "Басқару",
+  brand: "TirekAI",
   brandNote: "Жұмыс атауы",
   workspace: "Жұмыс кеңістігі",
   today: "Бүгін",

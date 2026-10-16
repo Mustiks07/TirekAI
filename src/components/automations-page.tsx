@@ -87,6 +87,8 @@ export function AutomationsPage({
       error_code: string | null;
     } | null>(null),
     [error, setError] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [commandBusy, setCommandBusy] = useState(false);
   const refresh = () => setRevision((v) => v + 1);
   useEffect(() => {
     let live = true;
@@ -94,10 +96,7 @@ export function AutomationsPage({
       api<{ items: Rule[] }>(`${base}/automations`),
       api<{ items: Execution[] }>(`${base}/automations/executions?limit=30`),
     ])
-      .then(
-        ([r, x]) =>
-          live && (setRules(r.items), setExecutions(x.items), setError("")),
-      )
+      .then(([r, x]) => live && (setRules(r.items), setExecutions(x.items)))
       .catch((e) => live && setError(e.code || "INTERNAL_ERROR"));
     api<{ items: { id: string; name: string }[] }>(`${base}/tasks/assignees`)
       .then((v) => live && setAssignees(v.items))
@@ -330,14 +329,25 @@ export function AutomationsPage({
                   } catch {
                     throw new Error("INVALID_INPUT");
                   }
-                  setTest(
-                    await api<Test>(
+                  setTesting(true);
+                  setError("");
+                  try {
+                    const result = await api<Test>(
                       `${base}/automations/${rule.id}/tests`,
                       "POST",
                       { sample: { topic: f(fd, "topic"), payload } },
-                    ),
-                  );
-                  refresh();
+                    );
+                    // Testing changes the rule version. Show success only once the command
+                    // buttons have that version, so an immediate activation cannot use the old one.
+                    const updated = await api<{ items: Rule[] }>(
+                      `${base}/automations`,
+                    );
+                    setRules(updated.items);
+                    setTest(result);
+                    refresh();
+                  } finally {
+                    setTesting(false);
+                  }
                 }}
               >
                 <Field label={t("Событие", "Оқиға")}>
@@ -407,17 +417,26 @@ export function AutomationsPage({
                         ? "primary-button"
                         : "secondary-button"
                     }
-                    disabled={rule.state === "disabled"}
-                    onClick={() =>
-                      api(`${base}/automations/${rule.id}/commands`, "POST", {
-                        key: crypto.randomUUID(),
-                        version: rule.version,
-                        kind,
-                        note: t("Изменено вручную", "Қолмен өзгертілді"),
-                      })
+                    disabled={
+                      rule.state === "disabled" || testing || commandBusy
+                    }
+                    onClick={() => {
+                      setCommandBusy(true);
+                      setError("");
+                      return api(
+                        `${base}/automations/${rule.id}/commands`,
+                        "POST",
+                        {
+                          key: crypto.randomUUID(),
+                          version: rule.version,
+                          kind,
+                          note: t("Изменено вручную", "Қолмен өзгертілді"),
+                        },
+                      )
                         .then(refresh)
                         .catch((x) => setError(x.code))
-                    }
+                        .finally(() => setCommandBusy(false));
+                    }}
                   >
                     {
                       {

@@ -129,6 +129,8 @@ test("situation → draft purchase → second-person approval → execution; tas
   await page.goto("/");
   await page.getByRole("button", { name: "РУС", exact: true }).click();
   // T023: reorder point through the form, then explicit detection.
+  await nav(page, "Каталог и склад");
+  await page.locator(".stock-thresholds > summary").click();
   let f = form(page, "Сохранить порог");
   await f
     .getByRole("combobox", { name: "Товар", exact: true })
@@ -136,10 +138,17 @@ test("situation → draft purchase → second-person approval → execution; tas
   await f.getByLabel("Минимум, базовые единицы", { exact: true }).fill("10");
   await f.getByLabel("Страховой запас", { exact: true }).fill("2");
   await f.getByRole("button", { name: "Сохранить порог", exact: true }).click();
+  await expect(f.getByRole("status")).toBeVisible();
+  await nav(page, "Сегодня");
   await page
     .getByRole("button", { name: "Проверить сейчас", exact: true })
     .click();
   await expect(page.getByText(/Риск нехватки товара: TEA-EXEC/)).toBeVisible();
+  await page
+    .locator(".today-situation")
+    .filter({ hasText: "TEA-EXEC" })
+    .locator("summary")
+    .click();
   await expect(page.getByText("Не хватает", { exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "Подготовить закупку", exact: true })
@@ -311,9 +320,7 @@ test("situation → draft purchase → second-person approval → execution; tas
   await expect(page.getByText(/AI-помощник не настроен/)).toBeVisible();
   // T026: honest not_configured state.
   await nav(page, "Помощник");
-  await expect(
-    page.getByText(/AI-провайдер не подключён на сервере/),
-  ).toBeVisible();
+  await expect(page.getByText(/Помощник пока не подключён/)).toBeVisible();
   await page
     .getByLabel("Вопрос или поручение", { exact: true })
     .fill("Что требует внимания?");

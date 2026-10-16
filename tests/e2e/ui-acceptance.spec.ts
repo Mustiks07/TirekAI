@@ -106,6 +106,10 @@ const settle = async (page: Page) => {
     timeout: 15000,
   });
 };
+async function openMenu(page: Page) {
+  if (!(await page.getByRole("navigation").isVisible()))
+    await page.getByRole("button", { name: /^(Меню|Мәзір)$/ }).click();
+}
 type Check = {
   locale: string;
   width: number;
@@ -283,6 +287,236 @@ test("T052: every section in KK (default) and RU on mobile and desktop widths", 
   expect(bad, JSON.stringify(bad.slice(0, 10), null, 1)).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test("TirekAI: mobile menu, order panel and finance tabs preserve usable controls", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await seed(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "РУС", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openMenu(page);
+  await expect(page.locator(".app-main")).toHaveAttribute("inert", "");
+  // Inspect the expanded sidebar itself, including controls below the fold.
+  for (const width of [360, 390, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    const sidebar = page.locator(".sidebar");
+    const controls = sidebar.locator("button, select");
+    for (let i = 0; i < (await controls.count()); i++) {
+      const control = controls.nth(i);
+      if (!(await control.isVisible())) continue;
+      await control.scrollIntoViewIfNeeded();
+      const clear = await control.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.left + r.width / 2,
+          r.top + r.height / 2,
+        );
+        return !!hit && (hit === el || el.contains(hit));
+      });
+      expect(clear, `menu ${width}: control ${i} is covered`).toBe(true);
+    }
+    await expect(sidebar.locator(".user-card strong")).toBeVisible();
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".app-main")).not.toHaveAttribute("inert", "");
+  await expect(
+    page.getByRole("button", { name: "Меню", exact: true }),
+  ).toBeFocused();
+  await openMenu(page);
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Заказы", exact: true })
+    .click();
+  await settle(page);
+  const search = page.getByLabel("Поиск по клиенту или номеру", {
+    exact: true,
+  });
+  await search.fill("Әсел");
+  await expect(page.locator(".commerce-order")).toHaveCount(1);
+  await page.locator(".commerce-order").click();
+  const detail = page.getByRole("region", {
+    name: "Карточка заказа",
+    exact: true,
+  });
+  await expect(detail).toBeFocused();
+  await expect(page.locator(".order-list-panel")).not.toBeVisible();
+  await expect(
+    detail.getByText("20,00 ₸", { exact: true }).first(),
+  ).toBeVisible();
+  await detail
+    .getByRole("button", { name: "К списку заказов", exact: true })
+    .click();
+  await expect(search).toHaveValue("Әсел");
+  await expect(page.locator(".commerce-order")).toBeFocused();
+  await openMenu(page);
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Финансы", exact: true })
+    .click();
+  await settle(page);
+  for (const tab of [
+    "Обзор",
+    "Счета и журнал",
+    "Заказы и оплаты",
+    "Календарь",
+    "Обязательства",
+    "Выписки",
+  ]) {
+    await page
+      .getByRole("group", { name: "Разделы финансов", exact: true })
+      .getByRole("button", { name: tab, exact: true })
+      .click();
+    const check = await inspect(page, "ru", 390, `finance:${tab}`, true);
+    expect(check.overflow).toBeLessThanOrEqual(1);
+    expect(check.axe).toEqual([]);
+    expect(check.smallTargets).toEqual([]);
+  }
+  // Hold a refresh in flight: already loaded commands must remain clickable.
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let intercepted!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => {
+    intercepted = resolve;
+  });
+  await page.route("**/api/v1/organizations/*/orders?*", async (route) => {
+    intercepted();
+    await refreshGate;
+    await route.continue();
+  });
+  try {
+    await page
+      .locator(".commerce-toolbar")
+      .getByRole("button", { name: "Обновить", exact: true })
+      .click();
+    await refreshStarted;
+    const moneyButton = page.getByRole("button", {
+      name: "Денежная операция",
+      exact: true,
+    });
+    await expect(moneyButton).toBeEnabled();
+    await moneyButton.click();
+    await expect(
+      page.getByRole("region", { name: "Форма операции", exact: true }),
+    ).toBeVisible();
+  } finally {
+    releaseRefresh();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+  // A desktop resize while the phone menu is open must release the workspace.
+  await openMenu(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(page.locator(".app-main")).not.toHaveAttribute("inert", "");
+});
+
+test("TirekAI: all industry create forms in RU/KK at phone and desktop sizes", async ({
+  page,
+}) => {
+  test.setTimeout(900_000);
+  await seed(page);
+  await page.goto("/");
+  await settle(page);
+  const api = client(page.request),
+    checks: Check[] = [];
+  for (const profile of [
+    "food",
+    "services",
+    "education",
+    "projects",
+    "production",
+    "construction",
+    "clinic",
+  ]) {
+    const org = await api.post("organizations", {
+      name: `Сынақ формалары ${profile}`,
+      profile,
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.reload();
+    await settle(page);
+    await page.locator(".organization-picker select").selectOption(org.id);
+    await page.getByRole("button", { name: "РУС", exact: true }).click();
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "Работа по профилю", exact: true })
+      .click();
+    await settle(page);
+    const buttons = page.locator(".industry-actions button");
+    const count = await buttons.count();
+    expect(count).toBeGreaterThan(0);
+    for (const locale of ["ru", "kk"]) {
+      await page
+        .getByRole("button", {
+          name: locale === "ru" ? "РУС" : "ҚАЗ",
+          exact: true,
+        })
+        .click();
+      for (const width of [360, 1440]) {
+        await page.setViewportSize({
+          width,
+          height: width === 360 ? 800 : 1000,
+        });
+        for (let i = 0; i < count; i++) {
+          await buttons.nth(i).click();
+          await expect(page.locator(".industry-detail form")).toBeVisible();
+          const label = (await buttons.nth(i).textContent()) || String(i);
+          checks.push(
+            await inspect(page, locale, width, `${profile}:${label}`, true),
+          );
+          // Every visible field is reachable without horizontal page scrolling.
+          const inputs = page.locator(
+            ".industry-detail form input:not([type=hidden]), .industry-detail form select, .industry-detail form textarea",
+          );
+          for (let n = 0; n < (await inputs.count()); n++) {
+            const input = inputs.nth(n);
+            if (!(await input.isVisible())) continue;
+            await input.scrollIntoViewIfNeeded();
+            const covered = await input.evaluate((el) => {
+              const r = el.getBoundingClientRect();
+              const hit = document.elementFromPoint(
+                r.left + r.width / 2,
+                r.top + r.height / 2,
+              );
+              return !hit || !(hit === el || el.contains(hit));
+            });
+            expect(covered, `${profile}:${label}: field ${n} covered`).toBe(
+              false,
+            );
+          }
+        }
+      }
+    }
+  }
+  await writeFile(
+    "docs/evidence/tirekai-open-forms.json",
+    JSON.stringify(
+      {
+        checks: checks.length,
+        failures: checks.filter(
+          (c) => c.overflow > 1 || c.axe.length || c.smallTargets.length,
+        ),
+      },
+      null,
+      2,
+    ),
+  );
+  expect(
+    checks.filter(
+      (c) => c.overflow > 1 || c.axe.length || c.smallTargets.length,
+    ),
+  ).toEqual([]);
+});
 test("T052: keyboard and visible focus, enlarged text, reduced motion and Kazakh glyphs", async ({
   page,
 }) => {
@@ -314,6 +548,7 @@ test("T052: keyboard and visible focus, enlarged text, reduced motion and Kazakh
     expect(focus.outline, JSON.stringify(focus)).not.toBe("none");
   }
   // A section opens from the keyboard alone.
+  await page.getByRole("button", { name: "Мәзір", exact: true }).click();
   const orders = page
     .getByRole("navigation")
     .getByRole("button", { name: "Тапсырыстар", exact: true });
@@ -323,6 +558,7 @@ test("T052: keyboard and visible focus, enlarged text, reduced motion and Kazakh
   // Enlarged text (user default font 32 px = 200 %): no horizontal page overflow at 360 px;
   // wide tables scroll inside their own region.
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.getByRole("button", { name: "Мәзір", exact: true }).click();
   const names = await page
     .getByRole("navigation")
     .getByRole("button")
@@ -330,6 +566,8 @@ test("T052: keyboard and visible focus, enlarged text, reduced motion and Kazakh
       els.map((e) => (e.textContent || "").trim()).filter(Boolean),
     );
   for (const name of names) {
+    if (!(await page.getByRole("navigation").isVisible()))
+      await page.getByRole("button", { name: "Мәзір", exact: true }).click();
     await page
       .getByRole("navigation")
       .getByRole("button", { name, exact: true })
