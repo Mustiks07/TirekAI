@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-16",
+  "branch": "codex/t056-free-providers",
+  "base": "258984c",
+  "lint": "PASS",
+  "typecheck": "PASS",
+  "unit": {
+    "passed": 232,
+    "total": 232,
+    "files": 40
+  },
+  "postgres": {
+    "passed": 18,
+    "total": 18,
+    "version": "18.2",
+    "isolated_cluster_stopped": true
+  },
+  "build": "PASS",
+  "e2e": {
+    "passed": 23,
+    "total": 23,
+    "single_full_run": true,
+    "ui_checks": 180,
+    "ui_violations": 0
+  },
+  "audit_vulnerabilities": 0,
+  "secrets": {
+    "findings": 0,
+    "actual_values_checked": 3
+  },
+  "live_ai": {
+    "passed": 8,
+    "cases": 8,
+    "full_acceptance": false
+  },
+  "migrations_changed": false
+}

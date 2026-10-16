@@ -234,8 +234,13 @@ export const EVAL_LIMITS = {
   maxOutputTokens: 4000,
   inputTokensPerCall: INPUT_TOKEN_ENVELOPE,
 } as const;
-export function evalBudget(cases: number, limits = EVAL_LIMITS) {
-  const calls = cases * limits.iterations;
+export function evalBudget(
+  cases: number,
+  limits = EVAL_LIMITS,
+  providerAttempts = 1,
+) {
+  const calls =
+    cases * limits.iterations * Math.min(3, Math.max(1, providerAttempts));
   return {
     cases,
     maxCalls: calls,

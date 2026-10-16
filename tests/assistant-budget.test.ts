@@ -75,6 +75,66 @@ const provider = (
   complete,
 });
 
+it("T056: fallback reserves each attempt and preserves unknown usage before successful recovery", async () => {
+  const ctx = await setup(100000);
+  let secondaryCalls = 0;
+  const primary = provider(async () => {
+    throw new AppError("ASSISTANT_RATE_LIMITED", 429);
+  });
+  const secondary = provider(async () => {
+    secondaryCalls++;
+    return response();
+  });
+  Object.assign(primary, { fallbacks: [secondary] });
+  await budgetedComplete(db, primary, ctx, request());
+  expect(secondaryCalls).toBe(1);
+  expect((await budgetState(db, ctx.org)).committed).toBe(16120);
+  const rows = await db.query(
+    "SELECT actual_tokens FROM assistant_budget_reservations WHERE organization_id=$1",
+    [ctx.org],
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows.filter((r) => r.actual_tokens === null)).toHaveLength(1);
+});
+it("T056: fallback cannot bypass budget, response validation, cancellation or a model refusal", async () => {
+  const ctx = await setup();
+  let calls = 0;
+  const secondary = provider(async () => {
+    calls++;
+    return response();
+  });
+  const primary = provider(async () => {
+    throw new AppError("ASSISTANT_TIMEOUT", 504);
+  });
+  Object.assign(primary, { fallbacks: [secondary] });
+  await expect(
+    budgetedComplete(db, primary, ctx, request()),
+  ).rejects.toMatchObject({ code: "ASSISTANT_BUDGET_EXCEEDED" });
+  expect(calls).toBe(0);
+  const fresh = await setup(100000);
+  const malformed = provider(async () => {
+    throw new AppError("ASSISTANT_REQUEST_REJECTED", 502);
+  });
+  Object.assign(malformed, { fallbacks: [secondary] });
+  await expect(
+    budgetedComplete(db, malformed, fresh, request()),
+  ).rejects.toMatchObject({ code: "ASSISTANT_REQUEST_REJECTED" });
+  const refused = provider(async () => ({
+    ...response(),
+    stopReason: "refusal",
+  }));
+  Object.assign(refused, { fallbacks: [secondary] });
+  expect(
+    (await budgetedComplete(db, refused, fresh, request())).stopReason,
+  ).toBe("refusal");
+  const aborted = request();
+  aborted.signal = AbortSignal.abort();
+  await expect(
+    budgetedComplete(db, refused, fresh, aborted),
+  ).rejects.toMatchObject({ code: "ASSISTANT_TIMEOUT" });
+  expect(calls).toBe(0);
+});
+
 it("T056: simultaneous chat and automation requests cannot reserve the same remaining budget", async () => {
   const ctx = await setup();
   let release!: (r: ProviderResponse) => void, entered!: () => void;
