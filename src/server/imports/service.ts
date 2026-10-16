@@ -16,6 +16,11 @@ import {
   type PageQuery,
 } from "../../domain/import-contracts";
 import { parseCustomers } from "./csv";
+import {
+  erasedImportValues,
+  importFingerprint,
+  lockImportPrivacy,
+} from "../privacy/import-erasure";
 
 export async function workerAvailable(tx: Sql) {
   return Boolean(
@@ -108,9 +113,45 @@ export class ImportService {
         data.branchId,
       );
       const id = randomUUID();
+      await lockImportPrivacy(tx, org);
+      const tombstones = new Set(
+        (
+          await tx.query<{ external_hash: string }>(
+            "SELECT external_hash FROM privacy_import_tombstones WHERE organization_id=$1 AND branch_id=$2 AND external_hash=ANY($3::text[])",
+            [
+              org,
+              data.branchId,
+              rows.map((r) =>
+                importFingerprint(org, data.branchId, r.values.external_id),
+              ),
+            ],
+          )
+        ).map((r) => r.external_hash),
+      );
+      let redacted = false;
+      for (const row of rows) {
+        if (
+          tombstones.has(
+            importFingerprint(org, data.branchId, row.values.external_id),
+          )
+        ) {
+          row.values = { ...erasedImportValues };
+          row.status = "invalid";
+          row.errors = ["SUBJECT_ERASED"];
+          redacted = true;
+        }
+      }
       const inserted = await tx.query(
         "INSERT INTO import_batches(id,organization_id,branch_id,created_by,filename,file_hash,source_content) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(organization_id,branch_id,file_hash) DO NOTHING RETURNING id",
-        [id, org, data.branchId, actorId, data.filename, hash, data.content],
+        [
+          id,
+          org,
+          data.branchId,
+          actorId,
+          data.filename,
+          hash,
+          redacted ? "" : data.content,
+        ],
       );
       if (!inserted.length) {
         const [previous] = await tx.query<{ id: string }>(
@@ -299,11 +340,16 @@ export class ImportService {
     const data = customerUpdate.parse(input);
     return this.db.transaction(async (tx) => {
       const scope = await sessionAccess(tx, secret, org, "customers:write");
-      const [customer] = await tx.query<{ branch_id: string; version: number }>(
-        "SELECT branch_id,version FROM customers WHERE id=$1 AND organization_id=$2 AND ($3::uuid IS NULL OR branch_id=$3) FOR UPDATE",
+      const [customer] = await tx.query<{
+        branch_id: string;
+        version: number;
+        erased_at: string | null;
+      }>(
+        "SELECT branch_id,version,erased_at FROM customers WHERE id=$1 AND organization_id=$2 AND ($3::uuid IS NULL OR branch_id=$3) FOR UPDATE",
         [id, org, scope.branchId],
       );
       if (!customer) throw new AppError("NOT_FOUND", 404);
+      if (customer.erased_at) throw new AppError("SUBJECT_ERASED", 409);
       if (customer.version !== data.version)
         throw new AppError("VERSION_CONFLICT", 409);
       await tx.query(

@@ -22,6 +22,47 @@ const heard = (
   confidence: extra.confidence ?? null,
   uncertain: extra.uncertain ?? [],
 });
+it("T056: critical keys match whole words and numeric tokens, including decimals and signs", () => {
+  const p: VoicePhrase = {
+    id: "boundary",
+    locale: "ru",
+    text: "12 Анна не",
+    keys: [
+      { any: ["12"], critical: true },
+      { any: ["анна"], critical: true },
+      { any: ["не"], critical: true },
+    ],
+  };
+  for (const value of ["120", "112", "12.5", "12,5", "-12", "12кг"]) {
+    expect(
+      scoreTranscription(p, heard(`${value} Анна не`, "ru")).criticalMissed,
+      value,
+    ).toBe(1);
+  }
+  expect(
+    scoreTranscription(p, heard("12 Жанна нет", "ru")).criticalMissed,
+  ).toBe(2);
+  expect(
+    scoreTranscription(p, heard("12, Анна, не!", "ru")).criticalMissed,
+  ).toBe(0);
+  expect(normalizeSpeech("12,5 −12 5 000")).toBe("12.5 -12 5000");
+});
+it("T056: empty, failed and wrong-locale voice runs cannot pass", () => {
+  expect(summarizeVoice([], 0).passed).toBe(false);
+  const ru = {
+    ...scoreTranscription(phrase("ru-11"), heard(phrase("ru-11").text, "ru")),
+    latencyMs: 1,
+  };
+  const kk = {
+    ...scoreTranscription(phrase("kk-12"), heard(phrase("kk-12").text, "kk")),
+    latencyMs: 1,
+  };
+  expect(summarizeVoice([ru, kk], 0).passed).toBe(true);
+  expect(summarizeVoice([ru, kk], 1).passed).toBe(false);
+  expect(summarizeVoice([ru, { ...kk, localeReturned: "ru" }], 0).passed).toBe(
+    false,
+  );
+});
 
 it("T056: the voice phrase set is balanced RU/KK and every phrase carries its meaning as keys", () => {
   expect(phrases.filter((p) => p.locale === "ru")).toHaveLength(12);

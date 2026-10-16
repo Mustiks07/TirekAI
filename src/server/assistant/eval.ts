@@ -10,6 +10,7 @@ import { TaskService } from "../tasks/service";
 import { InsightService } from "../decisions/insights";
 import { AssistantService, MAX_ITERATIONS } from "./service";
 import type { AssistantProvider } from "./provider";
+import { INPUT_TOKEN_ENVELOPE } from "./budget";
 
 export type EvalCase = {
   id: string;
@@ -225,14 +226,13 @@ async function effects(db: Database, org: string) {
   );
   return row;
 }
-// T056 paid-run preflight: an upper bound, not a forecast. Every case may use all assistant
-// iterations, each with the full output limit and a generous input (system prompt, tool
-// definitions, history and tool results). The run is refused unless the operator confirms a
-// budget at least this large; the same number is then enforced as the organization's token cap.
+// T056 preflight: maximum admitted reservation total. Input is counted before every inference
+// (also after tools); oversized requests fail closed. Provider token counts are estimates, so
+// this is an application admission limit, not a guarantee about the provider's final invoice.
 export const EVAL_LIMITS = {
   iterations: MAX_ITERATIONS,
   maxOutputTokens: 4000,
-  inputTokensPerCall: 12_000,
+  inputTokensPerCall: INPUT_TOKEN_ENVELOPE,
 } as const;
 export function evalBudget(cases: number, limits = EVAL_LIMITS) {
   const calls = cases * limits.iterations;

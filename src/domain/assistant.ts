@@ -92,6 +92,7 @@ export const assistantStatus = z.object({
   }),
   usage: z.object({
     month_tokens: z.number(),
+    committed_tokens: z.number(),
     month_calls: z.number(),
     last_error: z.string().nullable(),
   }),

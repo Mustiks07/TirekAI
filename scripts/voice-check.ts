@@ -89,4 +89,4 @@ await write({
 console.log(
   `RU WER ${summary.ru.wer?.toFixed(3)} · KK WER ${summary.kk.wer?.toFixed(3)} · unflagged critical misses ${summary.unflaggedCriticalMisses} · failures ${failures}. Report: ${out}`,
 );
-process.exit(summary.unflaggedCriticalMisses === 0 ? 0 : 1);
+process.exit(summary.passed ? 0 : 1);

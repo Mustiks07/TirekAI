@@ -16,8 +16,13 @@ export const normalizeSpeech = (text: string) =>
   text
     .toLowerCase()
     .replace(/ё/g, "е")
+    .replace(/[\uE000\uE001]/g, " ")
     .replace(/(\d)[\s\u00a0](?=\d{3}\b)/g, "$1")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/(?<=\d)[.,](?=\d)/g, "\uE000")
+    .replace(/[-−](?=\d)/g, "\uE001")
+    .replace(/[^\p{L}\p{N}\uE000\uE001]+/gu, " ")
+    .replace(/\uE000/g, ".")
+    .replace(/\uE001/g, "-")
     .trim();
 const words = (text: string) =>
   normalizeSpeech(text).split(" ").filter(Boolean);
@@ -41,7 +46,10 @@ export function scoreTranscription(phrase: VoicePhrase, t: Transcription) {
   const heard = ` ${normalizeSpeech(t.text)} `;
   const keys = phrase.keys.map((k) => ({
     critical: !!k.critical,
-    found: k.any.some((v) => heard.includes(normalizeSpeech(v))),
+    found: k.any.some((v) => {
+      const normalized = normalizeSpeech(v);
+      return normalized.length > 0 && heard.includes(` ${normalized} `);
+    }),
   }));
   const flagged =
     t.uncertain.length > 0 || (t.confidence !== null && t.confidence < 0.8);
@@ -84,6 +92,14 @@ export function summarizeVoice(results: Scored[], failures: number) {
     };
   };
   return {
+    passed:
+      failures === 0 &&
+      results.length > 0 &&
+      results.some((r) => r.locale === "ru") &&
+      results.some((r) => r.locale === "kk") &&
+      results.every(
+        (r) => !r.unflaggedCriticalMiss && r.localeReturned === r.locale,
+      ),
     ru: byLocale("ru"),
     kk: byLocale("kk"),
     providerFailures: failures,

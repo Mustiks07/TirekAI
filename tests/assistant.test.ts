@@ -25,6 +25,9 @@ class ScriptedProvider implements AssistantProvider {
   readonly name = "scripted-test";
   readonly model = "scripted";
   calls: ProviderRequest[] = [];
+  async countInputTokens() {
+    return 100;
+  }
   constructor(
     private turns: (
       | Anthropic.Beta.BetaContentBlock[]
@@ -293,7 +296,7 @@ it("T027: the eval set has 32 balanced RU/KK cases and the grader detects violat
   expect(report.critical_violations).toBe(1);
   await evalDb.close();
 });
-it("T056: a paid eval has an upper-bound preflight and the confirmed budget is a hard cap", async () => {
+it("T056: eval admission refuses a call that cannot fit its input/output reservation", async () => {
   const { runAssistantEval, evalBudget } =
     await import("../src/server/assistant/eval");
   // 32 cases × 6 iterations × (4000 output + 12000 input) — the number the operator confirms.
@@ -311,20 +314,20 @@ it("T056: a paid eval has an upper-bound preflight and the confirmed budget is a
     [toolUse("list_situations", {})],
     [text("не должен быть вызван")],
   ]);
-  // The first call uses 120 tokens against a cap of 100: nothing more is sent to the provider.
+  // Even the first call cannot fit: nothing is sent to paid inference.
   const report = await runAssistantEval(
     evalDb,
     provider,
     [cases[0], cases[1]],
     { tokenBudget: 100 },
   );
-  expect(provider.calls).toHaveLength(1);
+  expect(provider.calls).toHaveLength(0);
   expect(report.results.map((r) => r.status)).toEqual([
     "budget_exceeded",
     "budget_exceeded",
   ]);
   expect(report).toMatchObject({
-    tokens_used: "120",
+    tokens_used: "0",
     budget_stopped: 2,
     passed: 0,
   });

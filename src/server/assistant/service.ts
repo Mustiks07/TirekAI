@@ -33,6 +33,7 @@ import {
   type ToolSource,
 } from "./tools";
 import { speechStatus, configuredSpeech, type SpeechProvider } from "./speech";
+import { budgetedComplete, budgetState, lockAssistantBudget } from "./budget";
 
 export const MAX_ITERATIONS = 6;
 const DEFAULT_SETTINGS = {
@@ -80,7 +81,7 @@ export class AssistantService {
   }
   private async monthTokens(org: string) {
     const [row] = await this.db.query<{ tokens: number; calls: number }>(
-      "SELECT coalesce(sum(input_tokens+output_tokens),0)::int tokens,count(*)::int calls FROM assistant_usage u JOIN organizations o ON o.id=u.organization_id WHERE u.organization_id=$1 AND date_trunc('month',u.created_at AT TIME ZONE o.timezone)=date_trunc('month',now() AT TIME ZONE o.timezone)",
+      "SELECT coalesce(sum(input_tokens::bigint+output_tokens),0)::float8 tokens,count(*)::int calls FROM assistant_usage u JOIN organizations o ON o.id=u.organization_id WHERE u.organization_id=$1 AND date_trunc('month',u.created_at AT TIME ZONE o.timezone)=date_trunc('month',now() AT TIME ZONE o.timezone)",
       [org],
     );
     return row;
@@ -140,6 +141,7 @@ export class AssistantService {
         settings: await this.settings(org),
         usage: {
           month_tokens: month.tokens,
+          committed_tokens: (await budgetState(this.db, org)).committed,
           month_calls: month.calls,
           last_error: last?.error_code || null,
         },
@@ -152,6 +154,7 @@ export class AssistantService {
     const c = settingsInput.parse(input);
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "assistant:configure");
+      await lockAssistantBudget(tx, org);
       const [row] = await tx.query<{ version: number }>(
         "SELECT version FROM assistant_settings WHERE organization_id=$1 FOR UPDATE",
         [org],
@@ -324,38 +327,28 @@ export class AssistantService {
     let text = "",
       status = "incomplete";
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const month = await this.monthTokens(org);
-      if (month.tokens >= settings.monthly_token_budget) {
-        await this.usage(
-          org,
-          s.actorId,
-          conversation,
-          "chat",
-          "budget_exceeded",
-        );
-        return save("budget_exceeded", "", {
-          sources,
-          calls,
-          error: "ASSISTANT_BUDGET_EXCEEDED",
-        });
-      }
       const started = Date.now();
       let response;
       try {
-        response = await this.provider.complete({
-          system: systemPrompt({
-            organization: prepared.ctx!.name,
-            role: s.role,
-            branch: prepared.ctx!.branch,
-            locale: c.locale,
-            today: prepared.ctx!.today,
-            timezone: prepared.ctx!.timezone,
-          }),
-          messages,
-          tools,
-          maxTokens: settings.max_output_tokens,
-          signal: AbortSignal.timeout(60_000),
-        });
+        response = await budgetedComplete(
+          this.db,
+          this.provider,
+          { secret, org, user: s.actorId, conversation, feature: "chat" },
+          {
+            system: systemPrompt({
+              organization: prepared.ctx!.name,
+              role: s.role,
+              branch: prepared.ctx!.branch,
+              locale: c.locale,
+              today: prepared.ctx!.today,
+              timezone: prepared.ctx!.timezone,
+            }),
+            messages,
+            tools,
+            maxTokens: settings.max_output_tokens,
+            signal: AbortSignal.timeout(60_000),
+          },
+        );
       } catch (error) {
         const code =
           error instanceof AppError ? error.code : "ASSISTANT_UNAVAILABLE";
@@ -364,29 +357,22 @@ export class AssistantService {
           s.actorId,
           conversation,
           "chat",
-          code === "ASSISTANT_TIMEOUT"
-            ? "timeout"
-            : code === "ASSISTANT_RATE_LIMITED"
-              ? "rate_limited"
-              : "error",
+          code === "ASSISTANT_BUDGET_EXCEEDED"
+            ? "budget_exceeded"
+            : code === "ASSISTANT_TIMEOUT"
+              ? "timeout"
+              : code === "ASSISTANT_RATE_LIMITED"
+                ? "rate_limited"
+                : "error",
           { latency: Date.now() - started, error: code },
         );
         // A provider failure is never shown as an answer.
-        return save("error", "", { sources, calls, error: code });
+        return save(
+          code === "ASSISTANT_BUDGET_EXCEEDED" ? "budget_exceeded" : "error",
+          "",
+          { sources, calls, error: code },
+        );
       }
-      await this.usage(
-        org,
-        s.actorId,
-        conversation,
-        "chat",
-        response.stopReason === "refusal" ? "refused" : "ok",
-        {
-          input: response.inputTokens,
-          output: response.outputTokens,
-          latency: Date.now() - started,
-          model: response.model,
-        },
-      );
       if (response.stopReason === "refusal") {
         status = "refused";
         break;
@@ -543,16 +529,6 @@ export class AssistantService {
       );
       return empty("not_configured", "ASSISTANT_NOT_CONFIGURED");
     }
-    if ((await this.monthTokens(org)).tokens >= settings.monthly_token_budget) {
-      await this.usage(
-        org,
-        s.actorId,
-        null,
-        "automation_draft",
-        "budget_exceeded",
-      );
-      return empty("budget_exceeded", "ASSISTANT_BUDGET_EXCEEDED");
-    }
     const system = [
       "You turn a manager's description of a business automation into a rule definition for an SMB platform.",
       "Call the propose_rule tool exactly once. Do not answer in text.",
@@ -567,44 +543,52 @@ export class AssistantService {
     const started = Date.now();
     let response;
     try {
-      response = await this.provider.complete({
-        system,
-        messages: [{ role: "user", content: c.text }],
-        tools: [
-          {
-            name: "propose_rule",
-            description: "Propose one automation rule definition.",
-            input_schema: z.toJSONSchema(draftProposal, { io: "input" }) as {
-              type: "object";
-              [k: string]: unknown;
+      response = await budgetedComplete(
+        this.db,
+        this.provider,
+        {
+          secret,
+          org,
+          user: s.actorId,
+          conversation: null,
+          feature: "automation_draft",
+        },
+        {
+          system,
+          messages: [{ role: "user", content: c.text }],
+          tools: [
+            {
+              name: "propose_rule",
+              description: "Propose one automation rule definition.",
+              input_schema: z.toJSONSchema(draftProposal, { io: "input" }) as {
+                type: "object";
+                [k: string]: unknown;
+              },
             },
-          },
-        ],
-        maxTokens: Math.min(settings.max_output_tokens, 4000),
-        signal: AbortSignal.timeout(60_000),
-      });
+          ],
+          maxTokens: Math.min(settings.max_output_tokens, 4000),
+          signal: AbortSignal.timeout(60_000),
+        },
+      );
     } catch (error) {
       const code =
         error instanceof AppError ? error.code : "ASSISTANT_UNAVAILABLE";
-      await this.usage(org, s.actorId, null, "automation_draft", "error", {
-        latency: Date.now() - started,
-        error: code,
-      });
-      return empty("error", code);
+      await this.usage(
+        org,
+        s.actorId,
+        null,
+        "automation_draft",
+        code === "ASSISTANT_BUDGET_EXCEEDED" ? "budget_exceeded" : "error",
+        {
+          latency: Date.now() - started,
+          error: code,
+        },
+      );
+      return empty(
+        code === "ASSISTANT_BUDGET_EXCEEDED" ? "budget_exceeded" : "error",
+        code,
+      );
     }
-    await this.usage(
-      org,
-      s.actorId,
-      null,
-      "automation_draft",
-      response.stopReason === "refusal" ? "refused" : "ok",
-      {
-        input: response.inputTokens,
-        output: response.outputTokens,
-        latency: Date.now() - started,
-        model: response.model,
-      },
-    );
     if (response.stopReason === "refusal") return empty("refused", null);
     const use = response.content.find(
       (b): b is Anthropic.Beta.BetaToolUseBlock =>

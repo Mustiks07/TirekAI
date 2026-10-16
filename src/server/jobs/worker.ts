@@ -3,6 +3,7 @@ import type { Database } from "../db/database";
 import { actorAccess, audit } from "../access";
 import { AppError } from "../../domain/errors";
 import type { ImportRow } from "../../domain/import-contracts";
+import { lockImportPrivacy } from "../privacy/import-erasure";
 export type Claim = {
   id: string;
   organization_id: string;
@@ -62,6 +63,7 @@ export class ImportWorker {
   async process(claim: Claim, afterInsert?: () => void) {
     try {
       return await this.db.transaction(async (tx) => {
+        await lockImportPrivacy(tx, claim.organization_id);
         // All processing/retry paths lock the batch before the job.
         await tx.query("SELECT id FROM import_batches WHERE id=$1 FOR UPDATE", [
           claim.batch_id,

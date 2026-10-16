@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-16",
+  "branch": "codex/fix-t051-t058-review",
+  "baseCommit": "6514d663671193e350d454bcba7dcc99e0518320",
+  "scope": "T051-T058 review fixes; synthetic only",
+  "migration": 25,
+  "checks": {
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "unitFull": {
+      "passed": 212,
+      "failed": 0
+    },
+    "migrationSuiteAfterNewRegression": {
+      "passed": 3,
+      "failed": 0,
+      "newDistinctTests": 1
+    },
+    "postgres": {
+      "passed": 18,
+      "failed": 0,
+      "version": "18.2"
+    },
+    "build": "PASS before e2e",
+    "e2eFull": {
+      "passed": 22,
+      "failed": 1,
+      "failure": "New test used wrong close-button label; product conflict assertions passed"
+    },
+    "e2eCorrectedRegression": {
+      "passed": 1,
+      "failed": 0
+    },
+    "uiChecks": 180,
+    "auditVulnerabilities": 0,
+    "secretFindings": 0,
+    "configuredSecretValuesChecked": 0,
+    "restore": {
+      "result": "PASS",
+      "tables": 114,
+      "migration": 25
+    }
+  },
+  "liveIntegrations": "not_configured",
+  "remoteCI": "not_confirmed",
+  "loadRerun": false
+}

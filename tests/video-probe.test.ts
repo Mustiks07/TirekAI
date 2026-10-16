@@ -113,7 +113,9 @@ describe.skipIf(!hasFfmpeg)("T057 source probe with ffmpeg", () => {
     const p = await probeSource(["-rtsp_transport", "tcp", "-i", url], {
       timeoutMs: 10_000,
     });
-    expect(p).toMatchObject({ ok: false, error: "connection_refused" });
+    expect(p.ok).toBe(false);
+    // Windows/firewalls may drop the connection instead of immediately rejecting it.
+    if (!p.ok) expect(["connection_refused", "timeout"]).toContain(p.error);
     expect(JSON.stringify(p)).not.toContain("S3cret");
   });
 });
