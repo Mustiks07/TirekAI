@@ -31,11 +31,10 @@ export function AssistantPage({
     >([]),
     [current, setCurrent] = useState<Conversation | null>(null),
     [text, setText] = useState(""),
-    // Words from the last voice transcript that must be checked before sending (REQ AI 07).
-    [voiceCheck, setVoiceCheck] = useState<{
-      words: string[];
-      confirmed: boolean;
-    } | null>(null),
+    // A question on its way to the assistant (shown in the dialog until the answer arrives).
+    [outgoing, setOutgoing] = useState<{ text: string; voice: boolean } | null>(
+      null,
+    ),
     [answerLocale, setAnswerLocale] = useState<Locale>(locale),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -62,34 +61,58 @@ export function AssistantPage({
       await api<Conversation>(`${base}/assistant/conversations/${id}`),
     );
   }
-  async function send() {
-    if (!text.trim() || busy || (voiceCheck && !voiceCheck.confirmed)) return;
-    // The same key is reused on retry of the same text, so a repeated click never asks twice.
-    if (pending.current?.text !== text)
-      pending.current = { text, key: crypto.randomUUID() };
+  const inflight = useRef(false);
+  // One function for typed and spoken questions. A spoken question is sent once, right after
+  // recognition, with its own key; a typed one reuses the key when the same text is retried.
+  async function send(
+    question = text,
+    voice: { uncertain: string[] } | null = null,
+  ) {
+    if (!question.trim() || inflight.current) return;
+    inflight.current = true;
+    let key: string;
+    if (voice) key = crypto.randomUUID();
+    else {
+      if (pending.current?.text !== question)
+        pending.current = { text: question, key: crypto.randomUUID() };
+      key = pending.current.key;
+    }
     setBusy(true);
     setError("");
+    setOutgoing({ text: question, voice: !!voice });
+    if (voice) setText("");
     try {
       const r = await api<{ conversationId: string }>(
         `${base}/assistant/messages`,
         "POST",
         {
-          key: pending.current.key,
+          key,
           conversationId: current?.id || null,
           locale: answerLocale,
-          text,
+          text: question,
+          ...(voice ? { voice } : {}),
         },
       );
-      pending.current = null;
-      setText("");
-      setVoiceCheck(null);
+      if (!voice) {
+        pending.current = null;
+        setText("");
+      }
       await open(r.conversationId);
       setRevision((v) => v + 1);
     } catch (e) {
       setError(e instanceof ApiError ? e.code : "INTERNAL_ERROR");
+      // Nothing is lost: the recognized question stays editable for another try.
+      if (voice) setText(question);
     } finally {
+      setOutgoing(null);
       setBusy(false);
+      inflight.current = false;
     }
+  }
+  const field = useRef<HTMLTextAreaElement>(null);
+  function edit(previous: string) {
+    setText(previous);
+    field.current?.focus();
   }
   return (
     <div className="commerce-page assistant-page">
@@ -296,6 +319,16 @@ export function AssistantPage({
                 </p>
               )}
               {m.content && <p className="assistant-text">{m.content}</p>}
+              {m.role === "user" && m.content && (
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => edit(m.content)}
+                >
+                  {t("Исправить и отправить заново", "Түзетіп, қайта жіберу")}
+                </button>
+              )}
               {m.unverified_numbers.length > 0 && (
                 <p className="commerce-alert">
                   {t(
@@ -330,50 +363,33 @@ export function AssistantPage({
               )}
             </article>
           ))}
+          {outgoing && (
+            <article className="assistant-message user pending">
+              <strong>
+                {outgoing.voice
+                  ? t("Вы (голос)", "Сіз (дауыс)")
+                  : t("Вы", "Сіз")}
+              </strong>
+              <p className="assistant-text">{outgoing.text}</p>
+              <p role="status">{t("Готовим ответ…", "Жауап дайындалуда…")}</p>
+            </article>
+          )}
         </div>
         <Field label={t("Вопрос или поручение", "Сұрақ немесе тапсырма")}>
           <textarea
+            ref={field}
             value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (!e.target.value.trim()) setVoiceCheck(null);
-            }}
+            onChange={(e) => setText(e.target.value)}
             rows={3}
             maxLength={2000}
           />
         </Field>
-        {voiceCheck && (
-          <div className="commerce-alert voice-check" role="status">
-            <p>
-              {t(
-                "Распознано неуверенно, сверьте с тем, что вы сказали",
-                "Сенімсіз танылды, айтқаныңызбен салыстырыңыз",
-              )}
-              : <strong>{voiceCheck.words.join(", ")}</strong>
-            </p>
-            <label className="commerce-check">
-              <input
-                type="checkbox"
-                checked={voiceCheck.confirmed}
-                onChange={(e) =>
-                  setVoiceCheck({ ...voiceCheck, confirmed: e.target.checked })
-                }
-              />
-              {t(
-                "Я проверил(а) суммы, количества, названия и отрицания в тексте",
-                "Мәтіндегі сомаларды, сандарды, атауларды және болымсыздықты тексердім",
-              )}
-            </label>
-          </div>
-        )}
         <div className="commerce-actions">
           <button
             type="button"
             className="primary-button"
-            disabled={
-              busy || !text.trim() || (!!voiceCheck && !voiceCheck.confirmed)
-            }
-            onClick={send}
+            disabled={busy || !text.trim()}
+            onClick={() => send()}
           >
             {busy
               ? t("Готовим ответ…", "Жауап дайындалуда…")
@@ -386,14 +402,11 @@ export function AssistantPage({
             locale={locale}
             enabled={status.settings.voice_enabled}
             speech={status.speech.status}
-            onTranscript={(v, uncertain) => {
-              setText(v);
-              setVoiceCheck(
-                uncertain.length
-                  ? { words: uncertain, confirmed: false }
-                  : null,
-              );
-            }}
+            busy={busy}
+            initialLocale={answerLocale}
+            // Recognized speech goes straight to the assistant, once. Unsure words travel with
+            // it so the assistant can ask a short question instead of guessing.
+            onTranscript={(v, uncertain) => send(v, { uncertain })}
           />
         )}
       </section>
@@ -407,18 +420,22 @@ function Voice({
   locale,
   enabled,
   speech,
+  busy,
+  initialLocale,
   onTranscript,
 }: {
   base: string;
   locale: Locale;
   enabled: boolean;
   speech: string;
+  busy: boolean;
+  initialLocale: Locale;
   onTranscript: (v: string, uncertain: string[]) => void;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk);
   const [state, setState] = useState<"idle" | "recording" | "sending">("idle"),
     [problem, setProblem] = useState(""),
-    [voiceLocale, setVoiceLocale] = useState<Locale>(locale);
+    [voiceLocale, setVoiceLocale] = useState<Locale>(initialLocale);
   const recorder = useRef<MediaRecorder | null>(null),
     chunks = useRef<Blob[]>([]),
     cancelled = useRef(false);
@@ -474,9 +491,8 @@ function Voice({
               audio: btoa(bin),
             },
           );
-          // The transcript is only placed into the editable field; the user confirms and sends it.
-          // Unsure words (and unsure amounts, quantities, negations) block sending until checked.
-          onTranscript(result.text, result.uncertain);
+          // An empty result never sends anything (the server answers VOICE_EMPTY instead).
+          if (result.text.trim()) onTranscript(result.text, result.uncertain);
         } catch (e) {
           const code = e instanceof ApiError ? e.code : "NETWORK";
           setProblem(executionError(code, locale) || errorText(code, locale));
@@ -546,6 +562,7 @@ function Voice({
                 type="button"
                 className="secondary-button"
                 onClick={start}
+                disabled={busy}
               >
                 {t("Записать вопрос", "Сұрақты жазу")}
               </button>

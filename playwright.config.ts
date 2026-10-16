@@ -31,6 +31,8 @@ export default defineConfig({
       // Voice path test: the local speech adapter talks to a protocol test double, not a model.
       SPEECH_PROVIDER: "local",
       SPEECH_WORKER_SCRIPT: "tests/fixtures/fake-speech-worker.mjs",
+      // Camera check test: a stand-in that reports one person per frame, not the model.
+      VIDEO_LIVE_DETECTOR: "test-double",
       PORT: "3100",
       PGLITE_DATA_DIR: `.data/e2e-${Date.now()}`,
       NEXT_TELEMETRY_DISABLED: "1",

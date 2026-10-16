@@ -4,8 +4,9 @@ import { VideoService } from "../../../../server/video/service";
 import { readLimited } from "../../../../server/integrations/common";
 import { AppError } from "../../../../domain/errors";
 export const runtime = "nodejs";
-// Processing-device API (T035): authenticated by the source's device token, accepts only
-// configuration reads, run lifecycle, heartbeats and aggregated events — never frames.
+// Processing-device API (T035): authenticated by the source's device token, accepts
+// configuration reads, run lifecycle, heartbeats and aggregated events. The only image data is
+// the live-view frame (T057), sent only while someone is watching and kept in memory only.
 async function handle(request: NextRequest, action: string) {
   const svc = new VideoService(await getDatabase());
   const token =
@@ -21,7 +22,13 @@ async function handle(request: NextRequest, action: string) {
   if (request.method !== "POST") throw new AppError("NOT_FOUND", 404);
   let body: unknown;
   try {
-    body = JSON.parse(await readLimited(request, 512 * 1024));
+    // A live-view frame (JPEG in base64) is the only large body.
+    body = JSON.parse(
+      await readLimited(
+        request,
+        action === "preview" ? 1024 * 1024 : 512 * 1024,
+      ),
+    );
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError("INVALID_INPUT", 400);
@@ -30,6 +37,7 @@ async function handle(request: NextRequest, action: string) {
   if (action === "heartbeat") return svc.heartbeat(source, body);
   if (action === "events") return svc.ingest(source, body);
   if (action === "end") return svc.endRun(source, body);
+  if (action === "preview") return svc.preview(source, body);
   throw new AppError("NOT_FOUND", 404);
 }
 async function respond(

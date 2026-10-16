@@ -7,6 +7,7 @@ import { processVideo, type VideoEvent } from "../src/server/video/processor";
 import {
   detectorPath,
   loadDetector,
+  suppress,
   type PersonDetector,
 } from "../src/server/video/detector";
 import { components } from "../src/server/video/cv";
@@ -26,7 +27,7 @@ function stubDetector(): PersonDetector {
   const W = 640,
     H = 640;
   return {
-    kind: "dfine-n",
+    kind: "rfdetr-n",
     version: "stub-for-tests",
     precision: "fp32",
     width: W,
@@ -51,9 +52,20 @@ function stubDetector(): PersonDetector {
     async dispose() {},
   };
 }
+it("T057: overlapping duplicate boxes of one person become one; separate people stay separate", () => {
+  const box = (x0: number, score: number) => ({
+    x0,
+    y0: 0.2,
+    x1: x0 + 0.2,
+    y1: 0.9,
+    score,
+  });
+  const kept = suppress([box(0.1, 0.6), box(0.11, 0.9), box(0.6, 0.7)]);
+  expect(kept.map((d) => d.score)).toEqual([0.9, 0.7]);
+});
 it("T057: a missing detector model is an explicit error, not a silent switch to motion", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "taraz-nomodel-"));
-  await expect(loadDetector("dfine-n", { dir })).rejects.toThrow(
+  await expect(loadDetector("rfdetr-n", { dir })).rejects.toThrow(
     "DETECTOR_MODEL_MISSING",
   );
 });
@@ -123,32 +135,80 @@ describe.skipIf(!hasFfmpeg)("T057 neural pipeline with ffmpeg", () => {
     });
   }, 60_000);
 });
-describe.skipIf(!hasFfmpeg || !existsSync(detectorPath("dfine-n", "fp32")))(
-  "T057 real D-FINE-N model (downloaded with npm run video:model)",
-  () => {
-    it("loads on CPU and runs on 640×640 frames; rendered blobs are not taken for people", async () => {
-      const d = await loadDetector("dfine-n");
-      const dir = mkdtempSync(path.join(tmpdir(), "taraz-dfine-"));
-      const file = path.join(dir, "clip.mp4");
-      await renderClip({ ...labClips()[0], seconds: 6 }, file);
-      const events: VideoEvent[] = [];
-      const summary = await processVideo({
-        input: ["-i", file],
-        config: LAB_CONFIG,
-        startTime: new Date(),
-        live: false,
-        fps: 2,
-        detector: d,
-        onEvents: async (e) => void events.push(...e),
-      });
-      await d.dispose();
-      expect(summary.people).toMatchObject({
-        mode: "neural",
-        detector: "dfine_n_coco@onnx-fp32",
-      });
-      expect(summary.frames).toBeGreaterThanOrEqual(10);
-      // Synthetic rectangles are not people: no crossings may be invented from them.
-      expect(events.filter((e) => e.kind === "line_cross")).toHaveLength(0);
-    }, 120_000);
-  },
-);
+// Real model on real footage, where both were downloaded (npm run video:model; the Intel sample
+// videos, CC BY 4.0, see docs/LOCAL_MODELS.md). Skipped otherwise, never mocked.
+const clips = ".data/eval/videos";
+const clip = (name: string) => path.join(clips, name);
+describe.skipIf(
+  !hasFfmpeg ||
+    !existsSync(detectorPath("rfdetr-n", "fp32")) ||
+    !existsSync(clip("one-by-one-person-detection.mp4")) ||
+    !existsSync(clip("people-detection.mp4")),
+)("T057 real RF-DETR-N model on real people (CC BY 4.0 sample videos)", () => {
+  const full = {
+    id: "all",
+    name: "all",
+    kind: "presence" as const,
+    polygon: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ],
+  };
+  async function run(file: string, from: number, seconds: number) {
+    const d = await loadDetector("rfdetr-n");
+    const timeline: number[] = [],
+      ids = new Set<number>();
+    let crossings = { in: 0, out: 0 };
+    const summary = await processVideo({
+      input: ["-ss", String(from), "-t", String(seconds), "-i", clip(file)],
+      config: {
+        version: 1,
+        // Camera above the room: walking up the picture (away from the camera) is "in".
+        lines: [
+          {
+            id: "door",
+            name: "door",
+            a: { x: 0, y: 0.75 },
+            b: { x: 1, y: 0.75 },
+            inSide: -1,
+          },
+        ],
+        zones: [full],
+      },
+      startTime: new Date(0),
+      live: false,
+      fps: 5,
+      detector: d,
+      onEvents: async () => {},
+      onFrame: (r) => {
+        timeline.push(r.visible);
+        for (const p of r.people) if (p.counted) ids.add(p.id);
+        crossings = r.crossings.door;
+      },
+    });
+    await d.dispose();
+    return { summary, timeline, ids, crossings };
+  }
+  it("a person standing still is boxed and counted the whole time; an empty room is 0", async () => {
+    // 88–124 s: empty for 5 s, then a person walks in, stands ~25 s and leaves.
+    const r = await run("one-by-one-person-detection.mp4", 88, 36);
+    expect(r.summary.people.detector).toBe("rfdetr_nano_coco@onnx-fp32");
+    expect(r.ids.size).toBe(1);
+    expect(Math.max(...r.timeline)).toBe(1);
+    // Standing (≈ 100–115 s → frames 60–135): counted on every frame.
+    expect(r.timeline.slice(60, 135).every((v) => v === 1)).toBe(true);
+    // Before anyone enters (88–92 s) and after the person left: nobody is invented.
+    expect(r.timeline.slice(0, 20).every((v) => v === 0)).toBe(true);
+    expect(r.timeline.slice(-10).every((v) => v === 0)).toBe(true);
+  }, 180_000);
+  it("several people at once are counted separately and entering is counted in the right direction", async () => {
+    // 12–34 s: two people, then three people enter from the camera side.
+    const r = await run("people-detection.mp4", 12, 22);
+    expect(Math.max(...r.timeline)).toBe(3);
+    expect(r.ids.size).toBe(5);
+    expect(r.crossings.out).toBe(0);
+    expect(r.crossings.in).toBeGreaterThanOrEqual(4);
+  }, 180_000);
+});

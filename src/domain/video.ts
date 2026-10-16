@@ -102,9 +102,19 @@ export const eventInput = z
 export const ingestInput = z
   .object({ runId: z.uuid(), events: z.array(eventInput).max(1000) })
   .strict();
+// T057: how people are counted in this run, recorded at its start.
+export const pipelineSchema = z
+  .object({
+    mode: z.enum(["neural", "motion"]),
+    detector: z.string().max(80).nullable(),
+    tracker: z.enum(["bytetrack", "nearest"]),
+    fps: z.number().positive().max(60),
+  })
+  .strict();
 export const runStart = z
   .object({
     configVersion: z.number().int().positive(),
+    pipeline: pipelineSchema.optional(),
     sourceStart: z.iso.datetime(),
     passport: z
       .object({
@@ -117,14 +127,94 @@ export const runStart = z
       .default({}),
   })
   .strict();
+const counts = z.record(id, z.number().int().min(0).max(10000));
+const crossings = z.record(
+  id,
+  z
+    .object({
+      in: z.number().int().min(0).max(1e9),
+      out: z.number().int().min(0).max(1e9),
+    })
+    .strict(),
+);
 export const heartbeatInput = z
   .object({
     runId: z.uuid(),
     frames: z.number().int().nonnegative(),
     unusable: z.number().int().nonnegative(),
+    // Processing capacity (frames per second of processing time).
     fps: z.number().nonnegative().max(100000),
+    // Frames actually received per second of wall time (T057).
+    inputFps: z.number().nonnegative().max(1000).optional(),
     latencyMs: z.number().nonnegative().max(1e6),
     sourceTime: z.iso.datetime(),
+    // People counted on the latest analyzed frame (not an average).
+    now: z
+      .object({
+        at: z.iso.datetime(),
+        visible: z.number().int().min(0).max(10000),
+        zones: counts,
+        crossings,
+      })
+      .strict()
+      .nullable()
+      .optional(),
+    diagnosis: z
+      .object({
+        frames: z.number().int().nonnegative(),
+        usable: z.number().int().nonnegative(),
+        withDetections: z.number().int().nonnegative(),
+        withPeople: z.number().int().nonnegative(),
+        inZone: z.record(id, z.number().int().nonnegative()),
+        maxScore: z.number().min(0).max(1).nullable(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+const box = z.tuple([coord, coord, coord, coord]);
+const framePeople = z
+  .array(
+    z
+      .object({
+        id: z.number().int().nonnegative(),
+        box: box.nullable(),
+        counted: z.boolean(),
+        seen: z.boolean(),
+      })
+      .strict(),
+  )
+  .max(200);
+// T057 live view: the processing device sends the frame it just analyzed (JPEG, only while
+// somebody is watching) with the boxes found on it. Kept in server memory only.
+export const previewInput = z
+  .object({
+    runId: z.uuid(),
+    at: z.iso.datetime(),
+    image: z.base64().max(700_000),
+    width: z.number().int().min(16).max(4096),
+    height: z.number().int().min(16).max(4096),
+    visible: z.number().int().min(0).max(10000),
+    people: framePeople,
+    zones: counts,
+    crossings,
+  })
+  .strict();
+// T057 analysis in the app: the browser sends frames of its own camera or of a chosen file at
+// the detector's size; nothing is stored, boxes and counts come back to the same user.
+export const liveStartInput = z
+  .object({
+    key: z.uuid(),
+    kind: z.enum(["camera", "file"]),
+    fps: z.number().int().min(1).max(10),
+    lines: z.array(lineSchema).max(10),
+    zones: z.array(zoneSchema).max(10),
+  })
+  .strict();
+export const liveFrameInput = z
+  .object({
+    seq: z.number().int().nonnegative(),
+    rgb: z.base64().max(1_700_000),
   })
   .strict();
 export const runEnd = z

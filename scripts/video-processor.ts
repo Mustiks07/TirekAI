@@ -5,20 +5,26 @@ import {
   type VideoEvent,
 } from "../src/server/video/processor";
 import {
+  DEFAULT_DETECTOR,
   DETECTORS,
+  RETIRED_DETECTORS,
+  isDetectorKind,
   loadDetector,
-  type DetectorKind,
 } from "../src/server/video/detector";
+import { JpegEncoder } from "../src/server/video/jpeg";
 
 // T035 processing device. Started and stopped explicitly by an operator; long processing does
 // not depend on a browser tab. Raw frames never leave this process and are never stored.
 //   VIDEO_DEVICE_TOKEN=… npm run video:processor -- --server https://app --source <id> --file clip.mp4 [--start 2026-10-15T09:00:00+05:00]
+//   … --file shop.mp4 --realtime [--loop]   (a recording shown as a live camera, for demonstrations)
 //   VIDEO_DEVICE_TOKEN=… VIDEO_RTSP_URL=rtsp://user:pass@camera/stream npm run video:processor -- --server … --source … --rtsp
 //   VIDEO_DEVICE_TOKEN=… npm run video:processor -- --server … --source … --webcam /dev/video0   (Windows: --webcam "video=Camera")
 // Camera credentials stay in VIDEO_RTSP_URL on this device; they are not sent to the server.
-// People: --detector dfine-n (default, neural, model from `npm run video:model`), dfine-s, or
-// motion (the classical blob pipeline). A missing model stops the run; it never falls back.
-//   [--detector dfine-n|dfine-s|motion] [--precision fp32|int8] [--fps 5]
+// People: --detector rfdetr-n (default, neural, model from `npm run video:model`), rfdetr-s,
+// dfine-s, or motion (the classical blob pipeline). A missing model stops the run; it never falls
+// back. Live view: while someone watches the source in the app, the analyzed frames (JPEG, with
+// boxes) are sent to the server's memory; without a viewer nothing but counts leaves the device.
+//   [--detector rfdetr-n|rfdetr-s|dfine-s|motion] [--precision fp32|int8] [--fps 5] [--no-preview]
 const args = process.argv.slice(2);
 const arg = (name: string) => {
   const i = args.indexOf(`--${name}`);
@@ -35,8 +41,17 @@ if (!server || !source || !token) {
 }
 let input: string[], live: boolean, probe: string | null;
 if (arg("file")) {
-  input = ["-i", arg("file")!];
-  live = false;
+  // --realtime plays the file at its own speed and --loop repeats it: a permitted recording then
+  // behaves like a live camera (demonstrations). Without them the file is processed as fast as
+  // the device can, as a recording.
+  const realtime = args.includes("--realtime") || args.includes("--loop");
+  input = [
+    ...(args.includes("--loop") ? ["-stream_loop", "-1"] : []),
+    ...(realtime ? ["-re"] : []),
+    "-i",
+    arg("file")!,
+  ];
+  live = realtime;
   probe = arg("file")!;
 } else if (args.includes("--rtsp")) {
   const url = process.env.VIDEO_RTSP_URL;
@@ -57,7 +72,29 @@ const headers = {
   "X-Source-Id": source,
   "Content-Type": "application/json",
 };
-async function call<T>(path: string, body?: unknown): Promise<T> {
+// A refusal is not retried: it explains itself and ends the run (ffmpeg and the camera are
+// released by processVideo).
+class Refused extends Error {
+  constructor(
+    readonly path: string,
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(`server refused ${path}: ${status} ${code}`);
+  }
+}
+function explain(e: unknown) {
+  if (!(e instanceof Refused))
+    return e instanceof Error ? e.message : String(e);
+  if (e.status === 404 && e.code === "NOT_FOUND")
+    return "Сервер не принял токен устройства: токен перевыпущен или источник удалён. Выдайте токен в «Камеры → Настройки камеры» и запустите обработчик с новым VIDEO_DEVICE_TOKEN. / Сервер құрылғы токенін қабылдамады: токенді қайта беріп, өңдегішті жаңа токенмен іске қосыңыз.";
+  if (e.code === "RUN_ENDED")
+    return "Прогон уже закрыт на сервере. Запустите обработчик заново. / Іске қосу серверде жабылған.";
+  if (e.code === "VIDEO_NOT_CONFIGURED")
+    return "Для источника не сохранены линии или зоны. / Дереккөз үшін сызықтар не аймақтар сақталмаған.";
+  return e.message;
+}
+async function call<T>(path: string, body?: unknown, retries = 5): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       const r = await fetch(`${server}/api/video/${path}`, {
@@ -67,16 +104,17 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
         signal: AbortSignal.timeout(15_000),
       });
       if (r.ok) return (await r.json()) as T;
-      if (r.status < 500)
-        throw new Error(
-          `server refused ${path}: ${r.status} ${(await r.text()).slice(0, 200)}`,
-        );
+      if (r.status < 500) {
+        let code = "";
+        try {
+          code = String((await r.json()).error ?? "");
+        } catch {
+          // Not JSON: the status alone explains the refusal.
+        }
+        throw new Refused(path, r.status, code);
+      }
     } catch (error) {
-      if (
-        attempt >= 5 ||
-        (error instanceof Error && error.message.startsWith("server refused"))
-      )
-        throw error;
+      if (attempt >= retries || error instanceof Refused) throw error;
     }
     await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
   }
@@ -115,15 +153,21 @@ function ffprobe(target: string) {
     p.on("error", () => resolve({}));
   });
 }
-const kind = (arg("detector") ?? "dfine-n") as DetectorKind | "motion";
-if (kind !== "motion" && !(kind in DETECTORS)) {
+const kind = arg("detector") ?? DEFAULT_DETECTOR;
+if (kind in RETIRED_DETECTORS) {
+  console.error(
+    `--detector ${kind} is no longer offered: ${RETIRED_DETECTORS[kind]}. Run npm run video:model.`,
+  );
+  process.exit(2);
+}
+if (kind !== "motion" && !isDetectorKind(kind)) {
   console.error(
     `Unknown --detector ${kind}: use ${Object.keys(DETECTORS).join(", ")} or motion`,
   );
   process.exit(2);
 }
 const detector =
-  kind === "motion"
+  kind === "motion" || !isDetectorKind(kind)
     ? undefined
     : await loadDetector(kind, {
         precision: arg("precision") === "int8" ? "int8" : "fp32",
@@ -136,36 +180,102 @@ const detector =
         process.exit(2);
       });
 const fps = Number(arg("fps") ?? (detector ? 5 : 10));
-const cfg = await call<VideoConfig & { mode: string }>("config");
-const startTime = arg("start") ? new Date(arg("start")!) : new Date();
-const passport = probe ? await ffprobe(probe) : {};
-const { runId } = await call<{ runId: string }>("runs", {
-  configVersion: cfg.version,
-  sourceStart: startTime.toISOString(),
-  passport,
-});
-console.log(
-  `run ${runId}: config v${cfg.version}, ${live ? "live" : "recording"}, people: ${detector ? `${detector.version} + ByteTrack` : "motion (classical)"}, ${fps} fps`,
-);
 const controller = new AbortController();
 process.on("SIGINT", () => controller.abort());
 process.on("SIGTERM", () => controller.abort());
-const summary = await processVideo({
-  input,
-  config: cfg,
-  startTime,
-  live,
-  detector,
-  fps,
-  signal: controller.signal,
-  onEvents: async (events: VideoEvent[]) => {
-    for (let i = 0; i < events.length; i += 500)
-      await call("events", { runId, events: events.slice(i, i + 500) });
-  },
-  onHeartbeat: async (h) => {
-    await call("heartbeat", { runId, ...h });
-  },
-});
-await call("end", { runId, ended: summary.ended, summary });
-await detector?.dispose();
-console.log(JSON.stringify(summary));
+let runId = "";
+let summary: Awaited<ReturnType<typeof processVideo>> | null = null;
+const encoder = { current: null as JpegEncoder | null };
+try {
+  const cfg = await call<VideoConfig & { mode: string }>("config");
+  const startTime = arg("start") ? new Date(arg("start")!) : new Date();
+  const passport = probe ? await ffprobe(probe) : {};
+  // The pipeline is recorded at the start: an interrupted run still says how it counted.
+  ({ runId } = await call<{ runId: string }>("runs", {
+    configVersion: cfg.version,
+    sourceStart: startTime.toISOString(),
+    passport,
+    pipeline: detector
+      ? {
+          mode: "neural",
+          detector: detector.version,
+          tracker: "bytetrack",
+          fps,
+        }
+      : { mode: "motion", detector: null, tracker: "nearest", fps },
+  }));
+  console.log(
+    `run ${runId}: config v${cfg.version}, ${live ? "live" : "recording"}, people: ${detector ? `${detector.version} + ByteTrack` : "motion (classical)"}, ${fps} fps`,
+  );
+  // Live view: on only while the server says someone is watching (heartbeat answer).
+  const previewAllowed = !args.includes("--no-preview");
+  let watched = false,
+    sending = false,
+    lastSent = 0;
+  summary = await processVideo({
+    input,
+    config: cfg,
+    startTime,
+    live,
+    detector,
+    fps,
+    signal: controller.signal,
+    onEvents: async (events: VideoEvent[]) => {
+      for (let i = 0; i < events.length; i += 500)
+        await call("events", { runId, events: events.slice(i, i + 500) });
+    },
+    onHeartbeat: async (h) => {
+      const r = await call<{ preview?: boolean }>("heartbeat", { runId, ...h });
+      watched = previewAllowed && r.preview === true;
+    },
+    onFrame: (report, image) => {
+      if (!watched || sending || !report.usable) return;
+      // At most two frames per second; a slow upload skips frames instead of queueing them.
+      if (Date.now() - lastSent < 450) return;
+      sending = true;
+      lastSent = Date.now();
+      encoder.current ??= new JpegEncoder(
+        image.width,
+        image.height,
+        image.format,
+      );
+      encoder.current
+        .encode(image.data)
+        .then(async (jpeg) => {
+          if (!jpeg) return;
+          const r = await call<{ preview: boolean }>(
+            "preview",
+            {
+              runId,
+              at: report.at,
+              image: jpeg.toString("base64"),
+              width: image.width,
+              height: image.height,
+              visible: report.visible,
+              people: report.people.map((p) => ({
+                id: p.id,
+                box: p.box,
+                counted: p.counted,
+                seen: p.seen,
+              })),
+              zones: report.zones,
+              crossings: report.crossings,
+            },
+            0,
+          );
+          if (!r.preview) watched = false;
+        })
+        // A lost preview frame is not an error of the run.
+        .catch(() => {})
+        .finally(() => (sending = false));
+    },
+  });
+  await call("end", { runId, ended: summary.ended, summary });
+  console.log(JSON.stringify(summary));
+} catch (error) {
+  console.error(`Processing stopped: ${explain(error)}`);
+  process.exitCode = 1;
+} finally {
+  encoder.current?.close();
+  await detector?.dispose();
+}

@@ -41,7 +41,8 @@
     "format": "prettier --write src tests scripts *.ts *.mjs",
     "eval:assistant": "tsx --env-file-if-exists=.env.local scripts/assistant-eval.ts",
     "eval:video": "tsx scripts/video-eval.ts",
-    "video:processor": "tsx scripts/video-processor.ts"
+    "video:processor": "tsx scripts/video-processor.ts",
+    "video:check": "tsx scripts/video-check.ts"
   },
   "engines": {
     "node": ">=22.20.0"

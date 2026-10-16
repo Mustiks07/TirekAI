@@ -28,7 +28,11 @@ const config: NextConfig = {
             value:
               "base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'",
           },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(self)" },
+          // Camera and microphone only for this site: the in-app camera check (T057) and voice (T028).
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(self)",
+          },
         ],
       },
     ];

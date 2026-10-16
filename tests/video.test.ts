@@ -258,7 +258,10 @@ describe.skipIf(!hasFfmpeg)("T035–T038 with ffmpeg", () => {
       "SELECT id FROM video_sources WHERE organization_id=$1",
       [org],
     );
-    const { token } = await svc.issueDeviceToken(owner, org, srcRow.id);
+    // The source already has a token: replacing it is an explicit choice.
+    const { token } = await svc.issueDeviceToken(owner, org, srcRow.id, {
+      replace: true,
+    });
     const device = await svc.device(srcRow.id, token);
     const { runId } = await svc.startRun(device, {
       configVersion: 1,

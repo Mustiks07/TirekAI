@@ -8,6 +8,14 @@ export const askInput = z
     conversationId: z.uuid().nullable().default(null),
     locale: z.enum(["ru", "kk"]),
     text: z.string().trim().min(1).max(2000),
+    // T056: the question came from speech recognition; words the recognizer was unsure of. The
+    // assistant may ask a short clarifying question; nothing is approved by sending it.
+    voice: z
+      .object({
+        uncertain: z.array(z.string().trim().min(1).max(40)).max(20),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export const settingsInput = z

@@ -13,7 +13,10 @@ import { KnowledgeService } from "../src/server/knowledge/service";
 import { InsightService } from "../src/server/decisions/insights";
 import { TodayService } from "../src/server/decisions/today";
 
-const statePath = ".local/tirekai-business.json";
+// BUSINESS_FIXTURE_STATE lets a check build a separate throwaway copy (tests); default unchanged.
+const statePath =
+    process.env.BUSINESS_FIXTURE_STATE || ".local/tirekai-business.json",
+  reportPath = statePath.replace(/\.json$/, "") + "-report.json";
 type State = {
   email: string;
   password: string;
@@ -57,7 +60,7 @@ async function main() {
   if (state.database !== database) throw new Error("FIXTURE_DATABASE_MISMATCH");
   if (state.completed) {
     console.log(
-      "Business fixture already exists; credentials remain in .local/tirekai-business.json.",
+      `Business fixture already exists; credentials remain in ${statePath}.`,
     );
     return;
   }
@@ -612,14 +615,11 @@ async function main() {
       situations: today.situations_total,
       summary: await sales.summary(token, orgId, { branchId: branches[0] }),
     };
-    await writeFile(
-      ".local/tirekai-business-report.json",
-      JSON.stringify(report, null, 2),
-    );
+    await writeFile(reportPath, JSON.stringify(report, null, 2));
     state.completed = true;
     await save();
     console.log(
-      "Business fixture complete. Credentials: .local/tirekai-business.json; report: .local/tirekai-business-report.json. No external services called.",
+      `Business fixture complete. Credentials: ${statePath}; report: ${reportPath}. No external services called.`,
     );
   } finally {
     if (token) await p.logout(token).catch(() => {});

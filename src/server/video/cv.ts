@@ -25,6 +25,8 @@ export type Track = {
   firstSeen: number;
   zoneSince: Record<string, number>;
   crossed: Record<string, number>;
+  // Last matched box (x0, y0, x1, y1), normalized; shown on the live view.
+  box?: [number, number, number, number];
 };
 // Running-average background with a frozen update under moving objects.
 export class Background {
@@ -214,6 +216,7 @@ export class Tracker {
       tr.cx = b.cx;
       tr.cy = b.cy;
       tr.area = b.area;
+      tr.box = [b.x0, b.y0, b.x1, b.y1];
       tr.age++;
       tr.missed = 0;
     }
@@ -241,6 +244,7 @@ export class Tracker {
         firstSeen: t,
         zoneSince: {},
         crossed: {},
+        box: [b.x0, b.y0, b.x1, b.y1],
       });
     });
     return ended;

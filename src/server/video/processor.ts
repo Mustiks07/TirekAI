@@ -1,24 +1,18 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
-import {
-  Background,
-  Tracker,
-  components,
-  dilate,
-  crossing,
-  frameQuality,
-  inside,
-  open3,
-  type Point,
-  type Track,
-} from "./cv";
+import type { Point } from "./cv";
 
 // T035–T038 processor. Runs as its own process (scripts/video-processor.ts), never inside a
 // browser tab or the web request path. ffmpeg decodes the source to small grayscale frames in
 // memory; no frame is written to disk and only aggregated events leave the process.
 import { PROCESSOR_VERSION, DETECTOR_VERSIONS } from "./versions";
-import { ByteTracker, type Detection } from "./bytetrack";
 import type { PersonDetector } from "./detector";
+import {
+  FrameAnalyzer,
+  grayFromRgb,
+  type Diagnosis,
+  type FrameReport,
+} from "./analyzer";
 export { PROCESSOR_VERSION, DETECTOR_VERSIONS } from "./versions";
 export type VideoLine = {
   id: string;
@@ -63,9 +57,20 @@ export type VideoEvent = {
 export type Heartbeat = {
   frames: number;
   unusable: number;
+  // Processing capacity: frames per second of processing time (what the device could do).
   fps: number;
+  // Frames actually received per wall-clock second since the run started (≤ target fps).
+  inputFps: number;
   latencyMs: number;
   sourceTime: string;
+  // People counted on the latest analyzed frame and when (live screen, never an average).
+  now?: {
+    at: string;
+    visible: number;
+    zones: Record<string, number>;
+    crossings: Record<string, { in: number; out: number }>;
+  } | null;
+  diagnosis?: Diagnosis;
 };
 export type RunSummary = Heartbeat & {
   processor: string;
@@ -83,6 +88,12 @@ export type RunSummary = Heartbeat & {
     tracker: "bytetrack" | "nearest";
   };
 };
+export type FrameImage = {
+  data: Uint8Array;
+  width: number;
+  height: number;
+  format: "rgb24" | "gray";
+};
 export async function processVideo(o: {
   input: string[];
   config: VideoConfig;
@@ -96,244 +107,80 @@ export async function processVideo(o: {
   onEvents: (events: VideoEvent[]) => Promise<void>;
   onHeartbeat?: (h: Heartbeat) => Promise<void>;
   onFirstFrame?: () => void;
+  // Every analyzed frame with what was found on it and the image the analysis saw (neural: the
+  // detector's RGB input, stretched; motion: the small grayscale frame). Used for the live view;
+  // never stored here.
+  onFrame?: (report: FrameReport, image: FrameImage) => void;
   signal?: AbortSignal;
   ffmpeg?: string;
   // T057: people come from a neural detector + ByteTrack instead of moving blobs. Without it the
   // classical motion pipeline runs, and the summary says which one did — never switched silently.
   detector?: PersonDetector;
 }): Promise<RunSummary> {
-  const w = o.width ?? 320,
-    h = o.height ?? 180,
-    fps = o.fps ?? 10,
-    minArea = o.minArea ?? Math.round((w * h) / 900),
-    aggregate = o.aggregateSeconds ?? 10,
+  const fps = o.fps ?? 10,
+    a = new FrameAnalyzer({
+      config: o.config,
+      startTime: o.startTime,
+      live: o.live,
+      neural: !!o.detector,
+      width: o.width,
+      height: o.height,
+      fps,
+      minArea: o.minArea,
+      aggregateSeconds: o.aggregateSeconds,
+    }),
+    w = a.w,
+    h = a.h,
     size = w * h;
-  const bg = new Background(w, h),
-    tracker = o.detector
-      ? new ByteTracker({
-          high: 0.5,
-          low: 0.1,
-          newTrack: 0.6,
-          matchIou: 0.2,
-          lowMatchIou: 0.5,
-          buffer: 3 * (o.fps ?? 10),
-        })
-      : new Tracker();
-  const events: VideoEvent[] = [];
-  let seq = 0,
-    frames = 0,
-    unusable = 0,
-    busyMs = 0,
-    prev: Uint8Array | null = null,
-    hold: Uint8Array | undefined,
-    gapStart: number | null = null,
+  const started = Date.now();
+  let busyMs = 0,
     pending: Promise<void> = Promise.resolve(),
-    sent = 0;
-  const at = (frame: number) =>
-    new Date(o.startTime.getTime() + (frame * 1000) / fps).toISOString();
-  const emit = (e: Omit<VideoEvent, "seq">) =>
-    events.push({ ...e, seq: seq++ } as VideoEvent);
-  const zoneCounts: Record<string, number[]> = {};
-  const queueOpen: Record<string, number | null> = {},
-    queueRun: Record<string, number> = {};
-  const shelfRef: Record<string, number> = {},
-    shelfRun: Record<string, number> = {},
-    shelfOpen: Record<string, boolean> = {},
-    work: Record<string, { state: boolean; run: number }> = {};
-  const zonePixels = new Map<string, number[]>();
-  for (const z of o.config.zones) {
-    const idx: number[] = [];
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++)
-        if (inside({ x: (x + 0.5) / w, y: (y + 0.5) / h }, z.polygon))
-          idx.push(y * w + x);
-    zonePixels.set(z.id, idx);
-    zoneCounts[z.id] = [];
-  }
+    sent = 0,
+    last: FrameReport | null = null;
+  let stop = () => {};
   const flush = () => {
-    if (!events.length) return;
-    const batch = events.splice(0, events.length);
+    const batch = a.take();
+    if (!batch.length) return;
     sent += batch.length;
     pending = pending.then(() => o.onEvents(batch));
+    // A refused delivery (e.g. revoked device token) stops ffmpeg and is raised at the end.
+    pending.catch(() => stop());
   };
-  const leaveZones = (tr: Track, frame: number) => {
-    for (const [zone, since] of Object.entries(tr.zoneSince)) {
-      const seconds = (frame - since) / fps;
-      if (seconds >= 1)
-        emit({
-          kind: "dwell",
-          at: at(since),
-          zone,
-          value: Math.round(seconds * 10) / 10,
-          until: at(frame),
-        });
-      delete tr.zoneSince[zone];
-    }
+  const analyze = (
+    gray: Uint8Array,
+    image: FrameImage,
+    people: Parameters<FrameAnalyzer["step"]>[1],
+  ) => {
+    const t = performance.now();
+    if (a.frames === 0) o.onFirstFrame?.();
+    const report = a.step(gray, people);
+    if (report.usable) last = report;
+    if (a.aggregateDue) flush();
+    busyMs += performance.now() - t;
+    o.onFrame?.(report, image);
   };
-  const step = (frame: Uint8Array, people: Detection[] | null = null) => {
-    const started = performance.now(),
-      i = frames++;
-    if (i === 0) o.onFirstFrame?.();
-    const q = frameQuality(frame, prev);
-    prev = frame;
-    if (q.unusable || (q.frozen && o.live)) {
-      unusable++;
-      if (gapStart === null) gapStart = i;
-      busyMs += performance.now() - started;
-      return;
-    }
-    if (gapStart !== null) {
-      // A gap of unusable frames is reported as missing data, never as zero visitors.
-      if (i - gapStart >= fps)
-        emit({
-          kind: "gap",
-          at: at(gapStart),
-          until: at(i),
-          reason: "unusable_frames",
-        });
-      gapStart = null;
-    }
-    const mask = open3(bg.apply(frame, 28, hold), w, h);
-    hold = dilate(mask, w, h, 2);
-    const ended =
-      people && tracker instanceof ByteTracker
-        ? tracker.update(people, i)
-        : (tracker as Tracker).update(components(mask, w, h, minArea), i);
-    for (const tr of ended) leaveZones(tr, i);
-    for (const tr of tracker.tracks) {
-      if (tr.missed > 0 || tr.age < 2) continue;
-      for (const line of o.config.lines) {
-        const side = crossing(
-          { x: tr.px, y: tr.py },
-          { x: tr.cx, y: tr.cy },
-          line.a,
-          line.b,
-        );
-        // One count per track and line within two seconds suppresses jitter on the line.
-        if (
-          side &&
-          (tr.crossed[line.id] === undefined ||
-            i - tr.crossed[line.id] > 2 * fps)
-        ) {
-          tr.crossed[line.id] = i;
-          emit({
-            kind: "line_cross",
-            at: at(i),
-            line: line.id,
-            direction: side === line.inSide ? "in" : "out",
-          });
+  const metrics = (): Heartbeat => ({
+    frames: a.frames,
+    unusable: a.unusable,
+    fps: a.frames ? (a.frames * 1000) / Math.max(busyMs, 1) : 0,
+    inputFps: a.frames
+      ? Math.round((a.frames * 100000) / Math.max(Date.now() - started, 1)) /
+        100
+      : 0,
+    latencyMs: a.frames ? busyMs / a.frames : 0,
+    sourceTime: a.at(a.frames),
+    now: last
+      ? {
+          at: last.at,
+          visible: last.visible,
+          zones: last.zones,
+          crossings: last.crossings,
         }
-      }
-      for (const z of o.config.zones) {
-        const isIn = inside({ x: tr.cx, y: tr.cy }, z.polygon);
-        if (isIn && tr.zoneSince[z.id] === undefined) tr.zoneSince[z.id] = i;
-        if (!isIn && tr.zoneSince[z.id] !== undefined) {
-          const seconds = (i - tr.zoneSince[z.id]) / fps;
-          if (seconds >= 1)
-            emit({
-              kind: "dwell",
-              at: at(tr.zoneSince[z.id]),
-              zone: z.id,
-              value: Math.round(seconds * 10) / 10,
-              until: at(i),
-            });
-          delete tr.zoneSince[z.id];
-        }
-      }
-    }
-    for (const z of o.config.zones) {
-      // A live track counts at its last position while briefly missed (≤ tracker tolerance).
-      const visible = tracker.tracks.filter(
-        (tr) =>
-          tr.age >= 3 &&
-          tr.missed <= fps &&
-          inside({ x: tr.cx, y: tr.cy }, z.polygon),
-      ).length;
-      zoneCounts[z.id].push(visible);
-      if (z.kind === "queue") {
-        const min = z.queueMin ?? 3,
-          hold = (z.queueSeconds ?? 10) * fps;
-        queueRun[z.id] = visible >= min ? (queueRun[z.id] || 0) + 1 : 0;
-        if (queueRun[z.id] >= hold && queueOpen[z.id] == null) {
-          queueOpen[z.id] = i - hold + 1;
-          emit({
-            kind: "queue_start",
-            at: at(i - hold + 1),
-            zone: z.id,
-            value: visible,
-          });
-        }
-        if (visible < min && queueOpen[z.id] != null) {
-          emit({
-            kind: "queue_end",
-            at: at(i),
-            zone: z.id,
-            value: (i - queueOpen[z.id]!) / fps,
-          });
-          queueOpen[z.id] = null;
-        }
-      }
-      if (z.kind === "shelf" || z.kind === "workstation") {
-        const px = zonePixels.get(z.id)!;
-        let changed = 0;
-        for (const p of px) if (mask[p]) changed++;
-        const share = px.length ? changed / px.length : 0;
-        if (z.kind === "shelf") {
-          // The first seconds are the reference ("as configured"); a lasting change with nobody
-          // in front is a signal to check the shelf — never a stock movement.
-          if (i < 3 * fps) shelfRef[z.id] = share;
-          // People in front move; a changed shelf is a static blob that does not.
-          const movers = tracker.tracks.filter(
-            (tr) =>
-              tr.travel > 0.05 && inside({ x: tr.cx, y: tr.cy }, z.polygon),
-          ).length;
-          const lasting = share > 0.35 && movers === 0;
-          shelfRun[z.id] = lasting ? (shelfRun[z.id] || 0) + 1 : 0;
-          if (shelfRun[z.id] >= 5 * fps && !shelfOpen[z.id]) {
-            shelfOpen[z.id] = true;
-            emit({
-              kind: "shelf_change_suspected",
-              at: at(i),
-              zone: z.id,
-              value: Math.round(share * 100) / 100,
-            });
-          }
-          if (!lasting) shelfOpen[z.id] = false;
-        } else {
-          const occupied = visible > 0 || share > 0.2;
-          const s = (work[z.id] ||= { state: false, run: 0 });
-          s.run = occupied !== s.state ? s.run + 1 : 0;
-          if (s.run >= 3 * fps) {
-            s.state = occupied;
-            s.run = 0;
-            emit({
-              kind: "workstation_state",
-              at: at(i),
-              zone: z.id,
-              value: occupied ? 1 : 0,
-            });
-          }
-        }
-      }
-    }
-    if (frames % (aggregate * fps) === 0) {
-      for (const z of o.config.zones) {
-        const c = zoneCounts[z.id];
-        if (c.length)
-          emit({
-            kind: "zone_count",
-            at: at(i - c.length + 1),
-            until: at(i + 1),
-            zone: z.id,
-            value:
-              Math.round((c.reduce((a, b) => a + b, 0) / c.length) * 100) / 100,
-          });
-        zoneCounts[z.id] = [];
-      }
-      flush();
-    }
-    busyMs += performance.now() - started;
-  };
+      : null,
+    diagnosis: a.diagnosis,
+  });
+  const d = o.detector,
+    frameSize = d ? d.width * d.height * 3 : size;
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -341,8 +188,8 @@ export async function processVideo(o: {
     ...o.input,
     "-an",
     "-vf",
-    o.detector
-      ? `scale=${o.detector.width}:${o.detector.height},format=rgb24`
+    d
+      ? `scale=${d.width}:${d.height},format=rgb24`
       : `scale=${w}:${h},format=gray`,
     "-r",
     String(fps),
@@ -356,71 +203,75 @@ export async function processVideo(o: {
   });
   // ffmpeg errors may contain a credential-bearing RTSP URL. Drain but never persist them.
   child.stderr.resume();
-  const abort = () => child.kill("SIGTERM");
-  o.signal?.addEventListener("abort", abort);
-  const heartbeat = setInterval(() => {
-    if (o.onHeartbeat)
-      pending = pending.then(() =>
-        o.onHeartbeat!({
-          frames,
-          unusable,
-          fps: frames ? (frames * 1000) / Math.max(busyMs, 1) : 0,
-          latencyMs: frames ? busyMs / frames : 0,
-          sourceTime: at(frames),
-        }),
-      );
-  }, 5000);
-  let buffer: Buffer = Buffer.alloc(0);
-  const d = o.detector,
-    frameSize = d ? d.width * d.height * 3 : size;
-  // Neural mode: frames are processed one at a time; while the model runs, reading from ffmpeg
-  // pauses (back-pressure), so a slow device processes fewer frames instead of queueing memory.
-  // The grayscale frame for quality, gaps, shelf and workstation is derived from the RGB frame.
-  let frameQueue: Promise<void> = Promise.resolve();
-  const neural = async (rgb: Uint8Array) => {
-    const started = performance.now();
-    const people = await d!.detect(rgb);
-    // Model time counts as processing time in fps/latency figures.
-    busyMs += performance.now() - started;
-    const gray = new Uint8Array(size);
-    for (let y = 0; y < h; y++) {
-      const sy = Math.floor(((y + 0.5) * d!.height) / h);
-      for (let x = 0; x < w; x++) {
-        const k = (sy * d!.width + Math.floor(((x + 0.5) * d!.width) / w)) * 3;
-        gray[y * w + x] =
-          (rgb[k] * 77 + rgb[k + 1] * 150 + rgb[k + 2] * 29) >> 8;
-      }
-    }
-    step(gray, people);
+  stop = () => {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill("SIGTERM");
   };
-  const ended = await new Promise<RunSummary["ended"]>((resolve) => {
-    child.stdout.on("data", (chunk: Buffer) => {
-      buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
-      if (!d) {
-        while (buffer.length >= size) {
-          step(new Uint8Array(buffer.subarray(0, size)));
-          buffer = buffer.subarray(size);
+  o.signal?.addEventListener("abort", stop);
+  const heartbeat = setInterval(() => {
+    // Line crossings reach the app within a heartbeat, not only at the 10 s zone aggregate.
+    flush();
+    if (o.onHeartbeat) {
+      const h = metrics();
+      pending = pending.then(() => o.onHeartbeat!(h));
+      pending.catch(() => stop());
+    }
+  }, 5000);
+  let failure: unknown = null;
+  try {
+    let buffer: Buffer = Buffer.alloc(0);
+    // Neural mode: frames are processed one at a time; while the model runs, reading from ffmpeg
+    // pauses (back-pressure), so a slow device processes fewer frames instead of queueing memory.
+    // The grayscale frame for quality, gaps, shelf and workstation is derived from the RGB frame.
+    let frameQueue: Promise<void> = Promise.resolve();
+    const neural = async (rgb: Uint8Array) => {
+      const t = performance.now();
+      const people = await d!.detect(rgb);
+      // Model time counts as processing time in fps/latency figures.
+      busyMs += performance.now() - t;
+      analyze(
+        grayFromRgb(rgb, d!.width, d!.height, w, h),
+        { data: rgb, width: d!.width, height: d!.height, format: "rgb24" },
+        people,
+      );
+    };
+    const ended = await new Promise<RunSummary["ended"]>((resolve) => {
+      child.stdout.on("data", (chunk: Buffer) => {
+        buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
+        if (!d) {
+          while (buffer.length >= size) {
+            const gray = new Uint8Array(buffer.subarray(0, size));
+            analyze(
+              gray,
+              { data: gray, width: w, height: h, format: "gray" },
+              null,
+            );
+            buffer = buffer.subarray(size);
+          }
+          return;
         }
-        return;
-      }
-      const batch: Uint8Array[] = [];
-      while (buffer.length >= frameSize) {
-        batch.push(new Uint8Array(buffer.subarray(0, frameSize)));
-        buffer = buffer.subarray(frameSize);
-      }
-      if (!batch.length) return;
-      child.stdout.pause();
-      frameQueue = frameQueue
-        .then(async () => {
-          for (const f of batch) await neural(f);
-        })
-        .finally(() => child.stdout.resume());
-    });
-    child.on("error", () => resolve("decoder_error"));
-    child.on("close", (code) =>
-      frameQueue
-        .catch(() => {})
-        .then(() =>
+        const batch: Uint8Array[] = [];
+        while (buffer.length >= frameSize) {
+          batch.push(new Uint8Array(buffer.subarray(0, frameSize)));
+          buffer = buffer.subarray(frameSize);
+        }
+        if (!batch.length) return;
+        child.stdout.pause();
+        frameQueue = frameQueue
+          .then(async () => {
+            if (failure) return;
+            for (const f of batch) await neural(f);
+          })
+          .catch((e) => {
+            // A detector failure ends the run: ffmpeg is stopped, the error is raised below.
+            failure ??= e;
+            stop();
+          })
+          .finally(() => child.stdout.resume());
+      });
+      child.on("error", () => resolve("decoder_error"));
+      child.on("close", (code) =>
+        frameQueue.then(() =>
           resolve(
             o.signal?.aborted
               ? "aborted"
@@ -428,63 +279,50 @@ export async function processVideo(o: {
                 ? o.live
                   ? "signal_lost"
                   : "end_of_stream"
-                : frames
+                : a.frames
                   ? "signal_lost"
                   : "decoder_error",
           ),
         ),
-    );
-  });
-  // A detector failure is not a lost signal: it is raised to the operator.
-  await frameQueue;
-  clearInterval(heartbeat);
-  o.signal?.removeEventListener("abort", abort);
-  for (const tr of tracker.tracks) leaveZones(tr, frames);
-  for (const z of o.config.zones)
-    if (queueOpen[z.id] != null)
-      emit({
-        kind: "queue_end",
-        at: at(frames),
-        zone: z.id,
-        value: (frames - queueOpen[z.id]!) / fps,
-      });
-  if (gapStart !== null && frames - gapStart >= fps)
-    emit({
-      kind: "gap",
-      at: at(gapStart),
-      until: at(frames),
-      reason: "unusable_frames",
+      );
     });
-  // A lost live stream is an explicit event: the period after it has no data.
-  if (ended === "signal_lost" || ended === "decoder_error")
-    emit({
-      kind: "signal_lost",
-      at: at(frames),
-      reason: ended,
-    });
-  flush();
-  await pending;
-  const cpu = os.cpus()[0]?.model || "unknown";
-  return {
-    frames,
-    unusable,
-    fps: frames ? (frames * 1000) / Math.max(busyMs, 1) : 0,
-    latencyMs: frames ? busyMs / frames : 0,
-    sourceTime: at(frames),
-    processor: PROCESSOR_VERSION,
-    detectors: DETECTOR_VERSIONS,
-    people: o.detector
-      ? { mode: "neural", detector: o.detector.version, tracker: "bytetrack" }
-      : { mode: "motion", detector: null, tracker: "nearest" },
-    width: w,
-    height: h,
-    targetFps: fps,
-    hardware: {
-      cpu,
-      cores: os.cpus().length,
-      platform: `${os.platform()} ${os.arch()}`,
-    },
-    ended,
-    events: sent,
-  };
+    await frameQueue;
+    // A detector failure is not a lost signal: it is raised to the operator.
+    if (failure) throw failure;
+    a.finish(ended);
+    flush();
+    await pending;
+    const cpu = os.cpus()[0]?.model || "unknown";
+    const m = metrics();
+    return {
+      frames: m.frames,
+      unusable: m.unusable,
+      fps: m.fps,
+      inputFps: m.inputFps,
+      latencyMs: m.latencyMs,
+      sourceTime: m.sourceTime,
+      diagnosis: m.diagnosis,
+      processor: PROCESSOR_VERSION,
+      detectors: DETECTOR_VERSIONS,
+      people: d
+        ? { mode: "neural", detector: d.version, tracker: "bytetrack" }
+        : { mode: "motion", detector: null, tracker: "nearest" },
+      width: w,
+      height: h,
+      targetFps: fps,
+      hardware: {
+        cpu,
+        cores: os.cpus().length,
+        platform: `${os.platform()} ${os.arch()}`,
+      },
+      ended,
+      events: sent,
+    };
+  } finally {
+    // Always: no heartbeat timer, abort listener or ffmpeg (and the camera it holds) outlives
+    // the run, whatever ended it.
+    clearInterval(heartbeat);
+    o.signal?.removeEventListener("abort", stop);
+    stop();
+  }
 }

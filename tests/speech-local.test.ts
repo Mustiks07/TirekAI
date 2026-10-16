@@ -156,6 +156,46 @@ describe("T056 local speech process protocol (test double, not recognition)", ()
     ).resolves.toMatchObject({ text: "Спиши 25 штук" });
     s.stop();
   });
+  it("a deadline during model loading ends the request on time; the load continues", async () => {
+    const s = new LocalWhisperSpeech("slow-start", fake);
+    const started = Date.now();
+    await expect(
+      s.transcribe({
+        audio: wav(100),
+        mime: "audio/wav",
+        locale: "kk",
+        signal: AbortSignal.timeout(300),
+      }),
+    ).rejects.toMatchObject({ code: "VOICE_TIMEOUT" });
+    expect(Date.now() - started).toBeLessThan(1500);
+    // The same process finishes loading and serves the next recording.
+    const child = (s as unknown as { child: unknown }).child;
+    expect(child).not.toBeNull();
+    await expect(
+      s.transcribe({
+        audio: wav(100),
+        mime: "audio/wav",
+        locale: "kk",
+        signal: AbortSignal.timeout(5000),
+      }),
+    ).resolves.toMatchObject({ locale: "kk" });
+    expect((s as unknown as { child: unknown }).child).toBe(child);
+    s.stop();
+  });
+  it("a load that never finishes is stopped and retried by the next request", async () => {
+    const s = new LocalWhisperSpeech("never-ready", fake);
+    s.loadTimeoutMs = 300;
+    await expect(
+      s.transcribe({
+        audio: wav(100),
+        mime: "audio/wav",
+        locale: "ru",
+        signal: AbortSignal.timeout(3000),
+      }),
+    ).rejects.toMatchObject({ code: "VOICE_UNAVAILABLE" });
+    expect((s as unknown as { child: unknown }).child).toBeNull();
+    s.stop();
+  });
   it("more than three waiting recordings are refused as busy", async () => {
     const s = new LocalWhisperSpeech("test", fake);
     const slow = () =>

@@ -189,6 +189,6 @@ Worker дополнительно вызывает `runConnectors`: Битрик
 
 Детектор людей (T057) на устройстве обработки возле камеры:
 
-1. `npm run video:model` (D-FINE-N COCO, ≈ 20 МБ; `-- dfine-n dfine-s` — оба). Скорость на устройстве: `npm run video:bench`.
-2. Обработчик: `npm run video:processor -- --server … --source … --rtsp --detector dfine-n [--precision int8] [--fps 5]`. Классический режим — только явно: `--detector motion`. Без модели обработчик останавливается с подсказкой.
+1. `npm run video:model` (RF-DETR Nano COCO, ≈ 108 МБ; `-- rfdetr-n rfdetr-s dfine-s` — несколько). D-FINE-N снят (не находил людей, docs/LOCAL_MODELS.md). Скорость на устройстве: `npm run video:bench`. Проверка камеры без приложения: `npm run video:check -- --webcam "video=<камера>"` (Windows) — посекундно люди и диагноз звена; инструкция docs/CAMERA_WINDOWS.md.
+2. Обработчик: `npm run video:processor -- --server … --source … --rtsp [--detector rfdetr-n] [--fps 5] [--no-preview]`; запись как живая камера для показа: `--file shop.mp4 --loop`. Отказ сервера (например, перевыпущенный токен) останавливает обработчик и освобождает камеру с объяснением; `Ctrl+C` — штатная остановка. Классический режим — только явно: `--detector motion`. Без модели обработчик останавливается с подсказкой.
 3. Сравнение режимов на ваших размеченных записях: `npm run video:eval-recorded -- --manifest <файл>`; статус детектора в приложении меняется только через «Разметка и оценка».

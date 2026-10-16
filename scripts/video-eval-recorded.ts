@@ -1,5 +1,5 @@
 // T057 accuracy on permitted recordings with human-made truth, motion vs neural pipeline on the
-// same clips: `npm run video:eval-recorded -- --manifest <file.json> [--detector dfine-n] [--fps 5]`.
+// same clips: `npm run video:eval-recorded -- --manifest <file.json> [--detector rfdetr-n] [--fps 5]`.
 // Manifest: { name, permission, clips: [{ file, source, license, line: {a,b,inSide},
 //   truth: [{ t: seconds, direction: "in"|"out" }] }] }. Truth comes from a person watching the
 // clip; it is never produced by either pipeline. Offline report only: detector statuses in the
@@ -13,7 +13,11 @@ import {
   judge,
   type ClipResult,
 } from "../src/server/video/evaluate";
-import { loadDetector, type DetectorKind } from "../src/server/video/detector";
+import {
+  DEFAULT_DETECTOR,
+  loadDetector,
+  type DetectorKind,
+} from "../src/server/video/detector";
 import type { Point } from "../src/server/video/cv";
 
 type Manifest = {
@@ -36,7 +40,7 @@ async function main() {
   if (!path) throw new Error("MANIFEST_REQUIRED");
   const m = JSON.parse(await readFile(path, "utf8")) as Manifest;
   if (!m.permission?.trim()) throw new Error("PERMISSION_NOTE_REQUIRED");
-  const kind = (arg("detector") ?? "dfine-n") as DetectorKind;
+  const kind = (arg("detector") ?? DEFAULT_DETECTOR) as DetectorKind;
   const fps = Number(arg("fps") ?? "5");
   const precision = arg("precision") === "int8" ? "int8" : "fp32";
   const out: Record<string, unknown> = {};

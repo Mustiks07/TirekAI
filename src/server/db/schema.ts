@@ -22,6 +22,7 @@ import { extendedIndustryMigration } from "./extended-industry-migration";
 import { outcomesMigration } from "./outcomes-migration";
 import { privacyMigration } from "./privacy-migration";
 import { reviewMigration } from "./review-migration";
+import { videoPipelineMigration } from "./video-pipeline-migration";
 export const migrations = [
   {
     version: 1,
@@ -95,4 +96,5 @@ CREATE TABLE auth_limits (
   outcomesMigration,
   privacyMigration,
   reviewMigration,
+  videoPipelineMigration,
 ];

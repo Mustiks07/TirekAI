@@ -686,7 +686,45 @@ export const executionRoutes: Route[] = [
     path: "video/sources/:id/token",
     schema: z.object({ token: z.string() }),
     run: (c) =>
-      new VideoService(c.db).issueDeviceToken(c.secret, c.org, c.params[0]),
+      new VideoService(c.db).issueDeviceToken(
+        c.secret,
+        c.org,
+        c.params[0],
+        c.body,
+      ),
+  },
+  {
+    method: "GET",
+    path: "video/sources/:id/live",
+    run: (c) => new VideoService(c.db).live(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "video/sources/:id/view",
+    run: (c) => new VideoService(c.db).view(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "video/sources/:id/unview",
+    schema: z.object({ ok: z.boolean() }),
+    run: (c) => new VideoService(c.db).unview(c.secret, c.org, c.params[0]),
+  },
+  {
+    method: "POST",
+    path: "video/live",
+    run: (c) => new VideoService(c.db).liveStart(c.secret, c.org, c.body),
+  },
+  {
+    method: "POST",
+    path: "video/live/:id/frames",
+    run: (c) =>
+      new VideoService(c.db).liveFrame(c.secret, c.org, c.params[0], c.body),
+  },
+  {
+    method: "POST",
+    path: "video/live/:id/stop",
+    schema: z.object({ ok: z.boolean() }),
+    run: (c) => new VideoService(c.db).liveStop(c.secret, c.org, c.params[0]),
   },
   {
     method: "GET",
@@ -1116,6 +1154,8 @@ export const uploadLimits: { method: string; path: string; limit: number }[] = [
   { method: "POST", path: "marketing/campaigns/:id/images", limit: 2_900_000 },
   // Voice: up to 60 s of 16 kHz WAV in base64 (transcriptionInput allows 2.8 M characters).
   { method: "POST", path: "assistant/transcriptions", limit: 2_900_000 },
+  // T057 analysis in the app: one RGB frame at the detector size (640×640 at most) in base64.
+  { method: "POST", path: "video/live/:id/frames", limit: 1_800_000 },
 ];
 function match(pattern: string, path: string[]) {
   const parts = pattern.split("/");

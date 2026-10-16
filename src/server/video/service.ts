@@ -19,7 +19,10 @@ import {
   runEnd,
   runStart,
   sourceInput,
+  previewInput,
 } from "../../domain/video";
+import { previewStore } from "./preview";
+import { liveHub } from "./live-analysis";
 import { judge, scoreClip, type ClipResult } from "./evaluate";
 import { DETECTOR_VERSIONS } from "./versions";
 import type { RunSummary, VideoEvent } from "./processor";
@@ -105,10 +108,23 @@ export class VideoService {
     });
   }
   // The processing device authenticates with this token; it is shown once and stored hashed.
-  async issueDeviceToken(secret: Credential, org: string, id: string) {
+  // Reissuing replaces the old token at once: a processor still using it is refused from its next
+  // request. That must be asked for explicitly (replace: true).
+  async issueDeviceToken(
+    secret: Credential,
+    org: string,
+    id: string,
+    input: unknown = {},
+  ) {
+    const c = z
+      .object({ replace: z.boolean().default(false) })
+      .strict()
+      .parse(input ?? {});
     return this.db.transaction(async (tx) => {
       const s = await sessionAccess(tx, secret, org, "video:manage");
       const v = await this.source(tx, org, id, s.branchId, true);
+      if (v.device_token_hash && !c.replace)
+        throw new AppError("VIDEO_TOKEN_REPLACE_CONFIRM", 409);
       const token = randomBytes(32).toString("hex");
       await tx.query(
         "UPDATE video_sources SET device_token_hash=$3,version=version+1 WHERE organization_id=$1 AND id=$2",
@@ -391,7 +407,7 @@ export class VideoService {
       if (!cfg) throw new AppError("VIDEO_NOT_CONFIGURED", 409);
       const id = randomUUID();
       await tx.query(
-        "INSERT INTO video_runs(id,organization_id,source_id,config_version,state,source_start,passport) VALUES($1,$2,$3,$4,'running',$5,$6)",
+        "INSERT INTO video_runs(id,organization_id,source_id,config_version,state,source_start,passport,pipeline) VALUES($1,$2,$3,$4,'running',$5,$6,$7)",
         [
           id,
           s.organization_id,
@@ -399,6 +415,7 @@ export class VideoService {
           c.configVersion,
           c.sourceStart,
           JSON.stringify(c.passport),
+          c.pipeline ? JSON.stringify(c.pipeline) : null,
         ],
       );
       await tx.query(
@@ -434,12 +451,147 @@ export class VideoService {
             frames: c.frames,
             unusable: c.unusable,
             fps: c.fps,
+            inputFps: c.inputFps ?? null,
             latencyMs: c.latencyMs,
+            now: c.now ?? null,
+            diagnosis: c.diagnosis ?? null,
           }),
         ],
       );
     });
+    // Tells the device whether someone is watching (then it sends analyzed frames).
+    return { ok: true, preview: previewStore().wanted(s.id) };
+  }
+  // T057: an analyzed frame for the live view; accepted only while someone watches the source.
+  async preview(s: Source, input: unknown) {
+    const c = previewInput.parse(input);
+    const [r] = await this.db.query<{ state: string }>(
+      "SELECT state FROM video_runs WHERE organization_id=$1 AND id=$2 AND source_id=$3",
+      [s.organization_id, c.runId, s.id],
+    );
+    if (!r) throw new AppError("NOT_FOUND", 404);
+    if (r.state !== "running") throw new AppError("RUN_ENDED", 409);
+    const kept = previewStore().put(s.id, {
+      ...c,
+      org: s.organization_id,
+      received: Date.now(),
+    });
+    return { ok: true, preview: kept };
+  }
+  // Viewing: an authorized user of the source's organization and branch asks for the latest
+  // analyzed frame. Asking keeps the device sending for a few seconds; nothing is stored.
+  async view(secret: Credential, org: string, id: string) {
+    const v = await this.db.transaction(async (tx) => {
+      const s = await sessionAccess(tx, secret, org, "video:read");
+      return this.source(tx, org, id, s.branchId);
+    });
+    const store = previewStore();
+    store.watch(v.id);
+    const frame = store.get(v.id, org);
+    return {
+      frame: frame
+        ? {
+            at: frame.at,
+            age_ms: Date.now() - frame.received,
+            image: frame.image,
+            width: frame.width,
+            height: frame.height,
+            visible: frame.visible,
+            people: frame.people,
+            zones: frame.zones,
+            crossings: frame.crossings,
+          }
+        : null,
+    };
+  }
+  async unview(secret: Credential, org: string, id: string) {
+    const v = await this.db.transaction(async (tx) => {
+      const s = await sessionAccess(tx, secret, org, "video:read");
+      return this.source(tx, org, id, s.branchId);
+    });
+    previewStore().unwatch(v.id);
     return { ok: true };
+  }
+  // Main screen figures: connection, people counted on the latest analyzed frame (only when the
+  // heartbeat is fresh), entries and exits today and how people are counted in the current run.
+  async live(secret: Credential, org: string, id: string) {
+    return this.db.transaction(async (tx) => {
+      const s = await sessionAccess(tx, secret, org, "video:read");
+      const v = await this.source(tx, org, id, s.branchId);
+      const [row] = await tx.query<{
+        state: string;
+        mode: string;
+        last_heartbeat_at: string | null;
+        heartbeat_age: number | null;
+        last_metrics: Record<string, unknown> | null;
+        has_device: boolean;
+        today: string;
+      }>(
+        "SELECT v.state,v.mode,v.last_heartbeat_at,extract(epoch FROM now()-v.last_heartbeat_at)::float8 heartbeat_age,v.last_metrics,(v.device_token_hash IS NOT NULL) has_device,(now() AT TIME ZONE o.timezone)::date::text today FROM video_sources v JOIN organizations o ON o.id=v.organization_id WHERE v.id=$1",
+        [v.id],
+      );
+      const lines = await tx.query<{ direction: string; n: number }>(
+        "SELECT e.direction,count(*)::int n FROM video_events e JOIN organizations o ON o.id=e.organization_id WHERE e.organization_id=$1 AND e.source_id=$2 AND e.kind='line_cross' AND (e.at AT TIME ZONE o.timezone)::date=$3::date GROUP BY e.direction",
+        [org, v.id, row.today],
+      );
+      const [run] = await tx.query<{
+        id: string;
+        state: string;
+        pipeline: Record<string, unknown> | null;
+        started_at: string;
+      }>(
+        "SELECT id,state,pipeline,started_at FROM video_runs WHERE organization_id=$1 AND source_id=$2 ORDER BY started_at DESC LIMIT 1",
+        [org, v.id],
+      );
+      const online =
+        row.state === "running" &&
+        row.heartbeat_age !== null &&
+        row.heartbeat_age < LIVE_SECONDS;
+      // A heartbeat comes every 5 s; older figures are not presented as "now".
+      const fresh =
+        online && row.heartbeat_age !== null && row.heartbeat_age < 15;
+      const m = row.last_metrics || {};
+      return {
+        online,
+        state: row.state,
+        mode: row.mode,
+        hasDevice: row.has_device,
+        lastHeartbeatAt: row.last_heartbeat_at,
+        now: fresh ? (m.now ?? null) : null,
+        metrics: online
+          ? {
+              inputFps: m.inputFps ?? null,
+              processingFps: m.fps ?? null,
+              latencyMs: m.latencyMs ?? null,
+              frames: m.frames ?? null,
+              unusable: m.unusable ?? null,
+              diagnosis: m.diagnosis ?? null,
+            }
+          : null,
+        today: {
+          date: row.today,
+          in: lines.find((l) => l.direction === "in")?.n ?? 0,
+          out: lines.find((l) => l.direction === "out")?.n ?? 0,
+        },
+        run: run
+          ? {
+              id: run.id,
+              state: run.state,
+              startedAt: run.started_at,
+              pipeline: run.pipeline,
+            }
+          : null,
+      };
+    });
+  }
+  liveStart(secret: Credential, org: string, input: unknown) {
+    return liveHub().start(this.db, secret, org, input);
+  }
+  liveFrame(secret: Credential, org: string, id: string, input: unknown) {
+    return liveHub().frame(this.db, secret, org, id, input);
+  }
+  liveStop(secret: Credential, org: string, id: string) {
+    return liveHub().stop(this.db, secret, org, id);
   }
   // Aggregated events only; repeats of the same run sequence number are ignored.
   async ingest(s: Source, input: unknown) {
@@ -530,7 +682,7 @@ export class VideoService {
       const v = await this.source(tx, org, id, s.branchId);
       return {
         items: await tx.query(
-          "SELECT r.id,r.config_version,r.state,r.source_start,r.started_at,r.ended_at,r.summary,r.passport,(SELECT count(*)::int FROM video_annotations a WHERE a.run_id=r.id) annotations FROM video_runs r WHERE r.organization_id=$1 AND r.source_id=$2 ORDER BY r.started_at DESC LIMIT 20",
+          "SELECT r.id,r.config_version,r.state,r.source_start,r.started_at,r.ended_at,r.summary,r.passport,r.pipeline,(SELECT count(*)::int FROM video_annotations a WHERE a.run_id=r.id) annotations FROM video_runs r WHERE r.organization_id=$1 AND r.source_id=$2 ORDER BY r.started_at DESC LIMIT 20",
           [org, v.id],
         ),
       };

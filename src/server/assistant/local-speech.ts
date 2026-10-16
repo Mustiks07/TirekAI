@@ -26,6 +26,8 @@ export class LocalWhisperSpeech implements SpeechProvider {
   readonly name = "local-whisper";
   // A minute of audio takes about a minute on a 4-core CPU; the first request also loads the model.
   readonly timeoutMs = 150_000;
+  // Upper bound for loading the model (≈30 s on 4 cores; slow disks take longer).
+  loadTimeoutMs = 300_000;
   private child: ChildProcess | null = null;
   private ready: Promise<void> | null = null;
   private waiting = new Map<string, (a: Answer) => void>();
@@ -89,6 +91,16 @@ export class LocalWhisperSpeech implements SpeechProvider {
       });
     });
     const ready = this.ready;
+    // A load that never finishes (stuck disk, out of memory) is ended, so the next request
+    // starts a fresh process instead of waiting on a dead one.
+    const loading = setTimeout(() => {
+      if (this.child === child) this.stop();
+    }, this.loadTimeoutMs);
+    loading.unref();
+    ready.then(
+      () => clearTimeout(loading),
+      () => clearTimeout(loading),
+    );
     // A failed start (e.g. the model is not downloaded yet) is retried by the next request.
     ready.catch(() => {
       if (this.ready === ready) this.stop();
@@ -125,7 +137,23 @@ export class LocalWhisperSpeech implements SpeechProvider {
   }): Promise<Transcription> {
     if (r.signal.aborted) throw new AppError("VOICE_TIMEOUT", 504);
     if (this.idle) clearTimeout(this.idle);
-    await this.warm();
+    // The request's deadline also applies while the model is loading. The load itself goes on
+    // (the next recording benefits) and is unloaded later if nobody uses it.
+    let stopWaiting = () => {};
+    const deadline = new Promise<never>((_, fail) => {
+      const abort = () => fail(new AppError("VOICE_TIMEOUT", 504));
+      r.signal.addEventListener("abort", abort, { once: true });
+      stopWaiting = () => r.signal.removeEventListener("abort", abort);
+    });
+    try {
+      await Promise.race([this.warm(), deadline]);
+    } catch (error) {
+      this.idle = setTimeout(() => this.stop(), 15 * 60_000);
+      this.idle.unref();
+      throw error;
+    } finally {
+      stopWaiting();
+    }
     const id = randomUUID();
     const answer = await new Promise<Answer>((resolveAnswer) => {
       // The deadline listener lives only as long as this request.

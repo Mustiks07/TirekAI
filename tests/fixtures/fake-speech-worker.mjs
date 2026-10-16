@@ -3,7 +3,11 @@
 import { createInterface } from "node:readline";
 const send = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 send({ ready: false });
-setTimeout(() => send({ ready: true }), 50);
+// The model name selects a start-up behaviour: a slow load (2 s) or a load that never finishes.
+const start = { "slow-start": 2000, "never-ready": null }[
+  process.env.SPEECH_MODEL
+];
+if (start !== null) setTimeout(() => send({ ready: true }), start ?? 50);
 for await (const line of createInterface({ input: process.stdin })) {
   const r = JSON.parse(line);
   const size = Buffer.from(r.wav, "base64").length;

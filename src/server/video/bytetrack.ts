@@ -165,6 +165,7 @@ export class ByteTracker {
     s.cx = b[0];
     s.cy = b[1];
     s.area = b[2] * b[3];
+    s.box = [d.x0, d.y0, d.x1, d.y1];
     s.age++;
     s.hits++;
     s.missed = 0;
@@ -225,6 +226,7 @@ export class ByteTracker {
         age: 1,
         missed: 0,
         area: b[2] * b[3],
+        box: [d.x0, d.y0, d.x1, d.y1],
         travel: 0,
         firstSeen: t,
         zoneSince: {},
