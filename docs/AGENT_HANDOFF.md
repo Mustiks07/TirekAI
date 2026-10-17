@@ -2,7 +2,7 @@
 
 ## Актуальная передача: главный экран TirekAI (T005/T052) — 17.10.2026
 
-Работа в `codex/tirekai-dashboard-redesign` от `6a3770b` (origin/main); PR в main создан, **не сливать без пользователя**. Дополнительных агентов не запускать без прямого указания.
+Работа в `codex/tirekai-dashboard-redesign` от `6a3770b` (origin/main); по прямому указанию пользователя после полных проверок отправлена в main обычным fast-forward (без force). Начинать с актуального `origin/main`. Дополнительных агентов не запускать без прямого указания.
 
 - **Сервер**: `src/server/decisions/dashboard.ts` (`DashboardService.view/notifications/setReserve`), контракт `src/domain/dashboard.ts`, маршруты в `src/server/routes/execution.ts` (`GET dashboard`, `GET notifications`, `POST finance/reserve`). Миграция 27 `cash_reserves` (`src/server/db/cash-reserve-migration.ts`). Платёж и деньги берутся из `CommerceService.calendar` — не дублировать расчёт календаря. Деньги — bigint тиыны, количества — Decimal; недостающие данные — `missing[]`, не нули.
 - **Экран**: `src/components/dashboard.tsx` (карточки, диалог расчёта на `<dialog>` с `showModal`, график SVG по bigint, строка вопроса), тексты RU/KK `src/lib/dashboard-i18n.ts`. Голос вынесен в хук `useVoiceRecorder` (`assistant-page.tsx`), вопрос с главной передаётся в помощник через `AskRequest` (`initialQuestion`, отправка один раз на id). Прежний TodayBoard — ниже на главной (`#all-situations`).

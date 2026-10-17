@@ -105,7 +105,9 @@ test("a recognized question is sent once, shown in the dialog and can be correct
   await page
     .getByRole("button", { name: "Остановить и распознать", exact: true })
     .click();
-  await expect(page.getByRole("alert").first()).toBeVisible({
+  // Wait for the voice error itself (the page always has the route announcer alert), so the
+  // mocked recognition is answered before the mock is removed.
+  await expect(page.locator(".voice-panel [role=alert]")).toBeVisible({
     timeout: 30_000,
   });
   expect(asks).toHaveLength(0);
