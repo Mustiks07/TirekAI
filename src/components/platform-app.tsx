@@ -1639,21 +1639,21 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           tabIndex={-1}
         >
           <LiveSync organizationId={organizationId}>
-            <div className="page-heading" hidden={page === "today"}>
-              <div>
-                <div className="page-kicker">
-                  {currentOrg
-                    ? profileNames[locale][currentOrg.profile]
-                    : t.workspace}
-                </div>
-                <h1>
-                  {navLabel(page)}
-                  <span className="heading-dot">.</span>
-                </h1>
-                <p>
-                  {page === "today"
-                    ? t.todayNote
-                    : page === "tasks"
+            {/* The main screen has its own heading (one h1 per page). */}
+            {page !== "today" && (
+              <div className="page-heading">
+                <div>
+                  <div className="page-kicker">
+                    {currentOrg
+                      ? profileNames[locale][currentOrg.profile]
+                      : t.workspace}
+                  </div>
+                  <h1>
+                    {navLabel(page)}
+                    <span className="heading-dot">.</span>
+                  </h1>
+                  <p>
+                    {page === "tasks"
                       ? t.tasksNote
                       : page === "approvals"
                         ? t.approvalsNote
@@ -1688,18 +1688,19 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                                                     : page === "organization"
                                                       ? t.orgNote
                                                       : t.activityNote}
-                </p>
+                  </p>
+                </div>
+                {page === "team" && workspace?.canManageTeam ? (
+                  <button
+                    className="button primary"
+                    onClick={() => setModal("invite")}
+                  >
+                    <Plus size={17} />
+                    {t.invite}
+                  </button>
+                ) : null}
               </div>
-              {page === "team" && workspace?.canManageTeam ? (
-                <button
-                  className="button primary"
-                  onClick={() => setModal("invite")}
-                >
-                  <Plus size={17} />
-                  {t.invite}
-                </button>
-              ) : null}
-            </div>
+            )}
             {invitationPanel}
             <ErrorNotice error={error} locale={locale} />
             {notice && (

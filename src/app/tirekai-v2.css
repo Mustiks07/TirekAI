@@ -1330,9 +1330,10 @@ textarea::placeholder {
     min-height: 42px;
     background: transparent;
   }
+  /* The drawer ends above the quick-section bar, so nothing in it is covered. */
   .menu-open .sidebar {
-    inset: 0;
-    padding-bottom: 100px;
+    inset: 0 0 76px;
+    padding-bottom: 24px;
   }
   .menu-open .sidebar .nav-item {
     font-size: 0.9375rem;
@@ -1349,4 +1350,43 @@ textarea::placeholder {
   .dash-metrics dd {
     font-size: 1rem;
   }
+}
+
+/* Enlarged text (up to 200 %) on narrow screens: card parts wrap instead of leaving the page. */
+.dash-card-head {
+  display: flex;
+  flex-wrap: wrap;
+}
+.dash-card-head h2,
+.dash-card-head .dash-card-title {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dash-card-head .text-button {
+  margin-left: auto;
+  white-space: normal;
+}
+.dash-pair,
+.dash-compare {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+}
+.dash-pair strong,
+.dash-compare strong,
+.dashboard h2,
+.dashboard p,
+.dashboard li {
+  overflow-wrap: anywhere;
+}
+.dash-top > *,
+.dash-side > *,
+.dash-bottom > * {
+  min-width: 0;
+}
+.dashboard .panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dash-chart-axis {
+  flex-wrap: wrap;
+  column-gap: 8px;
 }

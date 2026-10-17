@@ -536,10 +536,18 @@ export function useVoiceRecorder({
       release();
     }
   }
-  const stop = () => recorder.current?.stop();
+  // The microphone is switched off at once on stop or cancel; the recorded part is still
+  // delivered to onstop.
+  const finish = () => {
+    const r = recorder.current;
+    if (!r) return;
+    if (r.state !== "inactive") r.stop();
+    r.stream.getTracks().forEach((track) => track.stop());
+  };
+  const stop = finish;
   const cancel = () => {
     cancelled.current = true;
-    recorder.current?.stop();
+    finish();
   };
   return { state, problem, start, stop, cancel };
 }

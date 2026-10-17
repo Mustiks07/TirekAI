@@ -1143,54 +1143,58 @@ function BranchesCard({
           <ArrowRight size={15} aria-hidden="true" />
         </button>
       </div>
-      <table className="dash-table">
-        <thead>
-          <tr>
-            <th scope="col">{t.branch}</th>
-            <th scope="col">{t.revenueToday}</th>
-            <th scope="col">{t.change}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {b.rows.map((r) => {
-            const share =
-              max > 0n ? Number((BigInt(r.today_minor) * 1000n) / max) / 10 : 0;
-            const down =
-              r.change_percent !== null && Number(r.change_percent) < 0;
-            return (
-              <tr key={r.branch_id}>
-                <th scope="row">{branchLabel(r.name, locale)}</th>
-                <td>
-                  <span>{tenge(r.today_minor)}</span>
-                  <span className="dash-bar" aria-hidden="true">
-                    <span style={{ width: `${share}%` }} />
-                  </span>
-                </td>
-                <td
-                  className={
-                    down ? "down" : r.change_percent !== null ? "up" : ""
-                  }
-                >
-                  {r.change_percent !== null ? (
-                    <>
-                      {down ? (
-                        <ArrowDown size={14} aria-hidden="true" />
-                      ) : (
-                        <ArrowUp size={14} aria-hidden="true" />
-                      )}
-                      {pct(r.change_percent)}
-                    </>
-                  ) : BigInt(r.today_minor) > 0n ? (
-                    t.newSales
-                  ) : (
-                    t.noValue
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table className="dash-table">
+          <thead>
+            <tr>
+              <th scope="col">{t.branch}</th>
+              <th scope="col">{t.revenueToday}</th>
+              <th scope="col">{t.change}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {b.rows.map((r) => {
+              const share =
+                max > 0n
+                  ? Number((BigInt(r.today_minor) * 1000n) / max) / 10
+                  : 0;
+              const down =
+                r.change_percent !== null && Number(r.change_percent) < 0;
+              return (
+                <tr key={r.branch_id}>
+                  <th scope="row">{branchLabel(r.name, locale)}</th>
+                  <td>
+                    <span>{tenge(r.today_minor)}</span>
+                    <span className="dash-bar" aria-hidden="true">
+                      <span style={{ width: `${share}%` }} />
+                    </span>
+                  </td>
+                  <td
+                    className={
+                      down ? "down" : r.change_percent !== null ? "up" : ""
+                    }
+                  >
+                    {r.change_percent !== null ? (
+                      <>
+                        {down ? (
+                          <ArrowDown size={14} aria-hidden="true" />
+                        ) : (
+                          <ArrowUp size={14} aria-hidden="true" />
+                        )}
+                        {pct(r.change_percent)}
+                      </>
+                    ) : BigInt(r.today_minor) > 0n ? (
+                      t.newSales
+                    ) : (
+                      t.noValue
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {b.state === "no_data" && <p className="dash-empty">{t.noSalesToday}</p>}
       <p className="dash-footnote">
         <Clock3 size={13} aria-hidden="true" /> {t.vsYesterday(b.until)}
