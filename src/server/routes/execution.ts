@@ -680,7 +680,7 @@ export const executionRoutes: Route[] = [
   },
   {
     method: "GET",
-    path: "notifications",
+    path: "notifications/summary",
     schema: notificationsView,
     run: (c) => new DashboardService(c.db).notifications(c.secret, c.org),
   },

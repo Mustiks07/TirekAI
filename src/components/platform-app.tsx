@@ -960,7 +960,9 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
     if (!organizationId) return;
     let alive = true;
     const load = () =>
-      api<NotificationsView>(`organizations/${organizationId}/notifications`)
+      api<NotificationsView>(
+        `organizations/${organizationId}/notifications/summary`,
+      )
         .then((n) => alive && setNotifications(n))
         .catch(() => alive && setNotifications(null));
     load();

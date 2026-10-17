@@ -1162,11 +1162,20 @@ textarea::placeholder {
   .top-greeting strong {
     font-size: 1rem;
   }
+  /* The language switch stays on the phone: it is the only place to change it. */
   .top-greeting .breadcrumb,
   .top-date,
   .topbar .top-actions > .icon-button,
-  .topbar .language {
+  .top-profile > svg {
     display: none;
+  }
+  .topbar .top-actions {
+    gap: 6px;
+  }
+  .topbar .language button {
+    min-width: 40px;
+    min-height: 36px;
+    padding: 0 6px;
   }
   .top-select {
     max-width: 150px;

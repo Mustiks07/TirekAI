@@ -287,6 +287,18 @@ test("TirekAI main screen: real data, refresh, branch switch, decision, calculat
       .violations,
   ).toEqual([]);
 
+  // The minimum cash reserve is set from the money card (versioned, idempotent command).
+  const cash = page.locator(".dash-cash");
+  await expect(
+    cash.getByText("Минимальный резерв не задан", { exact: true }),
+  ).toBeVisible();
+  await cash
+    .getByRole("button", { name: "Задать резерв", exact: true })
+    .click();
+  await cash.getByLabel("Минимальный резерв, ₸", { exact: true }).fill("500");
+  await cash.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(cash.getByText("500 ₸", { exact: true })).toBeVisible();
+
   // An event opens its record.
   await page
     .locator(".dash-timeline")

@@ -313,7 +313,7 @@ Sales имеет чтение каталога/остатков, issue/reserve/r
 | Метод | Путь (`/api/v1/organizations/:org/…`) | Права | Что делает |
 | --- | --- | --- | --- |
 | GET | `dashboard?branchId=` | `organization:read`; блоки — по правам роли | `dashboardView` (`src/domain/dashboard.ts`). Сотрудник, закреплённый за филиалом, получает только свой филиал; чужой `branchId` → 403 `FORBIDDEN`. Блоки без права роли приходят со `state: "no_access"` |
-| GET | `notifications` | `organization:read` | `{approvals, overdue_tasks, situations}`: предложения, ждущие решения этого человека; его просроченные задачи; открытые ситуации в его области |
+| GET | `notifications/summary` | `organization:read` | `{approvals, overdue_tasks, situations}` (прежний `GET notifications` — список уведомлений задач — не изменён): предложения, ждущие решения этого человека; его просроченные задачи; открытые ситуации в его области |
 | POST | `finance/reserve` `{key, branchId \| null, version, minimum}` | `finance:write`; закреплённый за филиалом — только свой филиал | Задать минимальный резерв (KZT, до 2 знаков). Идемпотентно по `key` (повтор ключа заново проверяет права), `version` — 409 `VERSION_CONFLICT`, аудит `finance.reserve_set`. Ответ `{id, reused}` |
 
 Блоки `dashboardView` и источники:
