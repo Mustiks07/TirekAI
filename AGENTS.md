@@ -1,4 +1,4 @@
-# Работа с TarazHackathon
+# Работа с TirekAI
 
 Перед изменениями прочитайте `docs/AGENT_HANDOFF.md`, `PROGRESS.md`, `docs/TASKS.md`, затем соответствующие разделы `SPECIFICATION.md` и `DEVELOPMENT_PLAN.md`.
 
