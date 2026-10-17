@@ -13,6 +13,7 @@ import { CrmService } from "../src/server/crm/service";
 import { InsightService } from "../src/server/decisions/insights";
 import { DashboardService } from "../src/server/decisions/dashboard";
 import { dashboardView, notificationsView } from "../src/domain/dashboard";
+import { executionRoutes } from "../src/server/routes/execution";
 
 // T005/T052 main screen: the view is computed from real records, names what is missing instead
 // of showing zero, follows role and branch scope; the reserve is a versioned, idempotent command.
@@ -343,4 +344,12 @@ it("sets the minimum reserve as an idempotent, versioned, audited command", asyn
     [org],
   );
   expect(log.n).toBe(1);
+});
+
+it("registers every route once (a duplicate path is silently shadowed by the first)", () => {
+  const seen = new Set<string>();
+  const duplicates = executionRoutes
+    .map((r) => `${r.method} ${r.path}`)
+    .filter((k) => (seen.has(k) ? true : (seen.add(k), false)));
+  expect(duplicates).toEqual([]);
 });
