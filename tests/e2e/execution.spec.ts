@@ -129,7 +129,7 @@ test("situation → draft purchase → second-person approval → execution; tas
   await page.goto("/");
   await page.getByRole("button", { name: "РУС", exact: true }).click();
   // T023: reorder point through the form, then explicit detection.
-  await nav(page, "Каталог и склад");
+  await nav(page, "Склад");
   await page.locator(".stock-thresholds > summary").click();
   let f = form(page, "Сохранить порог");
   await f
@@ -139,7 +139,7 @@ test("situation → draft purchase → second-person approval → execution; tas
   await f.getByLabel("Страховой запас", { exact: true }).fill("2");
   await f.getByRole("button", { name: "Сохранить порог", exact: true }).click();
   await expect(f.getByRole("status")).toBeVisible();
-  await nav(page, "Сегодня");
+  await nav(page, "Главная");
   await page
     .getByRole("button", { name: "Проверить сейчас", exact: true })
     .click();
@@ -454,7 +454,7 @@ test("situation → draft purchase → second-person approval → execution; tas
       .violations,
   ).toEqual([]);
   // Accessibility, KK and mobile widths on the new Today screen.
-  await nav(page, "Сегодня");
+  await nav(page, "Главная");
   expect(
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze())
       .violations,
@@ -470,7 +470,7 @@ test("situation → draft purchase → second-person approval → execution; tas
   for (const width of [360, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     for (const section of [
-      "Бүгін",
+      "Басты бет",
       "Тапсырмалар",
       "Келісулер",
       "Көмекші",

@@ -27,7 +27,7 @@ test("catalogue, converted receipt, reservation, issue, return, transfer and mob
   await page.getByRole("button", { name: "РУС", exact: true }).click();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Каталог и склад", exact: true })
+    .getByRole("button", { name: "Склад", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Добавить склад", exact: true })

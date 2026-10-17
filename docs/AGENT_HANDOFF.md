@@ -1,5 +1,17 @@
 # Передача проекта следующему агенту
 
+## Актуальная передача: главный экран TirekAI (T005/T052) — 17.10.2026
+
+Работа в `codex/tirekai-dashboard-redesign` от `6a3770b` (origin/main); PR в main создан, **не сливать без пользователя**. Дополнительных агентов не запускать без прямого указания.
+
+- **Сервер**: `src/server/decisions/dashboard.ts` (`DashboardService.view/notifications/setReserve`), контракт `src/domain/dashboard.ts`, маршруты в `src/server/routes/execution.ts` (`GET dashboard`, `GET notifications`, `POST finance/reserve`). Миграция 27 `cash_reserves` (`src/server/db/cash-reserve-migration.ts`). Платёж и деньги берутся из `CommerceService.calendar` — не дублировать расчёт календаря. Деньги — bigint тиыны, количества — Decimal; недостающие данные — `missing[]`, не нули.
+- **Экран**: `src/components/dashboard.tsx` (карточки, диалог расчёта на `<dialog>` с `showModal`, график SVG по bigint, строка вопроса), тексты RU/KK `src/lib/dashboard-i18n.ts`. Голос вынесен в хук `useVoiceRecorder` (`assistant-page.tsx`), вопрос с главной передаётся в помощник через `AskRequest` (`initialQuestion`, отправка один раз на id). Прежний TodayBoard — ниже на главной (`#all-situations`).
+- **Оболочка/тема**: логотип `src/components/brand.tsx` и `public/icons/app.svg`; тема `src/app/tirekai-v2.css` (последний слой, переопределяет `--green`/`--accent`); меню и верхняя панель — `platform-app.tsx` (`navLabel`, `branchPicker`, `openLink`). Заголовок раздела = пункт меню. Общая подпись филиала `branchName()` в `src/lib/i18n.ts`.
+- **Демо**: `npm run demo:today` (сервер остановлен) — продажи текущего дня; после `demo:reset` повторить.
+- **Тесты**: `tests/dashboard.test.ts` (расчёт, состояния, права, резерв), `tests/e2e/dashboard.spec.ts` (13 пунктов проверки макета). e2e-тексты переведены на новые названия меню («Главная», «Склад», «Сотрудники», «Продажи»).
+
+Не проверено: живые ответы моделей, реальный микрофон пользователя (в e2e — тестовый двойник распознавания), реальные устройства и Safari; глаз дизайнера на всех 17 разделах в KK на телефоне (сделан автоматический проход T052). Миграции 1–27 считать выпущенными, следующая — 28.
+
 ## Актуальная передача: камеры (T057), ответы AI и голос (T056) — 16.10.2026, вечер
 
 Начинать с актуального `origin/main`. Работа в `codex/t057-camera-view` от `4e87e60`, опубликована в main обычным fast-forward по разрешению пользователя. Дополнительных агентов не запускать без прямого указания.

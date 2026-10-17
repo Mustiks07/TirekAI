@@ -22,7 +22,10 @@ async function createOrg(page: Page, name: string) {
     .getByRole("button", { name: "Создать организацию", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Сегодня", exact: true }),
+    page.getByRole("heading", {
+      name: "Сегодня требуют внимания",
+      exact: true,
+    }),
   ).toBeVisible();
 }
 test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile and KK/RU", async ({
@@ -69,7 +72,7 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   await expect(page.getByText("Точка на Абая", { exact: true })).toBeVisible();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Команда", exact: true })
+    .getByRole("button", { name: "Сотрудники", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Пригласить сотрудника", exact: true })
@@ -106,11 +109,14 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
     .getByRole("button", { name: "Принять приглашение", exact: true })
     .click();
   await expect(
-    employee.getByRole("heading", { name: "Сегодня", exact: true }),
+    employee.getByRole("heading", {
+      name: "Сегодня требуют внимания",
+      exact: true,
+    }),
   ).toBeVisible();
   await employee
     .getByRole("navigation")
-    .getByRole("button", { name: "Команда", exact: true })
+    .getByRole("button", { name: "Сотрудники", exact: true })
     .click();
   await expect(
     employee.getByText(employeeEmail, { exact: true }),
@@ -162,7 +168,7 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   await employeeContext.close();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Сегодня", exact: true })
+    .getByRole("button", { name: "Главная", exact: true })
     .click();
   const violations = (
     await new AxeBuilder({ page })
@@ -173,7 +179,10 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   await page.getByRole("button", { name: "ҚАЗ", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "kk");
   await expect(
-    page.getByRole("heading", { name: "Бүгін", exact: true }),
+    page.getByRole("heading", {
+      name: "Бүгін назар аударуды қажет етеді",
+      exact: true,
+    }),
   ).toBeVisible();
   await page.screenshot({
     path: "docs/evidence/desktop-kk.png",
@@ -196,7 +205,10 @@ test("owner onboarding, branch-scoped invitation, isolation, revocation, mobile 
   }
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Бүгін", exact: true }),
+    page.getByRole("heading", {
+      name: "Бүгін назар аударуды қажет етеді",
+      exact: true,
+    }),
   ).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

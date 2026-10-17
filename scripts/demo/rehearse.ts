@@ -49,7 +49,9 @@ async function main() {
       .locator("form")
       .getByRole("button", { name: "Войти", exact: true })
       .click();
-    await expect(page.getByRole("heading", { name: "Сегодня" })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: "Сегодня требуют внимания" }),
+    ).toBeVisible({
       timeout: 20_000,
     });
     return page;
@@ -217,7 +219,7 @@ async function main() {
     .locator("article.today-situation")
     .filter({ hasText: "TM-034" });
   await timed(S2, "Сегодня: открыть расчёт ситуации", async () => {
-    await nav(page, "Сегодня");
+    await nav(page, "Главная");
     await situation.getByText("Расчёт и действия", { exact: true }).click();
     await expect(situation.getByText(/Тараз Снаб/).first()).toBeVisible();
   });
@@ -266,7 +268,7 @@ async function main() {
     .scrollIntoViewIfNeeded();
   await snap(page, "compare");
   await timed(S2, "Подготовить черновик закупки из ситуации", async () => {
-    await nav(page, "Сегодня");
+    await nav(page, "Главная");
     await situation.getByText("Расчёт и действия", { exact: true }).click();
     await situation
       .getByRole("button", { name: "Подготовить закупку", exact: true })

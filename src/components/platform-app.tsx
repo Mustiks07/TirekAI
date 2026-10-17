@@ -26,7 +26,6 @@ import {
   CheckCheck,
   ChevronDown,
   CircleCheck,
-  Clock3,
   Copy,
   Database,
   History,
@@ -1689,16 +1688,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                                                       : t.activityNote}
                 </p>
               </div>
-              {page === "today" ? (
-                <span className="date-chip">
-                  <Clock3 size={15} />
-                  {businessDate(
-                    new Date(),
-                    locale,
-                    currentOrg?.timezone || "Asia/Qyzylorda",
-                  )}
-                </span>
-              ) : page === "team" && workspace?.canManageTeam ? (
+              {page === "team" && workspace?.canManageTeam ? (
                 <button
                   className="button primary"
                   onClick={() => setModal("invite")}

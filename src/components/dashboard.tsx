@@ -23,6 +23,7 @@ import {
   Square,
   WalletCards,
 } from "lucide-react";
+import Decimal from "decimal.js";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { DashboardView, MainSituation } from "@/domain/dashboard";
 import type { AssistantStatus } from "@/domain/assistant";
@@ -149,7 +150,7 @@ export function Dashboard({
         </div>
         <div className="dash-updated">
           {shown && (
-            <span role="status">
+            <span>
               {t.updated} {updated}
             </span>
           )}
@@ -181,45 +182,50 @@ export function Dashboard({
           </button>
         </div>
       )}
-      <div className="dash-top">
-        <MainCard
-          t={t}
-          locale={locale}
-          base={base}
-          view={shown}
-          onOpen={onOpen}
-          onChanged={() => setRevision((v) => v + 1)}
-        />
-        <div className="dash-side">
-          <PaymentCard t={t} locale={locale} view={shown} onOpen={onOpen} />
-          <SlowCard
-            t={t}
-            locale={locale}
-            view={shown}
-            onOpen={onOpen}
-            branchId={branchId}
-          />
-        </div>
-      </div>
-      <div className="dash-bottom">
-        <CashCard
-          t={t}
-          locale={locale}
-          base={base}
-          view={shown}
-          tz={tz}
-          onOpen={onOpen}
-          onSaved={() => setRevision((v) => v + 1)}
-        />
-        <BranchesCard t={t} locale={locale} view={shown} onOpen={onOpen} />
-        <EventsCard
-          t={t}
-          locale={locale}
-          view={shown}
-          tz={tz}
-          onOpen={onOpen}
-        />
-      </div>
+      {/* Without any data a failed load shows only the message and "retry", not empty cards. */}
+      {!(error && !shown) && (
+        <>
+          <div className="dash-top">
+            <MainCard
+              t={t}
+              locale={locale}
+              base={base}
+              view={shown}
+              onOpen={onOpen}
+              onChanged={() => setRevision((v) => v + 1)}
+            />
+            <div className="dash-side">
+              <PaymentCard t={t} locale={locale} view={shown} onOpen={onOpen} />
+              <SlowCard
+                t={t}
+                locale={locale}
+                view={shown}
+                onOpen={onOpen}
+                branchId={branchId}
+              />
+            </div>
+          </div>
+          <div className="dash-bottom">
+            <CashCard
+              t={t}
+              locale={locale}
+              base={base}
+              view={shown}
+              tz={tz}
+              onOpen={onOpen}
+              onSaved={() => setRevision((v) => v + 1)}
+            />
+            <BranchesCard t={t} locale={locale} view={shown} onOpen={onOpen} />
+            <EventsCard
+              t={t}
+              locale={locale}
+              view={shown}
+              tz={tz}
+              onOpen={onOpen}
+            />
+          </div>
+        </>
+      )}
       <AskBar
         t={t}
         locale={locale}
@@ -373,7 +379,7 @@ function MainCard({
             <dt>{t.stockLeft}</dt>
             <dd
               className={
-                Number(st.available) <= Number(st.minimum) ? "risk" : ""
+                new Decimal(st.available).lte(st.minimum) ? "risk" : ""
               }
             >
               {quantityText(st.available)} {unit(st.unit)}
@@ -547,8 +553,8 @@ function CalcDialog({
     const u = unit(st.unit);
     lines.push(
       locale === "ru"
-        ? `Продано за ${st.history_days} дн.: ${quantityText(st.sold)} ${u} → в среднем ${st.daily_sales ? quantityText(st.daily_sales) : "—"} ${u} в день`
-        : `${st.history_days} күнде сатылды: ${quantityText(st.sold)} ${u} → күніне орташа ${st.daily_sales ? quantityText(st.daily_sales) : "—"} ${u}`,
+        ? `Продано за ${st.history_days} дн.: ${quantityText(st.sold)} ${u} → в среднем ${st.daily_sales ? quantityText(st.daily_sales) : t.noValue} ${u} в день`
+        : `${st.history_days} күнде сатылды: ${quantityText(st.sold)} ${u} → күніне орташа ${st.daily_sales ? quantityText(st.daily_sales) : t.noValue} ${u}`,
     );
     lines.push(
       locale === "ru"
@@ -570,8 +576,8 @@ function CalcDialog({
     if (st.order)
       lines.push(
         locale === "ru"
-          ? `Заказ: ${quantityText(st.order.quantity)} ${u} у «${st.order.supplier}» — ${tenge(st.order.total_minor)} с доставкой (самое дешёвое сопоставимое предложение)`
-          : `Тапсырыс: «${st.order.supplier}» — ${quantityText(st.order.quantity)} ${u}, жеткізумен ${tenge(st.order.total_minor)} (ең арзан салыстырмалы ұсыныс)`,
+          ? `Заказ: ${quantityText(st.order.quantity)} ${u} у «${st.order.supplier}» за ${tenge(st.order.total_minor)} с доставкой (самое дешёвое сопоставимое предложение)`
+          : `Тапсырыс: «${st.order.supplier}», ${quantityText(st.order.quantity)} ${u}, жеткізумен ${tenge(st.order.total_minor)} (ең арзан салыстырмалы ұсыныс)`,
       );
   } else lines.push(m.calculation);
   return (
@@ -593,8 +599,8 @@ function CalcDialog({
         {st
           ? st.period_from
             ? locale === "ru"
-              ? `продажи с ${st.period_from.split("-").reverse().join(".")} по сегодня (${st.history_days} дн., окно до 28 дней); остатки — на момент обновления`
-              : `${st.period_from.split("-").reverse().join(".")} бастап бүгінге дейінгі сатылым (${st.history_days} күн, 28 күнге дейінгі терезе); қалдықтар — жаңарту сәтінде`
+              ? `продажи с ${st.period_from.split("-").reverse().join(".")} по сегодня (${st.history_days} дн., окно до 28 дней); остатки на момент обновления`
+              : `${st.period_from.split("-").reverse().join(".")} бастап бүгінге дейінгі сатылым (${st.history_days} күн, 28 күнге дейінгі терезе); қалдықтар жаңарту сәтіндегі`
             : t.missing.no_sales_history
           : locale === "ru"
             ? `ситуация обнаружена ${m.detected_at.slice(0, 10).split("-").reverse().join(".")}`
@@ -701,7 +707,7 @@ function PaymentCard({
         )}
       </div>
       <p className="dash-amount">
-        {p.amount_minor ? tenge(p.amount_minor) : "—"}
+        {p.amount_minor ? tenge(p.amount_minor) : t.noValue}
       </p>
       <p className="dash-sub">
         {p.supplier}
@@ -1006,7 +1012,7 @@ function CashCard({
             <div>
               <span>{t.now}</span>
               <strong>
-                {c.opening_minor ? compact(c.opening_minor, locale) : "—"}
+                {c.opening_minor ? compact(c.opening_minor, locale) : t.noValue}
               </strong>
             </div>
             <div>
@@ -1041,9 +1047,13 @@ function CashCard({
           )}
           <p className="dash-sub">
             {t.plannedIn}:{" "}
-            {c.planned_in_minor ? compact(c.planned_in_minor, locale) : "—"} ·{" "}
-            {t.plannedOut}:{" "}
-            {c.planned_out_minor ? compact(c.planned_out_minor, locale) : "—"}
+            {c.planned_in_minor
+              ? compact(c.planned_in_minor, locale)
+              : t.noValue}{" "}
+            · {t.plannedOut}:{" "}
+            {c.planned_out_minor
+              ? compact(c.planned_out_minor, locale)
+              : t.noValue}
           </p>
         </>
       )}
@@ -1173,7 +1183,7 @@ function BranchesCard({
                   ) : BigInt(r.today_minor) > 0n ? (
                     t.newSales
                   ) : (
-                    "—"
+                    t.noValue
                   )}
                 </td>
               </tr>
@@ -1212,12 +1222,12 @@ function eventText(
       return ru ? `Новая ситуация: ${x.title}` : `Жаңа жағдай: ${x.title}`;
     case "average_check":
       return ru
-        ? `Средний чек ${Number(x.percent) >= 0 ? "вырос" : "снизился"} на ${String(x.percent).replace("-", "").replace(".", ",")}% — ${money(x.amount_minor)}`
-        : `Орташа чек ${String(x.percent).replace("-", "").replace(".", ",")}%-ға ${Number(x.percent) >= 0 ? "өсті" : "төмендеді"} — ${money(x.amount_minor)}`;
+        ? `Средний чек ${String(x.percent).startsWith("-") ? "снизился" : "вырос"} на ${String(x.percent).replace("-", "").replace(".", ",")}%, до ${money(x.amount_minor)}`
+        : `Орташа чек ${String(x.percent).replace("-", "").replace(".", ",")}%-ға ${String(x.percent).startsWith("-") ? "төмендеді" : "өсті"}, ${money(x.amount_minor)}`;
     case "item_sales":
       return ru
-        ? `Продажи «${x.name_ru}» ${Number(x.percent) >= 0 ? "выросли" : "снизились"} на ${String(x.percent).replace("-", "").replace(".", ",")}% · ${x.branch}`
-        : `«${x.name_kk}» сатылымы ${String(x.percent).replace("-", "").replace(".", ",")}%-ға ${Number(x.percent) >= 0 ? "өсті" : "төмендеді"} · ${x.branch}`;
+        ? `Продажи «${x.name_ru}» ${String(x.percent).startsWith("-") ? "снизились" : "выросли"} на ${String(x.percent).replace("-", "").replace(".", ",")}% · ${x.branch}`
+        : `«${x.name_kk}» сатылымы ${String(x.percent).replace("-", "").replace(".", ",")}%-ға ${String(x.percent).startsWith("-") ? "төмендеді" : "өсті"} · ${x.branch}`;
     default:
       return "";
   }
@@ -1280,13 +1290,15 @@ function EventsCard({
                   className="dash-event-link"
                   onClick={() => onOpen(item.link!)}
                 >
-                  {item.tone === "up"
-                    ? "↑ "
-                    : item.tone === "down"
-                      ? "↓ "
-                      : item.tone === "risk"
-                        ? "! "
-                        : ""}
+                  <span aria-hidden="true">
+                    {item.tone === "up"
+                      ? "↑ "
+                      : item.tone === "down"
+                        ? "↓ "
+                        : item.tone === "risk"
+                          ? "! "
+                          : ""}
+                  </span>
                   {eventText(item, locale)}
                 </button>
               ) : (

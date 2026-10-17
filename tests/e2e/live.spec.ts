@@ -123,7 +123,7 @@ test("open orders and stock screens of another user update within 3 s after a co
   });
   const orderMs = Date.now() - t0;
   // Stock screen: a reservation by someone else changes the available quantity.
-  await nav(screen, "Каталог и склад");
+  await nav(screen, "Склад");
   const card = screen
     .getByRole("article")
     .filter({ hasText: "LIVE-1" })

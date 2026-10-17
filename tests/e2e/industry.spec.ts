@@ -205,7 +205,7 @@ test("clinic: private request, appointment, visit and invoice through RU/KK mobi
   await page.getByRole("button", { name: "Меню", exact: true }).click();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Результаты", exact: true })
+    .getByRole("button", { name: "Продажи", exact: true })
     .click();
   await expect(
     page.getByRole("heading", {
@@ -464,7 +464,7 @@ test("outcomes: save a forecast before fulfillment and inspect distinct facts in
     await page.getByRole("button", { name: "РУС", exact: true }).click();
     await page
       .getByRole("navigation")
-      .getByRole("button", { name: "Результаты", exact: true })
+      .getByRole("button", { name: "Продажи", exact: true })
       .click();
     await expect(page.getByText("Загрузка…", { exact: true })).toHaveCount(0);
   };
