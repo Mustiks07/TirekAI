@@ -1,6 +1,6 @@
 /* Only public offline assets are cached. Business pages, APIs and mutations
    always use the network; no background sync or offline command replay. */
-const CACHE = "tirekai-public-v2";
+const CACHE = "tirekai-public-v3";
 const ASSETS = [
   "/offline.html",
   "/icons/app-192.png",

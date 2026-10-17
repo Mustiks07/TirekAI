@@ -13,7 +13,6 @@ import {
   Menu,
   ArrowDownLeft,
   BookOpen,
-  Bot,
   ClipboardCheck,
   ListChecks,
   Plug,
@@ -41,6 +40,16 @@ import {
   Sparkles,
   Users,
   X,
+  BarChart3,
+  ShoppingCart,
+  Package,
+  Banknote,
+  MessageSquareText,
+  Truck,
+  Contact,
+  Settings,
+  Bell,
+  CalendarDays,
 } from "lucide-react";
 import {
   assignableRoles,
@@ -52,6 +61,7 @@ import {
   type Workspace,
 } from "@/domain/contracts";
 import {
+  branchName,
   dictionary,
   errorText,
   eventText,
@@ -69,7 +79,11 @@ import { TasksPage } from "./tasks-page";
 import { KnowledgePage } from "./knowledge-page";
 import { ApprovalsPage } from "./approvals-page";
 import { AutomationsPage } from "./automations-page";
-import { AssistantPage } from "./assistant-page";
+import { AssistantPage, type AskRequest } from "./assistant-page";
+import { Dashboard, type DashboardLink } from "./dashboard";
+import { Logo } from "./brand";
+import { dashboardText, greeting } from "@/lib/dashboard-i18n";
+import type { NotificationsView } from "@/domain/dashboard";
 import { IntegrationsPage } from "./integrations-page";
 import { ChannelOrders } from "./channel-orders";
 import { VideoPage } from "./video-page";
@@ -101,8 +115,6 @@ type Page =
   | "marketing";
 type Modal = "invite" | "newOrg" | "branch" | null;
 const field = (form: FormData, name: string) => String(form.get(name) || "");
-const branchName = (name: string, locale: Locale) =>
-  name === "01" ? dictionary(locale).mainBranch : name;
 
 function Mark({ small = false }: { small?: boolean }) {
   return (
@@ -902,6 +914,80 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
   const [revision, setRevision] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [workspaceError, setWorkspaceError] = useState<unknown>(null);
+  // Main screen branch filter (null = all branches in the user's scope) and a question asked
+  // from the main screen for the assistant.
+  const [dashboardBranch, setDashboardBranch] = useState<string | null>(null);
+  const [ask, setAsk] = useState<AskRequest | null>(null);
+  const [panel, setPanel] = useState<"notifications" | "profile" | null>(null);
+  const [notifications, setNotifications] = useState<NotificationsView | null>(
+    null,
+  );
+  const d = dashboardText(locale);
+  // Short menu names of the approved design; page headings keep the full section names.
+  const navLabel = (id: Page): string =>
+    (
+      ({
+        today: d.navToday,
+        outcomes: d.navSales,
+        orders: d.navOrders,
+        inventory: d.navInventory,
+        finance: d.navFinance,
+        team: d.navTeam,
+        video: d.navVideo,
+        assistant: d.navAssistant,
+      }) as Partial<Record<Page, string>>
+    )[id] ?? t[id];
+  const branchPicker = (className: string) =>
+    workspace &&
+    !workspace.organization.branch_id &&
+    workspace.branches.length > 1 ? (
+      <label className={className}>
+        <Building2 size={17} aria-hidden="true" />
+        <span className="sr-only">{d.branch}</span>
+        <select
+          value={dashboardBranch ?? ""}
+          onChange={(e) => setDashboardBranch(e.target.value || null)}
+        >
+          <option value="">{d.allBranches}</option>
+          {workspace.branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {branchName(b.name, locale)}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
+  useEffect(() => {
+    if (!organizationId) return;
+    let alive = true;
+    const load = () =>
+      api<NotificationsView>(`organizations/${organizationId}/notifications`)
+        .then((n) => alive && setNotifications(n))
+        .catch(() => alive && setNotifications(null));
+    load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [organizationId, revision, page]);
+  useEffect(() => {
+    if (!panel) return;
+    const close = (e: KeyboardEvent | MouseEvent) => {
+      if (
+        e instanceof KeyboardEvent
+          ? e.key === "Escape"
+          : !(e.target as Element).closest(".top-popover-wrap")
+      )
+        setPanel(null);
+    };
+    document.addEventListener("keydown", close);
+    document.addEventListener("mousedown", close);
+    return () => {
+      document.removeEventListener("keydown", close);
+      document.removeEventListener("mousedown", close);
+    };
+  }, [panel]);
   async function reloadSession(preferred?: string) {
     const data = await api<SessionView>("session");
     setSession(data);
@@ -1004,6 +1090,25 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
     setPage(p);
     setNotice("");
     setError(null);
+  }
+  // A card or event on the main screen opens the section that holds its source record.
+  function openLink(link: DashboardLink) {
+    if (link.page === "today") {
+      document
+        .getElementById("all-situations")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    navigate(link.page);
+    if (link.id && link.branchId && workspace) {
+      const focus = {
+        id: link.id,
+        branchId: link.branchId,
+        org: workspace.organization.id,
+      };
+      if (link.page === "orders") setFocusedOrder(focus);
+      if (link.page === "purchasing") setFocusedPurchase(focus);
+    }
   }
   async function createOrganization(data: FormData) {
     const result = await api<{ id: string }>("organizations", "POST", {
@@ -1135,14 +1240,8 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
         >
           <X size={20} />
         </button>
-        <Link className="brand" href="/">
-          <Mark />
-          <span>
-            <span className="brand-name">
-              Tirek<span>AI</span>
-            </span>
-            <small>{t.workspace}</small>
-          </span>
+        <Link className="brand" href="/" aria-label="TirekAI">
+          <Logo tone="dark" size={34} />
         </Link>
         <div className="organization-picker">
           <span className="org-avatar">
@@ -1160,6 +1259,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                 return;
               }
               setOrganizationId(e.target.value);
+              setDashboardBranch(null);
               setPage("today");
             }}
           >
@@ -1175,25 +1275,26 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
         <nav aria-label={t.workspace}>
           {(
             [
-              { id: "today", Icon: LayoutDashboard, group: "work" },
-              { id: "tasks", Icon: ListChecks, group: "work" },
-              { id: "approvals", Icon: ClipboardCheck, group: "work" },
-              { id: "orders", Icon: CheckCheck, group: "business" },
-              { id: "customers", Icon: Users, group: "business" },
-              { id: "inventory", Icon: Database, group: "business" },
-              { id: "purchasing", Icon: Building2, group: "business" },
-              { id: "finance", Icon: ArrowRight, group: "business" },
-              { id: "industry", Icon: Building2, group: "business" },
-              { id: "outcomes", Icon: CheckCheck, group: "management" },
-              { id: "marketing", Icon: Megaphone, group: "management" },
-              { id: "automations", Icon: Workflow, group: "management" },
-              { id: "knowledge", Icon: BookOpen, group: "management" },
-              { id: "video", Icon: Camera, group: "management" },
-              { id: "assistant", Icon: Bot, group: "assistant" },
-              { id: "team", Icon: Users, group: "system" },
-              { id: "organization", Icon: Building2, group: "system" },
-              { id: "integrations", Icon: Plug, group: "system" },
-              { id: "activity", Icon: History, group: "system" },
+              // The eight main sections of the approved design, then every other section.
+              { id: "today", Icon: LayoutDashboard, group: "main" },
+              { id: "outcomes", Icon: BarChart3, group: "main" },
+              { id: "orders", Icon: ShoppingCart, group: "main" },
+              { id: "inventory", Icon: Package, group: "main" },
+              { id: "finance", Icon: Banknote, group: "main" },
+              { id: "team", Icon: Users, group: "main" },
+              { id: "video", Icon: Camera, group: "main" },
+              { id: "assistant", Icon: MessageSquareText, group: "main" },
+              { id: "tasks", Icon: ListChecks, group: "more" },
+              { id: "approvals", Icon: ClipboardCheck, group: "more" },
+              { id: "purchasing", Icon: Truck, group: "more" },
+              { id: "customers", Icon: Contact, group: "more" },
+              { id: "industry", Icon: Building2, group: "more" },
+              { id: "marketing", Icon: Megaphone, group: "more" },
+              { id: "automations", Icon: Workflow, group: "more" },
+              { id: "knowledge", Icon: BookOpen, group: "more" },
+              { id: "integrations", Icon: Plug, group: "more" },
+              { id: "organization", Icon: Settings, group: "more" },
+              { id: "activity", Icon: History, group: "more" },
             ] as const
           )
             .filter((item) => item.id !== "activity" || workspace?.canReadAudit)
@@ -1265,15 +1366,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
               <Fragment key={id}>
                 {(index === 0 || items[index - 1].group !== group) && (
                   <div className="nav-group-label">
-                    {
-                      {
-                        work: locale === "ru" ? "Работа" : "Жұмыс",
-                        business: locale === "ru" ? "Бизнес" : "Бизнес",
-                        management: locale === "ru" ? "Управление" : "Басқару",
-                        assistant: "TirekAI",
-                        system: locale === "ru" ? "Система" : "Жүйе",
-                      }[group]
-                    }
+                    {group === "main" ? d.navMain : d.navMore}
                   </div>
                 )}
                 <button
@@ -1281,8 +1374,8 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                   onClick={() => navigate(id)}
                   aria-current={page === id ? "page" : undefined}
                 >
-                  <Icon size={19} />
-                  <span>{t[id]}</span>
+                  <Icon size={19} aria-hidden="true" />
+                  <span>{navLabel(id)}</span>
                   {page === id && <span className="nav-dot" />}
                 </button>
               </Fragment>
@@ -1325,7 +1418,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           aria-pressed={page === "today"}
         >
           <LayoutDashboard size={21} />
-          <span>{t.today}</span>
+          <span>{d.navToday}</span>
         </button>
         {workspace && can(workspace.organization.role, "orders:read") && (
           <button
@@ -1366,24 +1459,27 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           >
             <Menu size={22} />
           </button>
-          <div className="breadcrumb">
-            <span>{t.workspace}</span>
-            <span>/</span>
-            <strong>{t[page]}</strong>
+          <div className="top-greeting">
+            <strong>
+              {greeting(locale, currentOrg?.timezone || "Asia/Qyzylorda")},{" "}
+              {session.user.name.split(" · ")[0].split(" ")[0]}
+            </strong>
+            <span className="breadcrumb">
+              <span>{currentOrg?.name}</span>
+              <span aria-hidden="true">/</span>
+              <span>{navLabel(page)}</span>
+            </span>
           </div>
           <span className="tag mobile-test">{t.testData}</span>
           <div className="top-actions">
-            <button
-              className="assistant-shortcut text-button"
-              onClick={() => navigate("assistant")}
-            >
-              <Sparkles size={17} />
-              <span>{t.assistant}</span>
-            </button>
-
-            <span className="local-indicator">
-              <span className="status-dot" />
-              {t.localOnly}
+            {page === "today" && branchPicker("top-select")}
+            <span className="date-chip top-date">
+              <CalendarDays size={16} aria-hidden="true" />
+              {businessDate(
+                new Date(),
+                locale,
+                currentOrg?.timezone || "Asia/Qyzylorda",
+              )}
             </span>
             <Language locale={locale} onChange={changeLocale} />
             <button
@@ -1394,6 +1490,146 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
             >
               <RefreshCw size={17} className={refreshing ? "spin" : ""} />
             </button>
+            <div className="top-popover-wrap">
+              <button
+                className="icon-button top-bell"
+                aria-label={`${d.notifications}${notifications ? `: ${notifications.approvals + notifications.overdue_tasks + notifications.situations}` : ""}`}
+                aria-expanded={panel === "notifications"}
+                aria-controls="notifications-panel"
+                onClick={() =>
+                  setPanel(panel === "notifications" ? null : "notifications")
+                }
+              >
+                <Bell size={19} aria-hidden="true" />
+                {!!notifications &&
+                  notifications.approvals + notifications.overdue_tasks > 0 && (
+                    <span className="top-badge" aria-hidden="true">
+                      {Math.min(
+                        99,
+                        notifications.approvals + notifications.overdue_tasks,
+                      )}
+                    </span>
+                  )}
+              </button>
+              {panel === "notifications" && (
+                <div
+                  className="top-popover"
+                  id="notifications-panel"
+                  role="region"
+                  aria-label={d.notifications}
+                >
+                  <h2>{d.notifications}</h2>
+                  {!notifications ||
+                  notifications.approvals +
+                    notifications.overdue_tasks +
+                    notifications.situations ===
+                    0 ? (
+                    <p>{d.noNotifications}</p>
+                  ) : (
+                    <ul>
+                      {notifications.approvals > 0 && (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPanel(null);
+                              navigate("approvals");
+                            }}
+                          >
+                            <strong>{notifications.approvals}</strong>{" "}
+                            {d.notifyApprovals}
+                          </button>
+                        </li>
+                      )}
+                      {notifications.overdue_tasks > 0 && (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPanel(null);
+                              navigate("tasks");
+                            }}
+                          >
+                            <strong>{notifications.overdue_tasks}</strong>{" "}
+                            {d.notifyTasks}
+                          </button>
+                        </li>
+                      )}
+                      {notifications.situations > 0 && (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPanel(null);
+                              navigate("today");
+                            }}
+                          >
+                            <strong>{notifications.situations}</strong>{" "}
+                            {d.notifySituations}
+                          </button>
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="top-popover-wrap">
+              <button
+                className="top-profile"
+                aria-label={`${d.profile}: ${session.user.name}`}
+                aria-expanded={panel === "profile"}
+                aria-controls="profile-panel"
+                onClick={() => setPanel(panel === "profile" ? null : "profile")}
+              >
+                <span className="user-avatar" aria-hidden="true">
+                  {session.user.name
+                    .split(" · ")[0]
+                    .split(" ")
+                    .map((w) => w[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </span>
+                <ChevronDown size={16} aria-hidden="true" />
+              </button>
+              {panel === "profile" && (
+                <div
+                  className="top-popover"
+                  id="profile-panel"
+                  role="region"
+                  aria-label={d.profile}
+                >
+                  <p className="top-user">
+                    <strong>{session.user.name}</strong>
+                    <span>{session.user.email}</span>
+                    <span>
+                      {currentOrg?.name}
+                      {currentOrg
+                        ? ` · ${roleNames[locale][currentOrg.role]}`
+                        : ""}
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setPanel(null);
+                      navigate("team");
+                    }}
+                  >
+                    {navLabel("team")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={logout}
+                  >
+                    <LogOut size={16} aria-hidden="true" /> {d.logout}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main
@@ -1402,7 +1638,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
           tabIndex={-1}
         >
           <LiveSync organizationId={organizationId}>
-            <div className="page-heading">
+            <div className="page-heading" hidden={page === "today"}>
               <div>
                 <div className="page-kicker">
                   {currentOrg
@@ -1410,7 +1646,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     : t.workspace}
                 </div>
                 <h1>
-                  {t[page]}
+                  {navLabel(page)}
                   <span className="heading-dot">.</span>
                 </h1>
                 <p>
@@ -1601,6 +1837,7 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     key={workspace.organization.id}
                     workspace={workspace}
                     locale={locale}
+                    initialQuestion={ask}
                   />
                 )}
                 {page === "outcomes" &&
@@ -1668,12 +1905,35 @@ export function PlatformApp({ initialLocale }: { initialLocale: Locale }) {
                     />
                   )}
                 {page === "today" && (
-                  <TodayBoard
+                  <Dashboard
                     key={workspace.organization.id}
                     workspace={workspace}
                     locale={locale}
-                    onNavigate={(d: Destination) => navigate(d)}
+                    branchId={
+                      workspace.organization.branch_id ?? dashboardBranch
+                    }
+                    onOpen={openLink}
+                    branchSelect={branchPicker("top-select mobile")}
+                    onAsk={(text, voice) => {
+                      setAsk({ id: crypto.randomUUID(), text, voice });
+                      navigate("assistant");
+                    }}
                   />
+                )}
+                {page === "today" && (
+                  <section
+                    id="all-situations"
+                    className="all-situations"
+                    aria-labelledby="all-situations-title"
+                  >
+                    <h2 id="all-situations-title">{d.allSituations}</h2>
+                    <TodayBoard
+                      key={workspace.organization.id}
+                      workspace={workspace}
+                      locale={locale}
+                      onNavigate={(dest: Destination) => navigate(dest)}
+                    />
+                  </section>
                 )}
                 {page === "today" && (
                   <details className="onboarding-disclosure">

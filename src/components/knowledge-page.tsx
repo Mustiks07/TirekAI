@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { branchName } from "@/lib/i18n";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { roles } from "@/domain/contracts";
 import type { KnowledgeDetail, KnowledgeHit } from "@/domain/knowledge";
@@ -62,7 +63,7 @@ export function KnowledgePage({
           <option value="">{t("Вся организация", "Бүкіл ұйым")}</option>
           {workspace.branches.map((b) => (
             <option key={b.id} value={b.id}>
-              {b.name}
+              {branchName(b.name, locale)}
             </option>
           ))}
         </select>

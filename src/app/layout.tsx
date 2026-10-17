@@ -4,16 +4,23 @@ import { cookies } from "next/headers";
 import "@fontsource-variable/noto-sans";
 import "./globals.css";
 import "./tirekai.css";
+import "./tirekai-v2.css";
 export const metadata: Metadata = {
   title: "TirekAI | Бизнес кеңістігі",
   description: "Ұйым мен команданы басқаруға арналған жұмыс кеңістігі.",
   appleWebApp: { capable: true, title: "TirekAI", statusBarStyle: "default" },
-  icons: { icon: "/icons/app-192.png", apple: "/icons/app-192.png" },
+  icons: {
+    icon: [
+      { url: "/icons/app.svg", type: "image/svg+xml" },
+      { url: "/icons/app-192.png", sizes: "192x192" },
+    ],
+    apple: "/icons/app-192.png",
+  },
 };
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#173c33",
+  themeColor: "#10283d",
 };
 export default async function RootLayout({
   children,

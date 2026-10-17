@@ -21,6 +21,7 @@
     "demo:reset": "tsx scripts/demo/reset.ts",
     "demo:invoice": "tsx scripts/demo/make-invoice.ts docs/demo/invoice-ts-1042.jpg",
     "demo:rehearse": "tsx scripts/demo/rehearse.ts",
+    "demo:today": "tsx scripts/demo/today.ts",
     "db:backup": "tsx scripts/backup.ts",
     "db:restore": "tsx scripts/restore.ts",
     "test:restore": "tsx scripts/restore-drill.ts",

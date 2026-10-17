@@ -13,6 +13,8 @@ import { Bitrix24Service } from "../integrations/bitrix24-service";
 import { OneCService } from "../integrations/onec-service";
 import { BankService } from "../bank/service";
 import { VideoService } from "../video/service";
+import { DashboardService } from "../decisions/dashboard";
+import { dashboardView, notificationsView } from "../../domain/dashboard";
 import { MarketingService } from "../marketing/service";
 import { TelegramService } from "../integrations/telegram-service";
 import { KaspiService } from "../integrations/kaspi-service";
@@ -669,6 +671,24 @@ export const executionRoutes: Route[] = [
         c.params[0],
         c.body,
       ),
+  },
+  {
+    method: "GET",
+    path: "dashboard",
+    schema: dashboardView,
+    run: (c) => new DashboardService(c.db).view(c.secret, c.org, c.query),
+  },
+  {
+    method: "GET",
+    path: "notifications",
+    schema: notificationsView,
+    run: (c) => new DashboardService(c.db).notifications(c.secret, c.org),
+  },
+  {
+    method: "POST",
+    path: "finance/reserve",
+    schema: commerceResult,
+    run: (c) => new DashboardService(c.db).setReserve(c.secret, c.org, c.body),
   },
   {
     method: "GET",

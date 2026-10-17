@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { branchName } from "@/lib/i18n";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { automationTopics } from "@/domain/automations";
 import { api } from "@/lib/client";
@@ -579,7 +580,7 @@ export function AutomationsPage({
                       <select name="branchId">
                         {workspace.branches.map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.name}
+                            {branchName(b.name, locale)}
                           </option>
                         ))}
                         <option value="">
@@ -648,7 +649,7 @@ export function AutomationsPage({
               <select name="branchId">
                 {workspace.branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {branchName(b.name, locale)}
                   </option>
                 ))}
                 <option value="">{t("Вся организация", "Бүкіл ұйым")}</option>

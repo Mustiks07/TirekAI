@@ -682,3 +682,6 @@ const events: Record<string, [string, string]> = {
 export function eventText(code: string, locale: Locale) {
   return events[code]?.[locale === "ru" ? 1 : 0] || code;
 }
+// The first branch is stored with the code "01"; people see it as the main branch.
+export const branchName = (name: string, locale: Locale) =>
+  name === "01" ? dictionary(locale).mainBranch : name;

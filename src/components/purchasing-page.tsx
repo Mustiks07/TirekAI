@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type FormEvent,
 } from "react";
+import { branchName } from "@/lib/i18n";
 import { z } from "zod";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { Item, Warehouse, CatalogView } from "@/domain/inventory";
@@ -528,7 +529,7 @@ export function PurchasingPage({
           >
             {workspace.branches.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.name}
+                {branchName(b.name, locale)}
               </option>
             ))}
           </select>

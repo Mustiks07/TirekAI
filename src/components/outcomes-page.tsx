@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { branchName } from "@/lib/i18n";
 import Decimal from "decimal.js";
 import type { Locale, Workspace } from "@/domain/contracts";
 import type { OutcomeView } from "@/domain/outcomes";
@@ -189,7 +190,7 @@ export function OutcomesPage({
           >
             {workspace.branches.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.name}
+                {branchName(b.name, locale)}
               </option>
             ))}
           </select>

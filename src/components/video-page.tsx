@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { branchName } from "@/lib/i18n";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { api } from "@/lib/client";
 import { useRevision } from "@/lib/live";
@@ -748,7 +749,7 @@ function AddSource({
         <select name="branchId">
           {workspace.branches.map((b) => (
             <option key={b.id} value={b.id}>
-              {b.name}
+              {branchName(b.name, locale)}
             </option>
           ))}
         </select>

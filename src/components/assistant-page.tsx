@@ -16,12 +16,20 @@ type Conversation = {
   title: string;
   messages: AssistantMessage[];
 };
+// A question asked from the main screen (typed or spoken); sent once per id.
+export type AskRequest = {
+  id: string;
+  text: string;
+  voice: { uncertain: string[] } | null;
+};
 export function AssistantPage({
   workspace,
   locale,
+  initialQuestion,
 }: {
   workspace: Workspace;
   locale: Locale;
+  initialQuestion?: AskRequest | null;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk);
   const base = `organizations/${workspace.organization.id}`;
@@ -109,6 +117,14 @@ export function AssistantPage({
       inflight.current = false;
     }
   }
+  const asked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialQuestion || asked.current === initialQuestion.id) return;
+    asked.current = initialQuestion.id;
+    send(initialQuestion.text, initialQuestion.voice);
+    // Only a new question id sends; the rest of the page state is not a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion?.id]);
   const field = useRef<HTMLTextAreaElement>(null);
   function edit(previous: string) {
     setText(previous);
@@ -413,29 +429,23 @@ export function AssistantPage({
     </div>
   );
 }
-// T028: push-to-talk. The microphone is requested only after an explicit click, stays visibly
-// indicated, and every track is stopped on stop, cancel or leaving the page.
-function Voice({
+// T028/T056 push-to-talk recording shared by the assistant and the main screen: the microphone
+// is requested only on an explicit action, released on stop, cancel, error and unmount; the
+// recording is converted to 16 kHz WAV and transcribed; an empty result calls nothing.
+export function useVoiceRecorder({
   base,
   locale,
-  enabled,
-  speech,
-  busy,
-  initialLocale,
+  voiceLocale,
   onTranscript,
 }: {
   base: string;
   locale: Locale;
-  enabled: boolean;
-  speech: string;
-  busy: boolean;
-  initialLocale: Locale;
+  voiceLocale: Locale;
   onTranscript: (v: string, uncertain: string[]) => void;
 }) {
   const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk);
   const [state, setState] = useState<"idle" | "recording" | "sending">("idle"),
-    [problem, setProblem] = useState(""),
-    [voiceLocale, setVoiceLocale] = useState<Locale>(initialLocale);
+    [problem, setProblem] = useState("");
   const recorder = useRef<MediaRecorder | null>(null),
     chunks = useRef<Blob[]>([]),
     cancelled = useRef(false);
@@ -526,6 +536,40 @@ function Voice({
       release();
     }
   }
+  const stop = () => recorder.current?.stop();
+  const cancel = () => {
+    cancelled.current = true;
+    recorder.current?.stop();
+  };
+  return { state, problem, start, stop, cancel };
+}
+// T028: push-to-talk. The microphone is requested only after an explicit click, stays visibly
+// indicated, and every track is stopped on stop, cancel or leaving the page.
+function Voice({
+  base,
+  locale,
+  enabled,
+  speech,
+  busy,
+  initialLocale,
+  onTranscript,
+}: {
+  base: string;
+  locale: Locale;
+  enabled: boolean;
+  speech: string;
+  busy: boolean;
+  initialLocale: Locale;
+  onTranscript: (v: string, uncertain: string[]) => void;
+}) {
+  const t = (ru: string, kk: string) => (locale === "ru" ? ru : kk);
+  const [voiceLocale, setVoiceLocale] = useState<Locale>(initialLocale);
+  const { state, problem, start, stop, cancel } = useVoiceRecorder({
+    base,
+    locale,
+    voiceLocale,
+    onTranscript,
+  });
   return (
     <fieldset className="voice-panel">
       <legend>{t("Голос", "Дауыс")}</legend>
@@ -576,20 +620,13 @@ function Voice({
                     "Микрофон қосулы, жазылуда",
                   )}
                 </span>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => recorder.current?.stop()}
-                >
+                <button type="button" className="primary-button" onClick={stop}>
                   {t("Остановить и распознать", "Тоқтату және тану")}
                 </button>
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => (
-                    (cancelled.current = true),
-                    recorder.current?.stop()
-                  )}
+                  onClick={cancel}
                 >
                   {t("Отменить запись", "Жазбадан бас тарту")}
                 </button>

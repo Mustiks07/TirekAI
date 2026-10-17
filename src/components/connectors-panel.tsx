@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
+import { branchName } from "@/lib/i18n";
 import type { Locale, Workspace } from "@/domain/contracts";
 import { api } from "@/lib/client";
 import { businessDate } from "@/lib/dates";
@@ -352,7 +353,7 @@ export function ConnectorsPanel(
                 <select name="branchId">
                   {workspace.branches.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.name}
+                      {branchName(b.name, locale)}
                     </option>
                   ))}
                 </select>
@@ -500,7 +501,7 @@ export function ConnectorsPanel(
               <select name="branchId">
                 {workspace.branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {branchName(b.name, locale)}
                   </option>
                 ))}
               </select>
@@ -659,7 +660,7 @@ export function ConnectorsPanel(
               <select name="branchId">
                 {workspace.branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {branchName(b.name, locale)}
                   </option>
                 ))}
               </select>
